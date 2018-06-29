@@ -1,5 +1,5 @@
 # msldap
-LDAP library for auditing MS AD
+LDAP library for MS AD
 
 # Installation
 `python3 setup.py install`
@@ -22,6 +22,7 @@ Authentication is a must, also you'll need to supply the domain tree (see exampl
 ### Example
 Following cmd will create a TSV file (can be opened by Excel) called `test.tsv`.  
 You may supply the password in command line with the `-p` option OR you will be prompted for it.   
+Info: you don't need to be a user with elevated privs, any generic user account will work.
 
-`msldap 10.0.0.1 dump test.tsv DC=TEST,DC=corp TEST\victim`  
+`msldap 10.0.0.1 dump test.tsv DC=TEST,DC=corp TEST\user`  
 `msldap <AD_IP> dump <outputfile> <tree> <username_with_domain>`
