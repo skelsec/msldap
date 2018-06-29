@@ -82,10 +82,10 @@ class MSADUser:
 		if self.pwdLastSet == 0:
 			return datetime(1601,1,1)
 
-		if (self.when_pw_expires - datetime.now(timezone.utc)).total_seconds() > 0:
+		if (self.when_pw_expires - datetime.now()).total_seconds() > 0:
 			return datetime(3000,1,1) #never
 
-		return self.pwdLastSet
+		return self.pwdLastSet.replace(tzinfo=None)
 
 
 	# https://msdn.microsoft.com/en-us/library/cc223991.aspx
@@ -95,7 +95,7 @@ class MSADUser:
 			if flag & self.userAccountControl:
 				return False
 
-		if (self.accountExpires - datetime.now()).total_seconds() < 0:
+		if (self.accountExpires.replace(tzinfo=None) - datetime.now()).total_seconds() < 0:
 			return False
 
 		#
@@ -150,8 +150,8 @@ class MSADUser:
 			adi.userAccountControl = MSLDAP_UAC(temp)
 
 			if adinfo:
-				adi.when_pw_change = (adi.pwdLastSet - timedelta(seconds = adinfo.minPwdAge/10000000)).replace(tzinfo=timezone.utc)
-				adi.when_pw_expires = (adi.pwdLastSet - timedelta(seconds = adinfo.maxPwdAge/10000000)).replace(tzinfo=timezone.utc)
+				adi.when_pw_change = (adi.pwdLastSet - timedelta(seconds = adinfo.minPwdAge/10000000)).replace(tzinfo=None)
+				adi.when_pw_expires = (adi.pwdLastSet - timedelta(seconds = adinfo.maxPwdAge/10000000)).replace(tzinfo=None)
 				adi.must_change_pw = adi.calc_PasswordMustChange() #datetime
 				if adi.sAMAccountName[-1] != '$':
 					adi.canLogon = adi.calc_CanLogon() #bool

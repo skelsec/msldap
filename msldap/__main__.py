@@ -44,7 +44,7 @@ def run():
 		ldap = MSLDAP(creds, target)
 		ldap.connect()
 		adinfo = ldap.get_ad_info()
-		with open(args.outfile, 'w') as f:
+		with open(args.outfile, 'w', newline='') as f:
 			writer = csv.writer(f, delimiter = '\t')
 			writer.writerow(MSADUser.TSV_ATTRS)
 			for user in ldap.get_all_user_objects():
