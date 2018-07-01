@@ -1,7 +1,8 @@
 import logging
 import csv
-from msldap.core.msldap import UserCredential, TargetServer, MSLDAP
-from msldap.ldap_objects.aduser import MSADUser
+from .core.msldap import *
+from .ldap_objects import *
+
 
 def run():
 	import argparse
@@ -15,11 +16,20 @@ def run():
 	
 	dump_group = subparsers.add_parser('dump', help='Dump all user objects to TSV file')
 	dump_group.add_argument('outfile', help='output file')
-	dump_group.add_argument('tree', help='tree to perform the queries on (HELP: get basic info with dsa command)')
-
+	
 	dump_group.add_argument('username', help='username')
 	dump_group.add_argument('-d', help='domain, optional if the username contains the domain as well')
 	dump_group.add_argument('-p', help='password, if not supplied you will be prompted in a secure manner')
+	dump_group.add_argument('-n', action='store_true', help='Perform NTLM authentication')
+	dump_group.add_argument('-t', '--tree', help='tree to perform the queries on')
+
+	spn_group = subparsers.add_parser('spn', help='Dump all user objects to TSV file')
+	spn_group.add_argument('outfile', help='output file')
+	spn_group.add_argument('username', help='username')
+	spn_group.add_argument('-d', help='domain, optional if the username contains the domain as well')
+	spn_group.add_argument('-p', help='password, if not supplied you will be prompted in a secure manner')
+	spn_group.add_argument('-n', action='store_true', help='Perform NTLM authentication')
+	spn_group.add_argument('-t', '--tree', help='tree to perform the queries on')
 
 	dsa_group = subparsers.add_parser('dsa', help='Grab basic info about the AD')
 
@@ -34,13 +44,13 @@ def run():
 
 
 	if args.command == 'dsa':
-		target = TargetServer(None, args.host)
+		target = MSLDAPTargetServer(args.host)
 		ldap = MSLDAP(None, target)
 		print(ldap.get_server_info())
 
 	elif args.command == 'dump':
-		creds = UserCredential(username = args.username, domain = args.d, password = args.p)
-		target = TargetServer(args.tree, args.host)
+		creds = MSLDAPUserCredential(username = args.username, domain = args.d, password = args.p, is_ntlm=args.n)
+		target = MSLDAPTargetServer(args.host, tree = args.tree)
 		ldap = MSLDAP(creds, target)
 		ldap.connect()
 		adinfo = ldap.get_ad_info()
@@ -49,6 +59,16 @@ def run():
 			writer.writerow(MSADUser.TSV_ATTRS)
 			for user in ldap.get_all_user_objects():
 				writer.writerow(user.get_row(MSADUser.TSV_ATTRS))
+
+	elif args.command == 'spn':
+		creds = MSLDAPUserCredential(username = args.username, domain = args.d, password = args.p, is_ntlm=args.n)
+		target = MSLDAPTargetServer(args.host, tree = args.tree)
+		ldap = MSLDAP(creds, target)
+		ldap.connect()
+		adinfo = ldap.get_ad_info()
+		with open(args.outfile, 'w', newline='') as f:
+			for user in ldap.get_all_service_user_objects():
+				f.write(user.sAMAccountName + '\r\n')
 
 if __name__ == '__main__':
 	run()
