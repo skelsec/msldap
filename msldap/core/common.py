@@ -1,6 +1,19 @@
 import enum
 from datetime import datetime
 
+class HashType(enum.Enum):
+	NT = 'NT'
+	LM = 'LM'
+	PLAINTEXT = 'PLAINTEXT'
+
+def s(x):
+	if x == '' or x == []:
+		return None
+	elif isinstance(x, list):
+		return '|'.join(x)
+	else:
+		return x
+
 def vn(x):
 	"""
 	value or none, returns none if x is an empty list

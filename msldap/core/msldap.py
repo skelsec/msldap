@@ -3,7 +3,7 @@ import logging
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE
 
 
-from ..ldap_objects import *
+from .dbmodel import *
 
 class MSLDAPUserCredential:
 	def __init__(self, domain=None, username= None, password = None, is_ntlm = False):
