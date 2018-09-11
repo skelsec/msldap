@@ -36,6 +36,7 @@ setup(
 	),
 	install_requires=[
 		'ldap3',
+		'sqlalchemy',
 	],
 	entry_points={
 		'console_scripts': [
