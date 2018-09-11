@@ -2,11 +2,29 @@ import hashlib
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
+from sqlalchemy import create_engine, func
+from sqlalchemy.orm import sessionmaker
 
 from datetime import datetime, timedelta, timezone
 from .common import *
+from . import logger
 
 Basemodel = declarative_base()
+
+def create_db(connection, verbosity = 0):
+	logger.info('Creating database %s' % connection)
+	engine = create_engine(connection, echo=True if verbosity > 1 else False) #'sqlite:///dump.db'	
+	Basemodel.metadata.create_all(engine)
+	logger.info('Done creating database %s' % connection)
+
+def get_session(connection, verbosity = 0):
+	logger.debug('Connecting to DB')
+	engine = create_engine(connection, echo=True if verbosity > 1 else False) #'sqlite:///dump.db'	
+	logger.debug('Creating session')
+	# create a configured "Session" class
+	Session = sessionmaker(bind=engine)
+	# create a Session
+	return Session()
 
 class Project(Basemodel):
 	__tablename__ = 'projects'
