@@ -196,3 +196,19 @@ class MSLDAP:
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
 		logging.debug('Finished polling for entries!')
 
+	def get_all_service_user_objects(self, include_machine = False):
+		"""
+		Fetches all user objects with useraccountcontrol DONT_REQ_PREAUTH flag set from the AD, and returns MSADUser object.
+		
+		"""
+		logging.debug('Polling AD for all user objects, machine accounts included: %s'% include_machine)
+		if include_machine == True:
+			ldap_filter = r'(userAccountControl:1.2.840.113556.1.4.803:=4194304)'
+		else:
+			ldap_filter = r'(&(userAccountControl:1.2.840.113556.1.4.803:=4194304)(!(sAMAccountName = *$)))'
+
+		attributes = MSADUser.ATTRS
+		for entry in self.pagedsearch(ldap_filter, attributes):
+			# TODO: return ldapuser object
+			yield MSADUser.from_ldap(entry, self._ldapinfo)
+		logging.debug('Finished polling for entries!')

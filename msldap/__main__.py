@@ -1,7 +1,7 @@
 import logging
 import csv
-from .core.msldap import *
-from .ldap_objects import *
+from msldap.core.msldap import *
+from msldap.ldap_objects import *
 
 
 def run():
