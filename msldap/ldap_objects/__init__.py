@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+#
+# Author:
+#  Tamas Jos (@skelsec)
+#
+
 from .adinfo import MSADInfo
 from .aduser import MSADUser
 from .common import MSLDAP_UAC

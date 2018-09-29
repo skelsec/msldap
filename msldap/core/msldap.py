@@ -1,5 +1,11 @@
+#!/usr/bin/env python3
+#
+# Author:
+#  Tamas Jos (@skelsec)
+#
+
 import getpass
-import logging
+from msldap import logger
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE
 
 
@@ -77,49 +83,49 @@ class MSLDAP:
 		Otherwise it will use the credentials set in the object constructor.
 		"""
 		if anonymous == True:
-			logging.debug('Getting server info via Anonymous BIND on server %s' % self.target_server.get_host())
+			logger.debug('Getting server info via Anonymous BIND on server %s' % self.target_server.get_host())
 			server = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
 			conn = Connection(server, auto_bind=True)
-			logging.debug('Got server info')
+			logger.debug('Got server info')
 		else:
-			logging.debug('Getting server info via credentials supplied on server %s' % self.target_server.get_host())
+			logger.debug('Getting server info via credentials supplied on server %s' % self.target_server.get_host())
 			server = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
 			conn = Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=self.login_credential.get_authmethod())
-			logging.debug('Performing BIND to server %s' % self.target_server.get_host())
+			logger.debug('Performing BIND to server %s' % self.target_server.get_host())
 			if not self._con.bind():
 				if 'description' in self._con.result:
 					raise Exception('Failed to bind to server! Reason: %s' % conn.result['description'])
 				raise Exception('Failed to bind to server! Reason: %s' % conn.result)
-			logging.debug('Connected to server!')
+			logger.debug('Connected to server!')
 		return server.info
 		
 
 	def connect(self, anonymous = False):
-		logging.debug('Connecting to server %s' % self.target_server.get_host())
+		logger.debug('Connecting to server %s' % self.target_server.get_host())
 		if anonymous == False:
 			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
 			self._con = Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=self.login_credential.get_authmethod())
-			logging.debug('Performing BIND to server %s' % self.target_server.get_host())
+			logger.debug('Performing BIND to server %s' % self.target_server.get_host())
 			if not self._con.bind():
 				if 'description' in self._con.result:
 					raise Exception('Failed to bind to server! Reason: %s' % self._con.result['description'])
 				raise Exception('Failed to bind to server! Reason: %s' % self._con.result)
-			logging.debug('Connected to server!')
+			logger.debug('Connected to server!')
 		else:
 			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
 			self._con = Connection(self._srv)
-			logging.debug('Performing ANONYMOUS BIND to server %s' % self.target_server.get_host())
+			logger.debug('Performing ANONYMOUS BIND to server %s' % self.target_server.get_host())
 			if not self._con.bind():
 				if 'description' in self._con.result:
 					raise Exception('Failed to bind to server! Reason: %s' % self._con.result['description'])
 				raise Exception('Failed to bind to server! Reason: %s' % self._con.result)
-			logging.debug('Connected to server!')
+			logger.debug('Connected to server!')
 
 		if not self._tree:
-			logging.debug('Search tree base not defined, selecting root tree')
+			logger.debug('Search tree base not defined, selecting root tree')
 			info = self.get_server_info()
 			self._tree = info.other['rootDomainNamingContext'][0]
-			logging.debug('Selected tree: %s' % self._tree)
+			logger.debug('Selected tree: %s' % self._tree)
 
 	def pagedsearch(self, ldap_filter, attributes):
 		"""
@@ -128,7 +134,7 @@ class MSLDAP:
 		ldap_filter: str : LDAP query filter
 		attributes: list : Attributes list to recieve in the result
 		"""
-		logging.debug('Paged search, filter: %s attributes: %s' % (ldap_filter, ','.join(attributes)))
+		logger.debug('Paged search, filter: %s attributes: %s' % (ldap_filter, ','.join(attributes)))
 		ctr = 0
 		entries = self._con.extend.standard.paged_search(self._tree, ldap_filter, attributes = attributes, paged_size = self.ldap_query_page_size)
 		for entry in entries:
@@ -136,7 +142,7 @@ class MSLDAP:
 				# TODO: return ldapuser object
 				ctr += 1
 				if ctr % self.ldap_query_page_size == 0:
-					logging.info('New page requested. Result count: %d' % ctr)
+					logger.info('New page requested. Result count: %d' % ctr)
 				yield entry
 
 
@@ -145,46 +151,46 @@ class MSLDAP:
 		"""
 		Fetches all user objects from the AD, and returns MSADUser object
 		"""
-		logging.debug('Polling AD for all user objects')
+		logger.debug('Polling AD for all user objects')
 		ldap_filter = r'(objectClass=user)'
 
 		attributes = MSADUser.ATTRS
 		for entry in self.pagedsearch(ldap_filter, attributes):
 			# TODO: return ldapuser object
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
-		logging.debug('Finished polling for entries!')
+		logger.debug('Finished polling for entries!')
 
 	def get_user(self, sAMAccountName):
 		"""
 		Fetches one user object from the AD, based on the sAMAccountName attribute (read: username) 
 		"""
-		logging.debug('Polling AD for user %s'% sAMAccountName)
+		logger.debug('Polling AD for user %s'% sAMAccountName)
 		ldap_filter = r'(&(objectClass=user)(sAMAccountName=%s)' % sAMAccountName
 		attributes = MSADUser.ATTRS
 		for entry in self.pagedsearch(ldap_filter, attributes):
 			# TODO: return ldapuser object
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
-		logging.debug('Finished polling for entries!')
+		logger.debug('Finished polling for entries!')
 
 	def get_ad_info(self):
 		"""
 		Polls for basic AD information (needed for determine password usage characteristics!)
 		"""
-		logging.debug('Polling AD for basic info')
+		logger.debug('Polling AD for basic info')
 		ldap_filter = r'(distinguishedName=%s)' % self._tree
 		attributes = MSADInfo.ATTRS
 		for entry in self.pagedsearch(ldap_filter, attributes):
 			self._ldapinfo = MSADInfo.from_ldap(entry)
 			return self._ldapinfo
 
-		logging.debug('Poll finished!')
+		logger.debug('Poll finished!')
 
 	def get_all_service_user_objects(self, include_machine = False):
 		"""
 		Fetches all service user objects from the AD, and returns MSADUser object.
 		Service user refers to an user whith SPN (servicePrincipalName) attribute set
 		"""
-		logging.debug('Polling AD for all user objects, machine accounts included: %s'% include_machine)
+		logger.debug('Polling AD for all user objects, machine accounts included: %s'% include_machine)
 		if include_machine == True:
 			ldap_filter = r'(servicePrincipalName=*)'
 		else:
@@ -194,14 +200,14 @@ class MSLDAP:
 		for entry in self.pagedsearch(ldap_filter, attributes):
 			# TODO: return ldapuser object
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
-		logging.debug('Finished polling for entries!')
+		logger.debug('Finished polling for entries!')
 
-	def get_all_service_user_objects(self, include_machine = False):
+	def get_all_knoreq_user_objects(self, include_machine = False):
 		"""
 		Fetches all user objects with useraccountcontrol DONT_REQ_PREAUTH flag set from the AD, and returns MSADUser object.
 		
 		"""
-		logging.debug('Polling AD for all user objects, machine accounts included: %s'% include_machine)
+		logger.debug('Polling AD for all user objects, machine accounts included: %s'% include_machine)
 		if include_machine == True:
 			ldap_filter = r'(userAccountControl:1.2.840.113556.1.4.803:=4194304)'
 		else:
@@ -211,4 +217,4 @@ class MSLDAP:
 		for entry in self.pagedsearch(ldap_filter, attributes):
 			# TODO: return ldapuser object
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
-		logging.debug('Finished polling for entries!')
+		logger.debug('Finished polling for entries!')
