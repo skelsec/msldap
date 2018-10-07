@@ -13,6 +13,8 @@ def vn(x):
 	"""
 	if x == []:
 		return None
+	if isinstance(x, list):
+		return '|'.join(x)
 	if isinstance(x, datetime):
 		return x.isoformat()
 	return x

@@ -5,10 +5,9 @@
 #
 
 import getpass
-from msldap import logger
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE
 
-
+from msldap import logger
 from ..ldap_objects import *
 
 class MSLDAPUserCredential:
@@ -21,10 +20,13 @@ class MSLDAPUserCredential:
 		if username.find('\\') != -1:
 			self.domain, self.username = username.split('\\')
 
-		if not self.domain:
-			raise Exception('Domain needs to be set, either via the "domain" parameter or by supplying the full username in "DOMAIN\\\\Username format"')
+		#if not self.domain:
+		#	raise Exception('Domain needs to be set, either via the "domain" parameter or by supplying the full username in "DOMAIN\\\\Username format"')
 
 	def get_msuser(self):
+		if not self.domain:
+			return self.username
+
 		return '%s\\%s' % (self.domain,self.username)
 
 	def get_authmethod(self):
