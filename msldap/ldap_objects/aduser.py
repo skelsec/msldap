@@ -205,6 +205,8 @@ class MSADUser:
 		return t
 
 	def uac_to_textflag(self, attr_s):
+		if self.userAccountControl is None or self.userAccountControl == '':
+			return 'N/A'
 		attr = getattr(MSLDAP_UAC, attr_s[4:])
 		if self.userAccountControl & attr:
 			return True

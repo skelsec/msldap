@@ -68,15 +68,28 @@ class MSLDAPTargetServer:
 		return self.proto.lower() == 'ldaps'
 
 class MSLDAP:
-	def __init__(self, login_credential, target_server, ldap_query_page_size = 1000):
+	def __init__(self, login_credential, target_server, ldap_query_page_size = 1000, use_sspi = False):
 		self.login_credential = login_credential
 		self.target_server = target_server
+		self.use_sspi = use_sspi
 
 		self.ldap_query_page_size = ldap_query_page_size #default for MSAD
 		self._tree = self.target_server.tree
 		self._ldapinfo = None
 		self._srv = None
 		self._con = None
+		
+	def monkeypatch(self):
+		#print('Monkey-patching ldap tp use SSPI module for NTLM auth!')
+		try:
+			from winsspi.sspi import LDAP3NTLMSSPI
+			import ldap3.utils.ntlm
+		except Exception as e:
+			print('Failed to import winsspi module!')
+			raise e
+		#monkey-patching NTLM client with winsspi's implementation
+		ldap3.utils.ntlm.NtlmClient = LDAP3NTLMSSPI
+		return Connection(self._srv, user='test\\test', password='test', authentication=NTLM)
 
 	def get_server_info(self, anonymous = True):
 		"""
@@ -92,7 +105,10 @@ class MSLDAP:
 		else:
 			logger.debug('Getting server info via credentials supplied on server %s' % self.target_server.get_host())
 			server = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
-			conn = Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=self.login_credential.get_authmethod())
+			if self.use_sspi == True:
+				conn = self.monkeypatch()
+			else:
+				conn = Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=self.login_credential.get_authmethod())
 			logger.debug('Performing BIND to server %s' % self.target_server.get_host())
 			if not self._con.bind():
 				if 'description' in self._con.result:
@@ -106,7 +122,10 @@ class MSLDAP:
 		logger.debug('Connecting to server %s' % self.target_server.get_host())
 		if anonymous == False:
 			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
-			self._con = Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=self.login_credential.get_authmethod())
+			if self.use_sspi == True:
+				self._con = self.monkeypatch()
+			else:
+				self._con = Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=self.login_credential.get_authmethod())
 			logger.debug('Performing BIND to server %s' % self.target_server.get_host())
 			if not self._con.bind():
 				if 'description' in self._con.result:

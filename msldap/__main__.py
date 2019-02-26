@@ -15,6 +15,7 @@ def run():
 	parser = argparse.ArgumentParser(description='MS LDAP library')
 	parser.add_argument('-v', '--verbose', action='count', default=0)
 	parser.add_argument('host', help='target IP/hostname (the DC)')
+	parser.add_argument('-s', '--use-sspi', action='store_true', help='Use windows built-in authentication. ')
 	
 	subparsers = parser.add_subparsers(help = 'commands')
 	subparsers.required = True
@@ -51,28 +52,34 @@ def run():
 
 	if args.command == 'dsa':
 		target = MSLDAPTargetServer(args.host)
-		ldap = MSLDAP(None, target)
+		ldap = MSLDAP(None, target, args.use_sspi)
 		print(ldap.get_server_info())
 
 	elif args.command == 'dump':
-		creds = MSLDAPUserCredential(username = args.username, domain = args.d, password = args.p, is_ntlm=args.n)
 		target = MSLDAPTargetServer(args.host, tree = args.tree)
-		ldap = MSLDAP(creds, target)
+		if args.use_sspi == False:
+			creds = MSLDAPUserCredential(username = args.username, domain = args.d, password = args.p, is_ntlm=args.n)
+		else:
+			creds = None
+		ldap = MSLDAP(creds, target, use_sspi = args.use_sspi)
 		ldap.connect()
 		adinfo = ldap.get_ad_info()
-		with open(args.outfile, 'w', newline='') as f:
+		with open(args.outfile, 'w', newline='', encoding = 'utf8') as f:
 			writer = csv.writer(f, delimiter = '\t')
 			writer.writerow(MSADUser.TSV_ATTRS)
 			for user in ldap.get_all_user_objects():
 				writer.writerow(user.get_row(MSADUser.TSV_ATTRS))
 
 	elif args.command == 'spn':
-		creds = MSLDAPUserCredential(username = args.username, domain = args.d, password = args.p, is_ntlm=args.n)
 		target = MSLDAPTargetServer(args.host, tree = args.tree)
-		ldap = MSLDAP(creds, target)
+		if args.use_sspi == False:
+			creds = MSLDAPUserCredential(username = args.username, domain = args.d, password = args.p, is_ntlm=args.n)
+		else:
+			creds = None
+		ldap = MSLDAP(creds, target, args.use_sspi)
 		ldap.connect()
 		adinfo = ldap.get_ad_info()
-		with open(args.outfile, 'w', newline='') as f:
+		with open(args.outfile, 'w', newline='', encoding = 'utf8') as f:
 			for user in ldap.get_all_service_user_objects():
 				f.write(user.sAMAccountName + '\r\n')
 
