@@ -5,7 +5,10 @@
 #
 
 import getpass
-from ldap3 import Server, Connection, ALL, NTLM, SIMPLE
+from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE
+
+from msldap.core.ms_asn1 import *
+from msldap.core.win_data_types import *
 
 from msldap import logger
 from ..ldap_objects import *
@@ -148,7 +151,7 @@ class MSLDAP:
 			self._tree = info.other['rootDomainNamingContext'][0]
 			logger.debug('Selected tree: %s' % self._tree)
 
-	def pagedsearch(self, ldap_filter, attributes):
+	def pagedsearch(self, ldap_filter, attributes, controls = None):
 		"""
 		Performs a paged search on the AD, using the filter and attributes as a normal query does.
 		Needs to connect to the server first!
@@ -157,7 +160,7 @@ class MSLDAP:
 		"""
 		logger.debug('Paged search, filter: %s attributes: %s' % (ldap_filter, ','.join(attributes)))
 		ctr = 0
-		entries = self._con.extend.standard.paged_search(self._tree, ldap_filter, attributes = attributes, paged_size = self.ldap_query_page_size)
+		entries = self._con.extend.standard.paged_search(self._tree, ldap_filter, attributes = attributes, paged_size = self.ldap_query_page_size, controls = controls)
 		for entry in entries:
 			if 'raw_attributes' in entry and 'attributes' in entry:
 				# TODO: return ldapuser object
@@ -177,8 +180,19 @@ class MSLDAP:
 
 		attributes = MSADUser.ATTRS
 		for entry in self.pagedsearch(ldap_filter, attributes):
-			# TODO: return ldapuser object
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
+		logger.debug('Finished polling for entries!')
+
+	def get_all_machine_objects(self):
+		"""
+		Fetches all machine objects from the AD, and returns MSADMachine object
+		"""
+		logger.debug('Polling AD for all user objects')
+		ldap_filter = r'(&(sAMAccountType=805306369))'
+
+		attributes = MSADMachine.ATTRS
+		for entry in self.pagedsearch(ldap_filter, attributes):
+			yield MSADMachine.from_ldap(entry, self._ldapinfo)
 		logger.debug('Finished polling for entries!')
 
 	def get_user(self, sAMAccountName):
@@ -239,3 +253,45 @@ class MSLDAP:
 			# TODO: return ldapuser object
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
 		logger.debug('Finished polling for entries!')
+		
+		
+	def get_all_objectacl(self):
+		"""
+		Returns all ACL info for all AD objects
+		"""
+		
+		flags_value = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION
+		req_flags = SDFlagsRequestValue({'Flags' : flags_value})
+		
+		ldap_filter = r'(objectClass=*)'
+		attributes = MSADSecurityInfo.ATTRS
+		controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
+		
+		for entry in self.pagedsearch(ldap_filter, attributes, controls = controls):
+			yield MSADSecurityInfo.from_ldap(entry)
+
+			
+	def get_all_tokengroups(self, t):
+		"""
+		returns the tokengroups attribute for all user and machine dns on the server
+		"""
+		dns = []
+		
+		ldap_filters = [r'(objectClass=user)', r'(sAMAccountType=805306369)']
+		attributes = ['distinguishedName']
+		
+		for ldap_filter in ldap_filters:
+			print(ldap_filter)
+			for entry in self.pagedsearch(ldap_filter, attributes):
+				print(entry['attributes']['distinguishedName'])
+				dns.append(entry['attributes']['distinguishedName'])
+
+		attributes=['tokenGroups', 'sn', 'cn', 'distinguishedName','objectGUID', 'objectSid']
+		for dn in dns:
+			ldap_filter = r'(distinguishedName=%s)' % dn
+			self._con.search(dn, ldap_filter, attributes=attributes, search_scope=BASE)
+			for entry in self._con.response:
+				#yield MSADTokenGroup.from_ldap(entry)
+				print(str(MSADTokenGroup.from_ldap(entry)))
+				
+		

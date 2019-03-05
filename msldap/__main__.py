@@ -69,6 +69,12 @@ def run():
 			writer.writerow(MSADUser.TSV_ATTRS)
 			for user in ldap.get_all_user_objects():
 				writer.writerow(user.get_row(MSADUser.TSV_ATTRS))
+				
+		with open(args.outfile + '_comp', 'w', newline='', encoding = 'utf8') as f:
+			writer = csv.writer(f, delimiter = '\t')
+			writer.writerow(MSADMachine.TSV_ATTRS)
+			for comp in ldap.get_all_machine_objects():
+				writer.writerow(comp.get_row(MSADMachine.TSV_ATTRS))
 
 	elif args.command == 'spn':
 		target = MSLDAPTargetServer(args.host, tree = args.tree)
