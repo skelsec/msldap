@@ -48,7 +48,7 @@ class MSADSecurityInfo:
 		self.sn = None #str
 		self.cn = None #str
 		self.distinguishedName = None #dn
-		self.nTSecurityDescriptor = []
+		self.nTSecurityDescriptor = None
 		self.objectGUID = None
 		self.objectSid = None
 		
@@ -63,7 +63,7 @@ class MSADSecurityInfo:
 		
 		decdesc_data =  entry['attributes'].get('nTSecurityDescriptor')
 		if decdesc_data:
-			adi.nTSecurityDescriptor.append(decdesc_data)
+			adi.nTSecurityDescriptor = SECURITY_DESCRIPTOR.from_bytes(decdesc_data)
 		
 		return adi
 		

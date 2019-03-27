@@ -5,7 +5,7 @@
 #
 
 import getpass
-from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE
+from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE, ALL_ATTRIBUTES
 
 from msldap.core.ms_asn1 import *
 from msldap.core.win_data_types import *
@@ -269,11 +269,26 @@ class MSLDAP:
 		
 		for entry in self.pagedsearch(ldap_filter, attributes, controls = controls):
 			yield MSADSecurityInfo.from_ldap(entry)
+			
+	def get_objectacl_by_dn(self, dn):
+		"""
+		Returns all ACL info for all AD objects
+		"""
+		
+		flags_value = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION
+		req_flags = SDFlagsRequestValue({'Flags' : flags_value})
+		
+		ldap_filter = r'(distinguishedName=%s)' % dn
+		attributes = MSADSecurityInfo.ATTRS
+		controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
+		
+		for entry in self.pagedsearch(ldap_filter, attributes, controls = controls):
+			yield MSADSecurityInfo.from_ldap(entry)
 
 			
-	def get_all_tokengroups(self, t):
+	def get_all_tokengroups(self):
 		"""
-		returns the tokengroups attribute for all user and machine dns on the server
+		returns the tokengroups attribute for all user and machine on the server
 		"""
 		dns = []
 		
@@ -293,5 +308,151 @@ class MSLDAP:
 			for entry in self._con.response:
 				#yield MSADTokenGroup.from_ldap(entry)
 				print(str(MSADTokenGroup.from_ldap(entry)))
-				
+	
+	def get_pdcroleowner(self):
+		#http://adcoding.com/how-to-determine-the-fsmo-role-holder-fsmoroleowner-attribute/
+		#get adinfo -> get ridmanagerreference attr -> look up the dn of ridmanagerreference -> get fsmoroleowner attr (which is a DN)
+		if not self._ldapinfo:
+			self.get_ad_info()
 		
+		ldap_filter = r'(distinguishedName=%s)' % self._ldapinfo.rIDManagerReference
+		for entry in self.pagedsearch(ldap_filter, ['fSMORoleOwner']):
+			return entry['attributes']['fSMORoleOwner']
+		
+	def get_infrastructureowner(self):
+		#http://adcoding.com/how-to-determine-the-fsmo-role-holder-fsmoroleowner-attribute/
+		#"CN=Infrastructure,DC=concorp,DC=contoso,DC=com" -l fSMORoleOwner
+		if not self._ldapinfo:
+			self.get_ad_info()
+		
+		ldap_filter = r'(distinguishedName=%s)' % ('CN=Infrastructure,' + self._ldapinfo.distinguishedName)
+		for entry in self.pagedsearch(ldap_filter, ['fSMORoleOwner']):
+			return entry['attributes']['fSMORoleOwner']
+			
+	def get_ridroleowner(self):
+		#http://adcoding.com/how-to-determine-the-fsmo-role-holder-fsmoroleowner-attribute/
+		if not self._ldapinfo:
+			self.get_ad_info()
+		
+		ldap_filter = r'(distinguishedName=%s)' % ('CN=RID Manager$,CN=System,' + self._ldapinfo.distinguishedName)
+		for entry in self.pagedsearch(ldap_filter, ['fSMORoleOwner']):
+			return entry['attributes']['fSMORoleOwner']		
+		
+	
+	def get_netdomain(self):
+		def nameconvert(x):
+			return x.split(',CN=')[1]
+		"""
+		gets the name of the current user's domain
+		"""
+		if not self._ldapinfo:
+			self.get_ad_info()
+		print(self._ldapinfo)
+		dname = self._ldapinfo.distinguishedName.replace('DC','').replace('=','').replace(',','.')
+		domain_controllers = ','.join(nameconvert(x) + '.' +dname  for x in self._ldapinfo.masteredBy)
+		
+		ridroleowner = nameconvert(self.get_ridroleowner()) + '.' +dname
+		infraowner = nameconvert(self.get_infrastructureowner()) + '.' +dname
+		pdcroleowner = nameconvert(self.get_pdcroleowner()) + '.' +dname
+		
+		print('name : %s' % dname)
+		print('Domain Controllers : %s' % domain_controllers)
+		print('DomainModeLevel : %s' % self._ldapinfo.domainmodelevel)
+		print('PdcRoleOwner : %s' % pdcroleowner)
+		print('RidRoleOwner : %s' % ridroleowner)
+		print('InfrastructureRoleOwner : %s' % infraowner)
+		
+	def get_domaincontroller(self):
+		ldap_filter = r'(userAccountControl:1.2.840.113556.1.4.803:=8192)'
+		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+			print('Forest: %s' % '')
+			print('Name: %s' % entry['attributes'].get('dNSHostName'))
+			print('OSVersion: %s' % entry['attributes'].get('operatingSystem'))
+			print(entry['attributes'])
+		
+		
+	def get_all_groups(self):
+		ldap_filter = r'(objectClass=group)'
+		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+			yield MSADGroup.from_ldap(entry)
+			
+	def get_group_by_dn(self, dn):
+		ldap_filter = r'(&(objectClass=group)(distinguishedName=%s))' % dn
+		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+			yield MSADGroup.from_ldap(entry)
+			
+	def get_object_by_dn(self, dn, expected_class = None):
+		ldap_filter = r'(distinguishedName=%s)' % dn
+		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+			temp = entry['attributes'].get('objectClass')
+			if expected_class:
+				yield expected_class.from_ldap(entry)
+			
+			if not temp:
+				yield entry
+			elif 'user' in temp:
+				yield MSADUser.from_ldap(entry)
+			elif 'group' in temp:
+				yield MSADGroup.from_ldap(entry)
+			
+	def get_user_by_dn(self, dn):
+		ldap_filter = r'(&(objectClass=user)(distinguishedName=%s))' % dn
+		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+			yield MSADUser.from_ldap(entry)
+			
+	def get_group_members(self, dn, recursive = False):
+		for group in self.get_group_by_dn(dn):
+			for member in group.member:
+				for result in self.get_object_by_dn(member):
+					if isinstance(result, MSADGroup) and recursive:
+						for user in self.get_group_members(result.distinguishedName, recursive = True):
+							yield(user)
+					else:
+						yield(result)
+						
+	def get_dn_for_objectsid(self, objectsid):
+		ldap_filter = r'(objectSid=%s)' % str(objectsid)
+		for entry in self.pagedsearch(ldap_filter, ['distinguishedName']):
+			return entry['attributes']['distinguishedName']
+						
+	def get_permissions_for_dn(self, dn):
+		"""
+		Lists all users who can modify the specified dn
+		"""
+		for secinfo in self.get_objectacl_by_dn(dn):
+			for secdata in secinfo.nTSecurityDescriptor:
+				sids_to_lookup = {}
+				sdec = SECURITY_DESCRIPTOR.from_bytes(secdata)
+				if not sdec.Dacl:
+					continue
+				
+				for ace in sdec.Dacl.aces:
+					sids_to_lookup[str(ace.Sid)] = 1
+				
+				for sid in sids_to_lookup:
+					sids_to_lookup[sid] = self.get_dn_for_objectsid(sid)
+					
+				print(sids_to_lookup)
+				
+				for ace in sdec.Dacl.aces:
+					if not sids_to_lookup[str(ace.Sid)]:
+						print(str(ace.Sid))
+					#print('===== %s =====' % sids_to_lookup[str(ace.Sid)])
+					#if 
+					#print(str(ace))
+					
+					
+					
+	def get_tokengroups(self, dn):
+		"""
+		returns the tokengroups attribute for a given DN
+		"""
+		ldap_filter = r'(distinguishedName=%s)' % dn
+		attributes=['tokenGroups']
+		
+		self._con.search(dn, ldap_filter, attributes=attributes, search_scope=BASE)
+		for entry in self._con.response:
+			if entry['attributes']['tokenGroups']:
+				for sid_data in entry['attributes']['tokenGroups']:
+					yield str(SID.from_bytes(sid_data))
+			

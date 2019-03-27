@@ -9,18 +9,7 @@ class LDAPRecon(MSLDAP):
 		self.use_sspi = True
 		self.connect()
 		
-	def get_netdomain(self, domain = None):
-		"""
-		gets the name of the current user's domain
-		"""
-		info = self.get_server_info()
-		print(info)
-		#print([x for x in info.__dict__])
-		print([x for x in info.__dict__['other']])
-		print(info.other['defaultNamingContext'])
-		print(info.other['dnsHostName'])
-		print(info.other['domainControllerFunctionality'])
-		print(info.other['forestFunctionality'])
+	
 		
 		
 	def get_netforest(self, forest = None):
