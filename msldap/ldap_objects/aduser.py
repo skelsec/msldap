@@ -14,7 +14,9 @@ class MSADUser:
 				'lastLogoff', 'lastLogon', 'lastLogonTimestamp', 'logonCount', 'name', 
 				'objectCategory', 'objectClass', 'objectGUID', 'objectSid', 'primaryGroupID', 
 				'pwdLastSet', 'sAMAccountName', 'sAMAccountType', 'sn', 'userAccountControl', 
-				'userPrincipalName', 'whenChanged', 'whenCreated','memberOf','member', 'servicePrincipalName']
+				'userPrincipalName', 'whenChanged', 'whenCreated','memberOf','member', 'servicePrincipalName',
+				'msDS-AllowedToDelegateTo',
+				]
 
 	TSV_ATTRS = [  	'sAMAccountName', 'userPrincipalName' ,'canLogon', 'badPasswordTime', 
 					'badPwdCount', 'when_pw_change', 'when_pw_expires', 'pwdLastSet', 'lastLogonTimestamp',
@@ -64,6 +66,7 @@ class MSADUser:
 		self.logonCount = None #int
 		self.sAMAccountType = None #int
 		self.userAccountControl = None #UserAccountControl intflag
+		self.allowedtodelegateto = None
 
 		
 		## other
@@ -150,6 +153,8 @@ class MSADUser:
 		adi.sAMAccountType = entry['attributes'].get('sAMAccountType')
 		adi.codePage = entry['attributes'].get('codePage')
 		adi.countryCode = entry['attributes'].get('countryCode')
+		
+		adi.allowedtodelegateto = entry['attributes'].get('msDS-AllowedToDelegateTo')
 		
 		temp = entry['attributes'].get('userAccountControl')
 		if temp:

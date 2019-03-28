@@ -6,12 +6,14 @@
 
 import getpass
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE, ALL_ATTRIBUTES
+from ldap3.utils.conv import *
 
 from msldap.core.ms_asn1 import *
 from msldap.core.win_data_types import *
 
 from msldap import logger
-from ..ldap_objects import *
+from msldap.ldap_objects import *
+
 
 class MSLDAPUserCredential:
 	def __init__(self, domain=None, username= None, password = None, is_ntlm = False):
@@ -278,7 +280,7 @@ class MSLDAP:
 		flags_value = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION
 		req_flags = SDFlagsRequestValue({'Flags' : flags_value})
 		
-		ldap_filter = r'(distinguishedName=%s)' % dn
+		ldap_filter = r'(distinguishedName=%s)' % escape_filter_chars(dn)
 		attributes = MSADSecurityInfo.ATTRS
 		controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
 		
@@ -377,7 +379,7 @@ class MSLDAP:
 			yield MSADGroup.from_ldap(entry)
 			
 	def get_group_by_dn(self, dn):
-		ldap_filter = r'(&(objectClass=group)(distinguishedName=%s))' % dn
+		ldap_filter = r'(&(objectClass=group)(distinguishedName=%s))' % escape_filter_chars(dn)
 		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
 			yield MSADGroup.from_ldap(entry)
 			

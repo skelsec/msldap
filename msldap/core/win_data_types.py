@@ -72,6 +72,8 @@ class ADS_ACCESS_MASK(enum.IntFlag):
 	ADS_RIGHT_DS_WRITE_PROP = 0x00000020 #The ObjectType GUID identifies a property set or property of the object. The ACE controls the trustee's right to write the property or property set.
 	ADS_RIGHT_DS_SELF = 0x00000008 #The ObjectType GUID identifies a validated write.
 
+#http://www.kouti.com/tables/baseattributes.htm
+
 ExtendedRightsGUID = { 
 	'ee914b82-0a98-11d1-adbb-00c04fd8d5cd' : 'Abandon Replication',
 	'440820ad-65b4-11d1-a3da-0000f875ae0d' : 'Add GUID',

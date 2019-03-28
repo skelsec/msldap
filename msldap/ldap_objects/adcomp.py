@@ -16,7 +16,7 @@ class MSADMachine:
 				'name', 'objectCategory', 'objectClass', 'objectGUID', 'objectSid', 
 				'operatingSystem', 'operatingSystemVersion','primaryGroupID', 
 				'pwdLastSet', 'sAMAccountName', 'sAMAccountType', 'sn', 'userAccountControl', 
-				'whenChanged', 'whenCreated', 'servicePrincipalName'
+				'whenChanged', 'whenCreated', 'servicePrincipalName','msDS-AllowedToDelegateTo',
 			]
 			
 	TSV_ATTRS = [  	'sAMAccountName', 'dNSHostName', 'operatingSystem', 'operatingSystemVersion', 'badPasswordTime', 
@@ -62,6 +62,7 @@ class MSADMachine:
 		self.whenChanged = None
 		self.whenCreated = None
 		self.servicePrincipalName = None
+		self.allowedtodelegateto = None
 		
 		
 	def from_ldap(entry, adinfo = None):
@@ -98,6 +99,8 @@ class MSADMachine:
 		adi.whenChanged = entry['attributes'].get('whenChanged')
 		adi.whenCreated = entry['attributes'].get('whenCreated')
 		adi.servicePrincipalName = entry['attributes'].get('servicePrincipalName')
+		
+		adi.allowedtodelegateto = entry['attributes'].get('msDS-AllowedToDelegateTo')
 
 		temp = entry['attributes'].get('userAccountControl')
 		if temp:
