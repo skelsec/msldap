@@ -449,7 +449,7 @@ class MSLDAP:
 		"""
 		returns the tokengroups attribute for a given DN
 		"""
-		ldap_filter = r'(distinguishedName=%s)' % dn
+		ldap_filter = r'(distinguishedName=%s)' % escape_filter_chars(dn)
 		attributes=['tokenGroups']
 		
 		self._con.search(dn, ldap_filter, attributes=attributes, search_scope=BASE)
