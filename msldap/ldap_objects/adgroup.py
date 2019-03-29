@@ -48,6 +48,7 @@ class MSADGroup:
 		t.cn = entry['attributes'].get('cn')
 		t.distinguishedName = entry['attributes'].get('distinguishedName')
 		t.objectGUID = entry['attributes'].get('objectGUID')
+		t.objectSid = entry['attributes'].get('objectSid')
 		t.groupType = entry['attributes'].get('groupType')
 		t.instanceType = entry['attributes'].get('instanceType')
 		t.name = entry['attributes'].get('name')
