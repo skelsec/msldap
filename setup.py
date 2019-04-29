@@ -35,7 +35,7 @@ setup(
 		"Operating System :: OS Independent",
 	),
 	install_requires=[
-		'ldap3',
+		'ldap3<2.5.2',
 		'winsspi;platform_system=="Windows"',
 	],
 	entry_points={
