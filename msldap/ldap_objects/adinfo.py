@@ -11,7 +11,7 @@ class MSADInfo:
 				'name', 'nextRid', 'nTSecurityDescriptor', 'objectCategory', 'objectClass', 
 				'objectGUID', 'objectSid', 'pwdHistoryLength', 
 				'pwdProperties', 'serverState', 'systemFlags', 'uASCompat', 'uSNChanged', 
-				'uSNCreated', 'whenChanged', 'whenCreated'
+				'uSNCreated', 'whenChanged', 'whenCreated', 'rIDManagerReference','msDS-Behavior-Version'
 			]
 	
 	def __init__(self):
@@ -44,6 +44,8 @@ class MSADInfo:
 		self.uSNCreated = None #int
 		self.whenChanged = None #datetime
 		self.whenCreated = None #datetime
+		self.rIDManagerReference = None #str
+		self.domainmodelevel = None
 	
 	def from_ldap(entry):
 		adi = MSADInfo()
@@ -76,8 +78,47 @@ class MSADInfo:
 		adi.uSNCreated = entry['attributes'].get('uSNCreated') #int
 		adi.whenChanged = entry['attributes'].get('whenChanged') #datetime
 		adi.whenCreated = entry['attributes'].get('whenCreated') #datetime
+		adi.rIDManagerReference = entry['attributes'].get('rIDManagerReference')
+		
+		#https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/564dc969-6db3-49b3-891a-f2f8d0a68a7f
+		adi.domainmodelevel = entry['attributes'].get('msDS-Behavior-Version')
 
 		return adi
+	
+	def to_dict(self):
+		d = {}
+		d['auditingPolicy'] = self.auditingPolicy
+		d['creationTime'] = self.creationTime
+		d['dc'] = self.dc
+		d['distinguishedName'] = self.distinguishedName
+		d['forceLogoff'] = self.forceLogoff
+		d['instanceType'] = self.instanceType
+		d['lockoutDuration'] = self.lockoutDuration
+		d['lockOutObservationWindow'] = self.lockOutObservationWindow
+		d['lockoutThreshold'] = self.lockoutThreshold
+		d['masteredBy'] = self.masteredBy
+		d['maxPwdAge'] = self.maxPwdAge
+		d['minPwdAge'] = self.minPwdAge
+		d['minPwdLength'] = self.minPwdLength
+		d['name'] = self.name
+		d['nextRid'] = self.nextRid
+		d['nTSecurityDescriptor'] = self.nTSecurityDescriptor
+		d['objectCategory'] = self.objectCategory
+		d['objectClass'] = self.objectClass
+		d['objectGUID'] = self.objectGUID
+		d['objectSid'] = self.objectSid
+		d['pwdHistoryLength'] = self.pwdHistoryLength
+		d['pwdProperties'] = self.pwdProperties
+		d['serverState'] = self.serverState
+		d['systemFlags'] = self.systemFlags
+		d['uASCompat'] = self.uASCompat
+		d['uSNChanged'] = self.uSNChanged
+		d['uSNCreated'] = self.uSNCreated
+		d['whenChanged'] = self.whenChanged
+		d['whenCreated'] = self.whenCreated
+		d['domainmodelevel'] = self.domainmodelevel
+		return d
+
 
 	def __str__(self):
 		t = 'MSADInfo\n'
