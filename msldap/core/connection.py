@@ -4,79 +4,19 @@
 #  Tamas Jos (@skelsec)
 #
 
-import getpass
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE, ALL_ATTRIBUTES
 from ldap3.utils.conv import *
 
-from msldap.core.ms_asn1 import *
-from msldap.core.win_data_types import *
-
 from msldap import logger
+from msldap.core.common import *
+from msldap.wintypes import *
 from msldap.ldap_objects import *
 
 
-class MSLDAPUserCredential:
-	def __init__(self, domain=None, username= None, password = None, is_ntlm = False):
-		self.domain   = domain
-		self.username = username
-		self.password = password
-		self.is_ntlm = is_ntlm
-
-		if username.find('\\') != -1:
-			self.domain, self.username = username.split('\\')
-
-		#if not self.domain:
-		#	raise Exception('Domain needs to be set, either via the "domain" parameter or by supplying the full username in "DOMAIN\\\\Username format"')
-
-	def get_msuser(self):
-		if not self.domain:
-			return self.username
-
-		return '%s\\%s' % (self.domain,self.username)
-
-	def get_authmethod(self):
-		if self.is_ntlm:
-			return NTLM
-		return SIMPLE
-
-	def get_password(self):
-		if self.is_ntlm == True:
-			# Are we passing the hash... maybe?
-			
-			if self.password and len(self.password) == 32:
-				try:
-					bytes.fromhex(self.password)
-				except Exception as e:
-					# this is not a hex password just happens to be 32 chars long
-					return self.password
-				else:
-					#we think that user is trying to pass the hash
-					#problem, is that ldap3 module only accepts the "LM:NT" format, where both hash types are filled
-					#so we do a slight conversion
-					return '%s:%s' % ('a'*32, self.password)
-		if self.password is None:
-			self.password = getpass.getpass('Enter password: ')
-
-		return self.password
-
-class MSLDAPTargetServer:
-	def __init__(self, host, port = 389, proto = 'ldap', tree = None):
-		self.proto = proto
-		self.host = host
-		self.tree = tree
-		self.port = port
-
-	def get_host(self):
-		return '%s://%s:%s' % (self.proto, self.host, self.port)
-
-	def is_ssl(self):
-		return self.proto.lower() == 'ldaps'
-
-class MSLDAP:
-	def __init__(self, login_credential, target_server, ldap_query_page_size = 1000, use_sspi = False):
+class MSLDAPConnection:
+	def __init__(self, login_credential, target_server, ldap_query_page_size = 1000):
 		self.login_credential = login_credential
 		self.target_server = target_server
-		self.use_sspi = use_sspi
 
 		self.ldap_query_page_size = ldap_query_page_size #default for MSAD
 		self._tree = self.target_server.tree
@@ -94,64 +34,49 @@ class MSLDAP:
 			raise e
 		#monkey-patching NTLM client with winsspi's implementation
 		ldap3.utils.ntlm.NtlmClient = LDAP3NTLMSSPI
-		return Connection(self._srv, user='test\\test', password='test', authentication=NTLM)
+		#return Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=NTLM)
+		
+	def connect(self):
+		if self.login_credential.is_anonymous() == True:
+			logger.debug('Getting server info via Anonymous BIND on server %s' % self.target_server.get_host())
+			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
+			self._con = Connection(self._srv, auto_bind=True)
+		else:
+			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
+			if self.login_credential.secret_type == MSLDAPSecretType.SSPI:
+				self.monkeypatch()
+			
+			self._con = Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=self.login_credential.get_authmethod(), auto_bind=True)
+			logger.debug('Performing BIND to server %s' % self.target_server.get_host())
+		
+		if not self._con.bind():
+			if 'description' in self._con.result:
+				raise Exception('Failed to bind to server! Reason: %s' % self._con.result['description'])
+			raise Exception('Failed to bind to server! Reason: %s' % self._con.result)
+		
+		if not self._tree:
+			logger.debug('Search tree base not defined, selecting root tree')
+			info = self.get_server_info()
+			if 'rootDomainNamingContext' not in info.other:
+				#really rare cases, the DC doesnt reply to DSA requests!!!
+				#in this case you will need to manually instruct the connection object on which tree it should perform the searches on	
+				raise Exception('Could not get the rootDomainNamingContext! You will need to specify the "tree" parameter manually!')
+			
+			self._tree = info.other['rootDomainNamingContext'][0]
+			logger.debug('Selected tree: %s' % self._tree)
+		
+		
+		logger.debug('Connected to server!')
 
-	def get_server_info(self, anonymous = True):
+	def get_server_info(self):
 		"""
 		Performs bind on the server and grabs the DSA info object.
 		If anonymous is set to true, then it will perform anonymous bind, not using user credentials
 		Otherwise it will use the credentials set in the object constructor.
 		"""
-		if anonymous == True:
-			logger.debug('Getting server info via Anonymous BIND on server %s' % self.target_server.get_host())
-			server = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
-			conn = Connection(server, auto_bind=True)
-			logger.debug('Got server info')
-		else:
-			logger.debug('Getting server info via credentials supplied on server %s' % self.target_server.get_host())
-			server = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
-			if self.use_sspi == True:
-				conn = self.monkeypatch()
-			else:
-				conn = Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=self.login_credential.get_authmethod())
-			logger.debug('Performing BIND to server %s' % self.target_server.get_host())
-			if not self._con.bind():
-				if 'description' in self._con.result:
-					raise Exception('Failed to bind to server! Reason: %s' % conn.result['description'])
-				raise Exception('Failed to bind to server! Reason: %s' % conn.result)
-			logger.debug('Connected to server!')
-		return server.info
-		
-
-	def connect(self, anonymous = False):
-		logger.debug('Connecting to server %s' % self.target_server.get_host())
-		if anonymous == False:
-			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
-			if self.use_sspi == True:
-				self._con = self.monkeypatch()
-			else:
-				self._con = Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=self.login_credential.get_authmethod())
-			logger.debug('Performing BIND to server %s' % self.target_server.get_host())
-			if not self._con.bind():
-				if 'description' in self._con.result:
-					raise Exception('Failed to bind to server! Reason: %s' % self._con.result['description'])
-				raise Exception('Failed to bind to server! Reason: %s' % self._con.result)
-			logger.debug('Connected to server!')
-		else:
-			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
-			self._con = Connection(self._srv)
-			logger.debug('Performing ANONYMOUS BIND to server %s' % self.target_server.get_host())
-			if not self._con.bind():
-				if 'description' in self._con.result:
-					raise Exception('Failed to bind to server! Reason: %s' % self._con.result['description'])
-				raise Exception('Failed to bind to server! Reason: %s' % self._con.result)
-			logger.debug('Connected to server!')
-
-		if not self._tree:
-			logger.debug('Search tree base not defined, selecting root tree')
-			info = self.get_server_info()
-			self._tree = info.other['rootDomainNamingContext'][0]
-			logger.debug('Selected tree: %s' % self._tree)
+		if not self._con:
+			self.connect()
+		return self._srv.info
 
 	def pagedsearch(self, ldap_filter, attributes, controls = None):
 		"""
@@ -377,6 +302,11 @@ class MSLDAP:
 		ldap_filter = r'(objectClass=group)'
 		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
 			yield MSADGroup.from_ldap(entry)
+			
+	def get_all_ous(self):
+		ldap_filter = r'(objectClass=organizationalUnit)'
+		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+			yield MSADOU.from_ldap(entry)
 			
 	def get_group_by_dn(self, dn):
 		ldap_filter = r'(&(objectClass=group)(distinguishedName=%s))' % escape_filter_chars(dn)

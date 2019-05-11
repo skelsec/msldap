@@ -1,8 +1,12 @@
-from msldap.core.ms_asn1 import *
-from msldap.core.win_data_types import *
+#!/usr/bin/env python3
+#
+# Author:
+#  Tamas Jos (@skelsec)
+#
+
+from msldap.wintypes import *
 from datetime import datetime, timedelta, timezone
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
-from msldap.core.win_data_types import *
 
 class MSADGroup:
 	def __init__(self):

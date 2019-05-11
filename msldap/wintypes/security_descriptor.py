@@ -1,34 +1,8 @@
 import io
 import enum
-from .sid import *
+from msldap.wintypes.sid import SID
+from msldap.wintypes.guid import GUID
 
-class GUID:
-	def __init__(self):
-		self.Data1 = None
-		self.Data2 = None
-		self.Data3 = None
-		self.Data4 = None
-		
-	@staticmethod
-	def from_buffer(buff):
-		guid = GUID()
-		guid.Data1 = buff.read(4)
-		guid.Data2 = buff.read(2)
-		guid.Data3 = buff.read(2)
-		guid.Data4 = buff.read(8)
-		return guid
-		
-	@staticmethod
-	def from_string(str):
-		guid = GUID()
-		guid.Data1 = bytes.fromhex(str.split('-')[0])
-		guid.Data2 = bytes.fromhex(str.split('-')[1])
-		guid.Data3 = bytes.fromhex(str.split('-')[2])
-		guid.Data4 = bytes.fromhex(str.split('-')[3])
-		return guid			
-		
-	def __str__(self):
-		return '-'.join([self.Data1.hex(), self.Data2.hex(),self.Data3.hex(),self.Data4.hex()])
 
 class ACCESS_MASK(enum.IntFlag):
 	GENERIC_READ = 0x80000000
@@ -45,32 +19,31 @@ class ACCESS_MASK(enum.IntFlag):
 	
 #https://docs.microsoft.com/en-us/previous-versions/tn-archive/ff405675(v%3dmsdn.10)
 class ADS_ACCESS_MASK(enum.IntFlag):
-	CREATE_CHILD = 0x1
-	DELETE_CHILD = 0x2
-	ACTRL_DS_LIST = 0x4
-	SELF = 0x8
-	READ_PROP = 0x10
-	WRITE_PROP = 0x20
-	DELETE_TREE = 0x40
-	LIST_OBJECT = 0x80
-	CONTROL_ACCESS = 0x100
-	GENERIC_READ = 0x80000000
-	GENERIC_WRITE = 0x4000000
-	GENERIC_EXECUTE = 0x20000000
-	GENERIC_ALL = 0x10000000
-	MAXIMUM_ALLOWED = 0x02000000
+	CREATE_CHILD   = 0x00000001 #The ObjectType GUID identifies a type of child object. The ACE controls the trustee's right to create this type of child object.
+	DELETE_CHILD   = 0x00000002 #The ObjectType GUID identifies a type of child object. The ACE controls the trustee's right to delete this type of child object.
+	
+	ACTRL_DS_LIST  = 0x00000004
+	SELF           = 0x00000008 #The ObjectType GUID identifies a validated write.
+	READ_PROP      = 0x00000010 #The ObjectType GUID identifies a property set or property of the object. The ACE controls the trustee's right to read the property or property set.
+	WRITE_PROP     = 0x00000020 #The ObjectType GUID identifies a property set or property of the object. The ACE controls the trustee's right to write the property or property set.
+	
+	DELETE_TREE    = 0x00000040
+	LIST_OBJECT    = 0x00000080
+	CONTROL_ACCESS = 0x00000100 #The ObjectType GUID identifies an extended access right.
+	
+	DELETE          = 0x00010000
+	READ_CONTROL    = 0x00020000
+	WRITE_DACL      = 0x00040000
+	WRITE_OWNER     = 0x00080000
+	SYNCHRONIZE     = 0x00100000
+	
 	ACCESS_SYSTEM_SECURITY = 0x01000000
-	SYNCHRONIZE = 0x00100000
-	WRITE_OWNER = 0x00080000
-	WRITE_DACL = 0x00040000
-	READ_CONTROL = 0x00020000
-	DELETE = 0x00010000
-	ADS_RIGHT_DS_CONTROL_ACCESS = 0X00000100 #The ObjectType GUID identifies an extended access right.
-	ADS_RIGHT_DS_CREATE_CHILD = 0X00000001 #The ObjectType GUID identifies a type of child object. The ACE controls the trustee's right to create this type of child object.
-	ADS_RIGHT_DS_DELETE_CHILD = 0X00000002 #The ObjectType GUID identifies a type of child object. The ACE controls the trustee's right to delete this type of child object.
-	ADS_RIGHT_DS_READ_PROP = 0x00000010 #The ObjectType GUID identifies a property set or property of the object. The ACE controls the trustee's right to read the property or property set.
-	ADS_RIGHT_DS_WRITE_PROP = 0x00000020 #The ObjectType GUID identifies a property set or property of the object. The ACE controls the trustee's right to write the property or property set.
-	ADS_RIGHT_DS_SELF = 0x00000008 #The ObjectType GUID identifies a validated write.
+	MAXIMUM_ALLOWED        = 0x02000000
+	
+	GENERIC_ALL     = 0x10000000
+	GENERIC_EXECUTE = 0x20000000
+	GENERIC_WRITE   = 0x40000000
+	GENERIC_READ    = 0x80000000
 
 #http://www.kouti.com/tables/baseattributes.htm
 

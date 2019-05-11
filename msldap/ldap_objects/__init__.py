@@ -10,5 +10,6 @@ from .adcomp import MSADMachine
 from .adsec  import MSADSecurityInfo, MSADTokenGroup
 from .common import MSLDAP_UAC
 from .adgroup import MSADGroup
+from .adou import MSADOU
 
-__all__ = ['MSADUser', 'MSADInfo','MSLDAP_UAC','MSADMachine', 'MSADSecurityInfo','MSADTokenGroup','MSADGroup']
+__all__ = ['MSADUser', 'MSADInfo','MSLDAP_UAC','MSADMachine', 'MSADSecurityInfo','MSADTokenGroup','MSADGroup','MSADOU']

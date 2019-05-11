@@ -4,8 +4,8 @@
 #  Tamas Jos (@skelsec)
 #
 
-from msldap.core.ms_asn1 import *
-from msldap.core.win_data_types import *
+
+from msldap.wintypes import *
 from datetime import datetime, timedelta, timezone
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
 

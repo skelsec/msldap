@@ -5,7 +5,7 @@ setup(
 	name="msldap",
 
 	# Version number (initial):
-	version="0.0.5",
+	version="0.1.0",
 
 	# Application author details:
 	author="Tamas Jos",
@@ -36,6 +36,7 @@ setup(
 	),
 	install_requires=[
 		'ldap3<2.5.2',
+		'asn1crypto',
 		'winsspi;platform_system=="Windows"',
 	],
 	entry_points={

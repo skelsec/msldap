@@ -1,5 +1,5 @@
-from .msldap import MSLDAPUserCredential, MSLDAPTargetServer, MSLDAP
-from .ms_asn1 import SDFlagsRequest, SDFlagsRequestValue
+from .connection import MSLDAPConnection
+from .common import MSLDAPCredential, MSLDAPTarget
 
 
-__all__ = ['MSLDAPUserCredential', 'MSLDAPTargetServer', 'MSLDAP','SDFlagsRequest', 'SDFlagsRequestValue']
+__all__ = ['MSLDAPCredential', 'MSLDAPTarget', 'MSLDAPConnection']
