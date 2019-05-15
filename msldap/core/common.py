@@ -2,6 +2,7 @@
 import getpass
 import enum
 from urllib.parse import urlparse
+import hashlib
 
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE, ALL_ATTRIBUTES
 
@@ -57,7 +58,26 @@ ldap_connection_string secret types:
 		if self.secret_type == MSLDAPSecretType.SSPI:
 			#this is here because of ldap3 module requires a password set 
 			return 'test'
-		return self.secret
+		elif self.secret_type == MSLDAPSecretType.NT:
+			if len(self.secret) == 32:
+				try:
+					bytes.fromhex(self.secret)
+				except:
+					#this is a plaintext password!
+					a = hashlib.new('md4')
+					a.update(self.secret.encode('utf-16-le'))
+					hs = a.hexdigest()
+					return '%s:%s' % (hs, hs)
+				else:
+					return '%s:%s' % (self.secret, self.secret)
+			else:
+				#this is a plaintext password!
+				a = hashlib.new('md4')
+				a.update(self.secret.encode('utf-16-le'))
+				hs = a.hexdigest()
+				return '%s:%s' % (hs, hs)
+		else:
+			return self.secret
 		
 	def is_anonymous(self):
 		return self.secret_type == MSLDAPSecretType.ANONYMOUS
