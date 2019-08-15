@@ -20,7 +20,6 @@ class SID:
 		sid_str = sid_str[4:]
 		t = sid_str.split('-')[0]
 		if t[:2] == '0x':
-			print(t[2:])
 			sid.IdentifierAuthority = int(t[2:],16)
 		else:
 			sid.IdentifierAuthority = int(t)
