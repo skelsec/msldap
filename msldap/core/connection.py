@@ -37,6 +37,9 @@ class MSLDAPConnection:
 		#return Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=NTLM)
 		
 	def connect(self):
+		if not self._con:
+			logger.debug('Already connected!')
+			return
 		if self.target_server.proxy is not None:
 			import socket
 			from socks5line.socks5line import Socks5LineProxyServer,SOCKS5Line 

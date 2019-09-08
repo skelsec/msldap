@@ -165,7 +165,7 @@ class MSLDAPTargetProxy:
 	def __init__(self):
 		self.ip = None
 		self.port = 1080
-		self.timeout = 1
+		self.timeout = 10
 		self.proxy_type = None
 		self.username = None
 		self.domain = None
