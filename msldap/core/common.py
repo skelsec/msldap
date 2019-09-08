@@ -3,6 +3,8 @@ import getpass
 import enum
 from urllib.parse import urlparse
 import hashlib
+import ipaddress
+
 
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE, ALL_ATTRIBUTES
 
@@ -114,11 +116,12 @@ ldap_connection_string secret types:
 	
 
 class MSLDAPTarget:
-	def __init__(self, host, port = 389, proto = 'ldap', tree = None):
+	def __init__(self, host, port = 389, proto = 'ldap', tree = None, proxy = None):
 		self.proto = proto
 		self.host = host
 		self.tree = tree
 		self.port = port
+		self.proxy = proxy
 
 	def get_host(self):
 		return '%s://%s:%s' % (self.proto, self.host, self.port)
@@ -151,6 +154,59 @@ class MSLDAPTarget:
 				port = 389
 			
 			return MSLDAPTarget(host, port = port)
+
+class MSLDAPTargetProxySecretType(enum.Enum):
+	NONE = 'NONE'
+
+class MSLDAPTargetProxyServerType(enum.Enum):
+	SOCKS5 = 'SOCKS5'
+
+class MSLDAPTargetProxy:
+	def __init__(self):
+		self.ip = None
+		self.port = 1080
+		self.timeout = 1
+		self.proxy_type = None
+		self.username = None
+		self.domain = None
+		self.secret = None
+		self.secret_type = None #SMBCredentialsSecretType
+		
+	def to_target_string(self):
+		pass
+	
+	@staticmethod
+	def from_connection_string(s):
+		"""
+		protocol/domain/user/secret-type:secret@proxy_server:port
+		"""
+		port = 1080
+		t, target = s.rsplit('@', 1)
+		ip = target
+		if target.find(':') != -1:
+			ip, port = target.split(':')
+			
+		st = MSLDAPTargetProxy()
+		st.port = int(port)
+		st.ip = ip
+
+		t, secret = t.split(':', 1)
+		elems = t.split('/')
+		st.proxy_type = MSLDAPTargetProxyServerType(elems[0].upper())
+		st.domain = elems[1]
+		st.user = elems[2]
+		st.secret_type = MSLDAPTargetProxySecretType(elems[3].upper())
+		st.secret = secret
+	
+		return st
+		
+	def __str__(self):
+		t = '==== MSLDAPTargetProxy ====\r\n'
+		for k in self.__dict__:
+			print(k)
+			t += '%s: %s\r\n' % (k, self.__dict__[k])
+			
+		return t
 		
 		
 if __name__ == '__main__':

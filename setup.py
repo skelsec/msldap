@@ -5,7 +5,7 @@ setup(
 	name="msldap",
 
 	# Version number (initial):
-	version="0.1.1",
+	version="0.1.2",
 
 	# Application author details:
 	author="Tamas Jos",
@@ -38,6 +38,7 @@ setup(
 		'ldap3<2.5.2',
 		'asn1crypto',
 		'winsspi;platform_system=="Windows"',
+		'socks5line'
 	],
 	entry_points={
 		'console_scripts': [

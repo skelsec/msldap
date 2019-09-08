@@ -37,6 +37,26 @@ class MSLDAPConnection:
 		#return Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=NTLM)
 		
 	def connect(self):
+		if self.target_server.proxy is not None:
+			import socket
+			from socks5line.socks5line import Socks5LineProxyServer,SOCKS5Line 
+
+			s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			s.bind(('127.0.0.1', 0))
+			new_port = s.getsockname()[1]
+			proxy = Socks5LineProxyServer()
+			proxy.ip = self.target_server.proxy.ip
+			proxy.port = self.target_server.proxy.port
+			proxy.timeout = self.target_server.proxy.timeout
+			proxy.username = self.target_server.proxy.username
+			proxy.password = self.target_server.proxy.secret
+
+			sl = SOCKS5Line(proxy, self.target_server.host, self.target_server.port)
+			sl.run_newthread(s)
+
+			self.target_server.host = '127.0.0.1'
+			self.target_server.port = new_port
+
 		if self.login_credential.is_anonymous() == True:
 			logger.debug('Getting server info via Anonymous BIND on server %s' % self.target_server.get_host())
 			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
