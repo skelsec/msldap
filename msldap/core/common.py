@@ -111,9 +111,7 @@ ldap_connection_string secret types:
 		cred.secret = secret
 		
 		return cred
-		
 
-	
 
 class MSLDAPTarget:
 	def __init__(self, host, port = 389, proto = 'ldap', tree = None, proxy = None):

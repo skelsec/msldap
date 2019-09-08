@@ -37,7 +37,7 @@ class MSLDAPConnection:
 		#return Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=NTLM)
 		
 	def connect(self):
-		if not self._con:
+		if self._con is not None:
 			logger.debug('Already connected!')
 			return
 		if self.target_server.proxy is not None:
