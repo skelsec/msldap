@@ -11,12 +11,16 @@ from msldap import logger
 from msldap.core.common import *
 from msldap.wintypes import *
 from msldap.ldap_objects import *
+from msldap.core.proxyhandler import Proxyhandler
+from msldap.core.authhandler import AuthHandler
 
 
 class MSLDAPConnection:
 	def __init__(self, login_credential, target_server, ldap_query_page_size = 1000):
 		self.login_credential = login_credential
 		self.target_server = target_server
+		self.auth_handler = AuthHandler(self.login_credential, self.target_server)
+		self.proxy_handler = Proxyhandler(self.target_server)
 
 		self.ldap_query_page_size = ldap_query_page_size #default for MSAD
 		self._tree = self.target_server.tree
@@ -24,52 +28,26 @@ class MSLDAPConnection:
 		self._srv = None
 		self._con = None
 		
-	def monkeypatch(self):
-		#print('Monkey-patching ldap tp use SSPI module for NTLM auth!')
-		try:
-			from winsspi.sspi import LDAP3NTLMSSPI
-			import ldap3.utils.ntlm
-		except Exception as e:
-			print('Failed to import winsspi module!')
-			raise e
-		#monkey-patching NTLM client with winsspi's implementation
-		ldap3.utils.ntlm.NtlmClient = LDAP3NTLMSSPI
-		#return Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=NTLM)
-		
+
 	def connect(self):
 		if self._con is not None:
 			logger.debug('Already connected!')
 			return
-		if self.target_server.proxy is not None:
-			import socket
-			from socks5line.socks5line import Socks5LineProxyServer,SOCKS5Line 
 
-			s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			s.bind(('127.0.0.1', 0))
-			new_port = s.getsockname()[1]
-			proxy = Socks5LineProxyServer()
-			proxy.ip = self.target_server.proxy.ip
-			proxy.port = self.target_server.proxy.port
-			proxy.timeout = self.target_server.proxy.timeout
-			proxy.username = self.target_server.proxy.username
-			proxy.password = self.target_server.proxy.secret
+		#setting up authentication
+		self.login_credential = self.auth_handler.select()
+		input(str(self.login_credential))
 
-			sl = SOCKS5Line(proxy, self.target_server.host, self.target_server.port)
-			sl.run_newthread(s)
-
-			self.target_server.host = '127.0.0.1'
-			self.target_server.port = new_port
+		#setting up connection
+		self.target_server = self.proxy_handler.select()
 
 		if self.login_credential.is_anonymous() == True:
 			logger.debug('Getting server info via Anonymous BIND on server %s' % self.target_server.get_host())
 			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
 			self._con = Connection(self._srv, auto_bind=True)
 		else:
-			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
-			if self.login_credential.secret_type == MSLDAPSecretType.SSPI:
-				self.monkeypatch()
-			
-			self._con = Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.get_password(), authentication=self.login_credential.get_authmethod(), auto_bind=True)
+			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)			
+			self._con = Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.password, authentication=self.login_credential.get_authmethod(), auto_bind=True)
 			logger.debug('Performing BIND to server %s' % self.target_server.get_host())
 		
 		if not self._con.bind():

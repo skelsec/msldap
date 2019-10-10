@@ -15,7 +15,7 @@ def run():
 	import argparse
 	parser = argparse.ArgumentParser(description='MS LDAP library')
 	parser.add_argument('-v', '--verbose', action='count', default=0, help='Verbosity, can be stacked')
-	parser.add_argument('connection', help='Connection string in the following format: <domain>/<username>/<secret_type>:<secret>@<dc_ip_or_hostname_or_ldap_url> Secret type can be: password/nt/sspi')
+	parser.add_argument('connection', help='Connection string in URL format.')
 	parser.add_argument('--tree', help='LDAP tree to perform the searches on')
 	
 	subparsers = parser.add_subparsers(help = 'commands')
@@ -39,8 +39,11 @@ def run():
 	else:
 		logging.basicConfig(level=logging.DEBUG)
 
-	creds = MSLDAPCredential.from_connection_string(args.connection)
-	target = MSLDAPTarget.from_connection_string(args.connection)
+	url_dec = MSLDAPURLDecoder(args.connection)
+	creds = url_dec.get_credential()
+	target = url_dec.get_target()
+	print(str(creds))
+	print(str(target))
 	connection = MSLDAPConnection(creds, target)
 
 	if args.command == 'dsa':
