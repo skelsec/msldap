@@ -94,8 +94,7 @@ class MSLDAPURLDecoder:
 		try:
 			self.auth_scheme = LDAPAuthProtocol(schemes[1])
 		except:
-			self.proxy_scheme = LDAPProxyType(schemes[1])
-			self.auth_scheme = LDAPAuthProtocol.PLAIN
+			raise Exception('Uknown scheme!')
 		
 		return
 
@@ -151,7 +150,7 @@ class MSLDAPURLDecoder:
 
 		#now for the url parameters
 		"""
-		ldaps://user:pass@10.10.10.2/?proxyserver=127.0.0.1&proxyport=8888&proxyuser=dddd&proxypass=ssss&dns=127.0.0.1
+		ldaps://user:pass@10.10.10.2/?proxyhost=127.0.0.1&proxyport=8888&proxyuser=dddd&proxypass=ssss&dns=127.0.0.1
 		"""
 		if url_e.query is not None:
 			query = parse_qs(url_e.query)
@@ -164,7 +163,7 @@ class MSLDAPURLDecoder:
 				elif k.startswith('proxy'):
 					if k == 'proxytype':
 						self.proxy_scheme = LDAPProxyType(query[k][0].upper())
-					elif k == 'proxyserver':
+					elif k == 'proxyhost':
 						self.proxy_ip = query[k][0]
 					elif k == 'proxyuser':
 						if query[k][0].find('\\') != -1:
@@ -177,6 +176,25 @@ class MSLDAPURLDecoder:
 						self.proxy_port = int(query[k][0])
 					else:
 						self.proxy_settings[k[len('proxy'):]] = query[k] #the result is a list for each entry because this preprocessor is not aware which elements should be lists!
+
+				#####TODOOOO FIX THIS!!!!
+				elif k.startswith('same'):
+					self.auth_settings[k[len('same'):]] = query[k]
+					if k == 'sametype':
+						self.proxy_scheme = LDAPProxyType(query[k][0].upper())
+					elif k == 'samehost':
+						self.proxy_ip = query[k][0]
+					elif k == 'sameuser':
+						if query[k][0].find('\\') != -1:
+							self.proxy_domain, self.proxy_username = query[k][0].split('\\')
+						else:
+							self.proxy_username = query[k][0]
+					elif k == 'samepass':
+						self.proxy_password = query[k][0]
+					elif k == 'sameport':
+						self.proxy_port = int(query[k][0])
+					else:
+						self.proxy_settings[k[len('same'):]] = query[k] #the result is a list for each entry because this preprocessor is not aware which elements should be lists!
 		
 		#setting default proxy ports
 		if self.proxy_scheme in [LDAPProxyType.SOCKS5, LDAPProxyType.SOCKS5_SSL]:

@@ -51,9 +51,9 @@ class AuthHandler:
 
 			#creating connection string
 			if self.login_credential.auth_method == LDAPAuthProtocol.MULTIPLEXOR:
-				con_str = 'ws://%s:%s' % (self.login_credential.settings['ip'][0], self.login_credential.settings['port'][0])
+				con_str = 'ws://%s:%s' % (self.login_credential.settings['host'][0], self.login_credential.settings['port'][0])
 			else:
-				con_str = 'wss://%s:%s' % (self.login_credential.settings['ip'][0], self.login_credential.settings['port'][0])
+				con_str = 'wss://%s:%s' % (self.login_credential.settings['host'][0], self.login_credential.settings['port'][0])
 			
 			agent_id = self.login_credential.settings['agentid'][0]
 			#print(con_str)
