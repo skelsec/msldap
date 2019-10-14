@@ -1,6 +1,6 @@
 import copy
 import asyncio
-from msldap.core.common import LDAPAuthProtocol, LDAPProxyType
+from msldap.commons.credential import LDAPAuthProtocol
 
 # If multiplexor is used, the proxy is defining the auth as well!
 #
