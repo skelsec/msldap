@@ -5,14 +5,16 @@
 #
 
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE, ALL_ATTRIBUTES
-from ldap3.utils.conv import *
+from ldap3.utils.conv import escape_filter_chars
 
 from msldap import logger
-from msldap.core.common import *
-from msldap.wintypes import *
+from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest, SDFlagsRequestValue
+from msldap.wintypes.security_descriptor import SECURITY_DESCRIPTOR
+from msldap.wintypes.sid import SID
+
 from msldap.ldap_objects import *
-from msldap.core.proxyhandler import Proxyhandler
-from msldap.core.authhandler import AuthHandler
+from msldap.network.proxy.handler import Proxyhandler
+from msldap.authentication.handler import AuthHandler
 
 
 class MSLDAPConnection:
@@ -36,7 +38,6 @@ class MSLDAPConnection:
 
 		#setting up authentication
 		self.login_credential = self.auth_handler.select()
-		input(str(self.login_credential))
 
 		#setting up connection
 		self.target_server = self.proxy_handler.select()

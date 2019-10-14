@@ -1,7 +1,7 @@
 import copy
 import asyncio
 
-from msldap.core.common import LDAPProxyType
+from msldap.commons.proxy import LDAPProxyType
 
 
 class Proxyhandler:

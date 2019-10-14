@@ -6,9 +6,9 @@
 
 import logging
 import csv
-from msldap.core.connection import *
-from msldap.core.common import *
-from msldap.ldap_objects import *
+from msldap.connection import MSLDAPConnection
+from msldap.commons.url import MSLDAPURLDecoder
+from msldap.ldap_objects import MSADUser, MSADMachine
 
 
 def run():
