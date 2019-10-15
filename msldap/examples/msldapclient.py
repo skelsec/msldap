@@ -156,7 +156,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 
 	async def do_groupmembership(self, dn):
-		"""Feteches names all groupnames the user is a member of given DN"""
+		"""Feteches names all groupnames the user is a member of for a given DN"""
 		try:
 			await self.do_ldapinfo(False)
 			await self.do_adinfo(False)
