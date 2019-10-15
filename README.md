@@ -17,7 +17,6 @@ OR
  
 # Usage
 Please note that this is a library, and was not intended to be used as a command line program.  
-Despite the statement above, when installing this module it will create an executable called `msldap` that can be used via the command line.  
 Whit this noted, the projects packs a fully functional LDAP interactive client. When installing the `msldap` module with `setup.py install` a new binary will appear called `msldap` (shocking naming conventions)  
 
 # LDAP connection URL
