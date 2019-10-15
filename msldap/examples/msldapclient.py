@@ -25,6 +25,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 			self.conn_url = MSLDAPURLDecoder(url)
 		self.connection = None
 		self.adinfo = None
+		self.ldapinfo = None
 
 	async def do_login(self, url = None):
 		"""Performs connection and login"""
@@ -46,11 +47,21 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 		except Exception as e:
 			traceback.print_exc()
 
-	async def do_info(self, show = True):
+	async def do_ldapinfo(self, show = True):
 		"""Prints detailed LDAP connection info (DSA)"""
 		try:
+			if self.ldapinfo is None:
+				self.ldapinfo = self.connection.get_server_info()
+			if show is True:
+				print(self.ldapinfo)
+		except Exception as e:
+			traceback.print_exc()
+
+	async def do_adinfo(self, show = True):
+		"""Prints detailed Active Driectory info"""
+		try:
 			if self.adinfo is None:
-				self.adinfo = self.connection.get_server_info()
+				self.adinfo = self.connection.get_ad_info()
 			if show is True:
 				print(self.adinfo)
 		except Exception as e:
@@ -59,7 +70,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 	async def do_spns(self):
 		"""Fetches kerberoastable SPN user accounts"""
 		try:
-			await self.do_info(False)
+			await self.do_ldapinfo(False)
 			for user in self.connection.get_all_service_user_objects():
 				print(user.sAMAccountName)
 		except Exception as e:
@@ -69,7 +80,8 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 	async def do_dump(self):
 		"""Fetches ALL user and machine accounts from the domain with a LOT of attributes"""
 		try:
-			await self.do_info(False)
+			await self.do_adinfo(False)
+			await self.do_ldapinfo(False)
 			for user in self.connection.get_all_user_objects():
 				print(user.get_row(MSADUser.TSV_ATTRS))
 			#with open(args.outfile, 'w', newline='', encoding = 'utf8') as f:
@@ -83,6 +95,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 	async def do_query(self, query, attributes = None):
 		"""Performs a raw LDAP query against the server. Secondary parameter is the requested attributes SEPARATED WITH COMMA (,)"""
 		try:
+			await self.do_ldapinfo(False)
 			if attributes is None:
 				attributes = '*'
 			if attributes.find(','):
@@ -97,6 +110,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 	async def do_tree(self, dn = None, level = 1):
 		"""Prints a tree from the given DN (if not set, the top) and with a given depth (default: 1)"""
 		try:
+			await self.do_ldapinfo(False)
 			if level is None:
 				level = 1
 			level = int(level)
@@ -110,7 +124,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 					dn = None
 					
 			if dn is None:
-				await self.do_info(False)
+				await self.do_ldapinfo(False)
 				dn = self.connection._tree
 			logging.debug('Tree on %s' % dn)
 			tree_data = self.connection.get_tree_plot(dn, level)
@@ -124,10 +138,40 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 	async def do_user(self, samaccountname):
 		"""Feteches a user object based on the sAMAccountName of the user"""
 		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
 			for user in self.connection.get_user(samaccountname):
 				print(user)
 		except Exception as e:
 			traceback.print_exc()
+
+	async def do_acl(self, dn):
+		"""Feteches security info for a given DN"""
+		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
+			for sec_info in self.connection.get_objectacl_by_dn(dn):
+				print(sec_info)
+		except Exception as e:
+			traceback.print_exc()
+
+	async def do_groupmembership(self, dn):
+		"""Feteches names all groupnames the user is a member of given DN"""
+		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
+			group_sids = []
+			for group_sid in self.connection.get_tokengroups(dn):
+				group_sids.append(group_sids)
+				group_dn = self.connection.get_dn_for_objectsid(group_sid)
+				print('%s - %s' % (group_dn, group_sid))
+				
+			if len(group_sids) == 0:
+				print('No memberships found')
+		except Exception as e:
+			traceback.print_exc()
+
+			
 
 	
 	"""
