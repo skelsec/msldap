@@ -42,7 +42,7 @@ setup(
 	],
 	entry_points={
 		'console_scripts': [
-			'msldap = msldap.__main__:run',
+			'msldap = msldap.examples.msldapclient:main',
 		],
 	}
 )

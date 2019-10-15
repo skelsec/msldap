@@ -4,7 +4,7 @@
 #  Tamas Jos (@skelsec)
 #
 
-from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE, ALL_ATTRIBUTES
+from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE, ALL_ATTRIBUTES, LEVEL
 from ldap3.utils.conv import escape_filter_chars
 
 from msldap import logger
@@ -98,6 +98,23 @@ class MSLDAPConnection:
 					logger.info('New page requested. Result count: %d' % ctr)
 				yield entry
 
+	def get_tree_plot(self, dn, level = 2):
+		logger.debug('Tree, dn: %s level: %s' % (dn, level))
+		tree = {}
+		entries = self._con.extend.standard.paged_search(dn, '(distinguishedName=*)', attributes = 'distinguishedName', paged_size = self.ldap_query_page_size, search_scope=LEVEL, controls = None)
+		for entry in entries:
+			
+			if 'raw_attributes' in entry and 'attributes' in entry:
+				# TODO: return ldapuser object
+				if level == 0:
+					return {}
+				
+				#print(entry['attributes']['distinguishedName'])
+				if entry['attributes']['distinguishedName'] is None or entry['attributes']['distinguishedName'] == []:
+					continue
+				subtree = self.get_tree_plot(entry['attributes']['distinguishedName'], level = level -1)
+				tree[entry['attributes']['distinguishedName']] = subtree
+		return {dn : tree}
 
 
 	def get_all_user_objects(self):
@@ -129,7 +146,8 @@ class MSLDAPConnection:
 		Fetches one user object from the AD, based on the sAMAccountName attribute (read: username) 
 		"""
 		logger.debug('Polling AD for user %s'% sAMAccountName)
-		ldap_filter = r'(&(objectClass=user)(sAMAccountName=%s)' % sAMAccountName
+		ldap_filter = r'(&(objectClass=user)(sAMAccountName=%s))' % sAMAccountName
+		print(ldap_filter)
 		attributes = MSADUser.ATTRS
 		for entry in self.pagedsearch(ldap_filter, attributes):
 			# TODO: return ldapuser object
