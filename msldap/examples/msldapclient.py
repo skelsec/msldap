@@ -27,6 +27,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 		self.adinfo = None
 
 	async def do_login(self, url = None):
+		"""Performs connection and login"""
 		try:
 			print('url %s' % repr(url))
 			
@@ -46,6 +47,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 
 	async def do_info(self, show = True):
+		"""Prints detailed LDAP connection info (DSA)"""
 		try:
 			if self.adinfo is None:
 				self.adinfo = self.connection.get_server_info()
@@ -55,6 +57,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 
 	async def do_spns(self):
+		"""Fetches kerberoastable SPN user accounts"""
 		try:
 			await self.do_info(False)
 			for user in self.connection.get_all_service_user_objects():
@@ -64,6 +67,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 
 
 	async def do_dump(self):
+		"""Fetches ALL user and machine accounts from the domain with a LOT of attributes"""
 		try:
 			await self.do_info(False)
 			for user in self.connection.get_all_user_objects():
@@ -77,6 +81,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 		
 	async def do_query(self, query, attributes = None):
+		"""Performs a raw LDAP query against the server. Secondary parameter is the requested attributes SEPARATED WITH COMMA (,)"""
 		try:
 			if attributes is None:
 				attributes = '*'
@@ -90,6 +95,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 
 	async def do_tree(self, dn = None, level = 1):
+		"""Prints a tree from the given DN (if not set, the top) and with a given depth (default: 1)"""
 		try:
 			if level is None:
 				level = 1
@@ -116,11 +122,14 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 
 	async def do_user(self, samaccountname):
+		"""Feteches a user object based on the sAMAccountName of the user"""
 		try:
 			for user in self.connection.get_user(samaccountname):
 				print(user)
 		except Exception as e:
 			traceback.print_exc()
+
+	
 	"""
 	async def do_info(self):
 		try:
