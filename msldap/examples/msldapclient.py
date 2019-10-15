@@ -68,10 +68,19 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 
 	async def do_spns(self):
-		"""Fetches kerberoastable SPN user accounts"""
+		"""Fetches kerberoastable user accounts"""
 		try:
 			await self.do_ldapinfo(False)
 			for user in self.connection.get_all_service_user_objects():
+				print(user.sAMAccountName)
+		except Exception as e:
+			traceback.print_exc()
+	
+	async def do_asrep(self):
+		"""Fetches ASREP-roastable user accounts"""
+		try:
+			await self.do_ldapinfo(False)
+			for user in self.connection.get_all_knoreq_user_objects():
 				print(user.sAMAccountName)
 		except Exception as e:
 			traceback.print_exc()
