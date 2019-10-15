@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+#
+# Author:
+#  Tamas Jos (@skelsec)
+#
+
 import enum
 
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE, ALL_ATTRIBUTES

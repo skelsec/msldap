@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+#
+# Author:
+#  Tamas Jos (@skelsec)
+#
 
 # https://docs.microsoft.com/en-us/previous-versions/aa373931(v%3Dvs.80)
 # Dear Microsoft ppl, pls fuck youselves...

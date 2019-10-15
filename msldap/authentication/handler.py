@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+#
+# Author:
+#  Tamas Jos (@skelsec)
+#
+
 import copy
 import asyncio
 from msldap.commons.credential import LDAPAuthProtocol

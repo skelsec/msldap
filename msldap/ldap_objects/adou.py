@@ -25,6 +25,7 @@ class MSADOU:
 		self.whenChanged = None #str
 		self.whenCreated = None #str
 	
+	@staticmethod
 	def from_ldap(entry):
 		adi = MSADOU()
 		adi.description = entry['attributes'].get('description') #dunno

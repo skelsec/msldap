@@ -47,6 +47,7 @@ class MSADInfo:
 		self.rIDManagerReference = None #str
 		self.domainmodelevel = None
 	
+	@staticmethod
 	def from_ldap(entry):
 		adi = MSADInfo()
 		adi.auditingPolicy = entry['attributes'].get('auditingPolicy') #dunno

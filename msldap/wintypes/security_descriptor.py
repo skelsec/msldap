@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+#
+# Author:
+#  Tamas Jos (@skelsec)
+#
+
 import io
 import enum
 from msldap.wintypes.sid import SID
@@ -381,10 +387,10 @@ class ACCESS_ALLOWED_CALLBACK_ACE:
 		
 	def __str__(self):
 		t = 'ACCESS_ALLOWED_CALLBACK_ACE'
-		t += 'ObjectType: %s\r\n' % self.ObjectType
-		t += 'InheritedObjectType: %s\r\n' % self.InheritedObjectType
-		t += 'ObjectFlags: %s\r\n' % self.Flags
-		t += 'AccessControlType: Allow\r\n'
+		t += 'Header: %s\r\n' % self.Header
+		t += 'Mask: %s\r\n' % self.Mask
+		t += 'Sid: %s\r\n' % self.Sid
+		t += 'ApplicationData: %s \r\n' % self.ApplicationData
 		
 		return t
 		
@@ -406,10 +412,10 @@ class ACCESS_DENIED_CALLBACK_ACE:
 		
 	def __str__(self):
 		t = 'ACCESS_DENIED_CALLBACK_ACE'
-		t += 'ObjectType: %s\r\n' % self.ObjectType
-		t += 'InheritedObjectType: %s\r\n' % self.InheritedObjectType
-		t += 'ObjectFlags: %s\r\n' % self.Flags
-		t += 'AccessControlType: Allow\r\n'
+		t += 'Header: %s\r\n' % self.Header
+		t += 'Mask: %s\r\n' % self.Mask
+		t += 'Sid: %s\r\n' % self.Sid
+		t += 'ApplicationData: %s \r\n' % self.ApplicationData
 		
 		return t
 		
@@ -442,7 +448,7 @@ class ACCESS_ALLOWED_CALLBACK_OBJECT_ACE:
 		t += 'ObjectType: %s\r\n' % self.ObjectType
 		t += 'InheritedObjectType: %s\r\n' % self.InheritedObjectType
 		t += 'ObjectFlags: %s\r\n' % self.Flags
-		t += 'AccessControlType: Allow\r\n'
+		t += 'ApplicationData: %s \r\n' % self.ApplicationData
 		
 		return t
 		
@@ -475,7 +481,7 @@ class ACCESS_DENIED_CALLBACK_OBJECT_ACE:
 		t += 'ObjectType: %s\r\n' % self.ObjectType
 		t += 'InheritedObjectType: %s\r\n' % self.InheritedObjectType
 		t += 'ObjectFlags: %s\r\n' % self.Flags
-		t += 'AccessControlType: Allow\r\n'
+		t += 'ApplicationData: %s \r\n' % self.ApplicationData
 		
 		return t
 		
@@ -497,10 +503,10 @@ class SYSTEM_AUDIT_CALLBACK_ACE:
 		
 	def __str__(self):
 		t = 'SYSTEM_AUDIT_CALLBACK_ACE'
-		t += 'ObjectType: %s\r\n' % self.ObjectType
-		t += 'InheritedObjectType: %s\r\n' % self.InheritedObjectType
-		t += 'ObjectFlags: %s\r\n' % self.Flags
-		t += 'AccessControlType: Allow\r\n'
+		t += 'Header: %s\r\n' % self.Header
+		t += 'Mask: %s\r\n' % self.Mask
+		t += 'Sid: %s\r\n' % self.Sid
+		t += 'ApplicationData: %s \r\n' % self.ApplicationData
 		
 		return t
 		
@@ -533,7 +539,7 @@ class SYSTEM_AUDIT_CALLBACK_OBJECT_ACE:
 		t += 'ObjectType: %s\r\n' % self.ObjectType
 		t += 'InheritedObjectType: %s\r\n' % self.InheritedObjectType
 		t += 'ObjectFlags: %s\r\n' % self.Flags
-		t += 'AccessControlType: Allow\r\n'
+		t += 'ApplicationData: %s \r\n' % self.ApplicationData
 		
 		return t
 		
@@ -571,10 +577,10 @@ class SYSTEM_RESOURCE_ATTRIBUTE_ACE:
 		
 	def __str__(self):
 		t = 'SYSTEM_RESOURCE_ATTRIBUTE_ACE'
-		t += 'ObjectType: %s\r\n' % self.ObjectType
-		t += 'InheritedObjectType: %s\r\n' % self.InheritedObjectType
-		t += 'ObjectFlags: %s\r\n' % self.Flags
-		t += 'AccessControlType: Allow\r\n'
+		t += 'Header: %s\r\n' % self.Header
+		t += 'Mask: %s\r\n' % self.Mask
+		t += 'Sid: %s\r\n' % self.Sid
+		t += 'AttributeData: %s \r\n' % self.AttributeData
 		
 		return t
 		
@@ -666,7 +672,7 @@ class ACL:
 		acl.AclSize = int.from_bytes(buff.read(2), 'little', signed = False)
 		acl.AceCount = int.from_bytes(buff.read(2), 'little', signed = False)
 		acl.Sbz2 = int.from_bytes(buff.read(2), 'little', signed = False)
-		for i in range(acl.AceCount):
+		for _ in range(acl.AceCount):
 			acl.aces.append(ACEReader.from_buffer(buff))
 		return acl
 		

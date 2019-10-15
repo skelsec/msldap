@@ -64,7 +64,7 @@ class MSADMachine:
 		self.servicePrincipalName = None
 		self.allowedtodelegateto = None
 		
-		
+	@staticmethod
 	def from_ldap(entry, adinfo = None):
 		adi = MSADMachine()
 		adi.sn = entry['attributes'].get('sn') 

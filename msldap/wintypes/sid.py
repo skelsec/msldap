@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+#
+# Author:
+#  Tamas Jos (@skelsec)
+#
+
 import io
 
 # https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/f992ad60-0fe4-4b87-9fed-beb478836861
@@ -43,7 +49,7 @@ class SID:
 		sid.Revision = int.from_bytes(buff.read(1), 'little', signed = False)
 		sid.SubAuthorityCount = int.from_bytes(buff.read(1), 'little', signed = False)
 		sid.IdentifierAuthority = int.from_bytes(buff.read(6), 'big', signed = False)
-		for i in range(sid.SubAuthorityCount):
+		for _ in range(sid.SubAuthorityCount):
 			sid.SubAuthority.append(int.from_bytes(buff.read(4), 'little', signed = False))
 		return sid
 		

@@ -120,7 +120,7 @@ class MSADUser:
 
 		return True
 
-
+	@staticmethod
 	def from_ldap(entry, adinfo = None):
 		adi = MSADUser()
 		adi.sn = entry['attributes'].get('sn') 
