@@ -201,7 +201,11 @@ def main():
     else:
         logging.basicConfig(level=logging.DEBUG)
 
-    asyncio.get_event_loop().run_until_complete(MSLDAPClient(args.url).run())
+    client = MSLDAPClient(args.url)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(client.do_login())
+    loop.run_until_complete(client.run())
+
 
 if __name__ == '__main__':
     main()
