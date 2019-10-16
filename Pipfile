@@ -6,6 +6,12 @@ verify_ssl = true
 [dev-packages]
 
 [packages]
+ldap3 = "<2.5.2"
+asn1crypto = "*"
+winsspi = {markers = "platform_system=='Windows'",version = "*"}
+socks5line = "*"
+aiocmd = "*"
+asciitree = "*"
 
 [requires]
 python_version = "3.7"
