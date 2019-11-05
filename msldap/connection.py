@@ -25,7 +25,7 @@ class MSLDAPConnection:
 		self.proxy_handler = Proxyhandler(self.target_server)
 
 		self.ldap_query_page_size = ldap_query_page_size #default for MSAD
-		self._tree = self.target_server.tree
+		self._tree = None
 		self._ldapinfo = None
 		self._srv = None
 		self._con = None
@@ -41,6 +41,7 @@ class MSLDAPConnection:
 
 		#setting up connection
 		self.target_server = self.proxy_handler.select()
+		self._tree = self.target_server.tree
 
 		if self.login_credential.is_anonymous() == True:
 			logger.debug('Getting server info via Anonymous BIND on server %s' % self.target_server.get_host())
@@ -59,12 +60,12 @@ class MSLDAPConnection:
 		if not self._tree:
 			logger.debug('Search tree base not defined, selecting root tree')
 			info = self.get_server_info()
-			if 'rootDomainNamingContext' not in info.other:
+			if 'defaultNamingContext' not in info.other:
 				#really rare cases, the DC doesnt reply to DSA requests!!!
 				#in this case you will need to manually instruct the connection object on which tree it should perform the searches on	
-				raise Exception('Could not get the rootDomainNamingContext! You will need to specify the "tree" parameter manually!')
+				raise Exception('Could not get the defaultNamingContext! You will need to specify the "tree" parameter manually!')
 			
-			self._tree = info.other['rootDomainNamingContext'][0]
+			self._tree = info.other['defaultNamingContext'][0]
 			logger.debug('Selected tree: %s' % self._tree)
 		
 		

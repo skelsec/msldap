@@ -39,6 +39,7 @@ class MSLDAPURLDecoder:
 		self.ldap_proto = None
 		self.ldap_host = None
 		self.ldap_port = None
+		self.ldap_tree = None
 
 		self.proxy_domain = None
 		self.proxy_username = None
@@ -55,7 +56,7 @@ class MSLDAPURLDecoder:
 		return MSLDAPCredential(domain=self.domain, username=self.username, password = self.password, auth_method=self.auth_scheme, settings = self.auth_settings)
 
 	def get_target(self):
-		target = MSLDAPTarget(self.ldap_host, port = self.ldap_port, proto = self.ldap_proto.lower())
+		target = MSLDAPTarget(self.ldap_host, port = self.ldap_port, proto = self.ldap_proto.lower(), tree=self.ldap_tree)
 		if self.proxy_scheme is not None:
 			proxy = MSLDAPProxy()
 			proxy.ip = self.proxy_ip
@@ -138,6 +139,11 @@ class MSLDAPURLDecoder:
 				self.ldap_port = 389
 			else:
 				self.ldap_port = 636
+
+		if url_e.path is not None:
+			tree = url_e.path.replace('/','')
+			if tree != '':
+				self.ldap_tree = tree
 
 		#now for the url parameters
 		"""
