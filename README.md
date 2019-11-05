@@ -5,7 +5,7 @@ LDAP library for MS AD
 Via GIT  
 `python3 setup.py install`  
 OR  
-`pip msldap install`
+`pip install msldap`
 
 # Prerequisites
  - `ldap3` module. It's pure python so you dont have to compile anything.
