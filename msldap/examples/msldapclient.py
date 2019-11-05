@@ -40,9 +40,10 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 			print(self.conn_url.get_credential())
 			print(self.conn_url.get_target())
 			
+			
 			self.connection = self.conn_url.get_connection()
 			self.connection.connect()
-			
+			print(self.connection._tree)
 			
 		except Exception as e:
 			traceback.print_exc()
@@ -180,8 +181,11 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 		except Exception as e:
 			traceback.print_exc()
 
-			
-
+	async def do_bindtree(self, newtree):
+		"""Changes the LDAP TREE for future queries. 
+				 MUST be DN format eg. 'DC=test,DC=corp'
+				 !DANGER! Switching tree to a tree outside of the domain will trigger a connection to that domain, leaking credentials!"""
+		self.connection._tree = newtree
 	
 	"""
 	async def do_info(self):
