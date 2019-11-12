@@ -38,7 +38,7 @@ setup(
 		'ldap3<2.5.2',
 		'asn1crypto',
 		'winsspi;platform_system=="Windows"',
-		'socks5line',
+		'socks5line>=0.0.3',
 		'aiocmd',
 		'asciitree',
 	],
