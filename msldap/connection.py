@@ -20,9 +20,9 @@ from msldap.authentication.handler import AuthHandler
 class MSLDAPConnection:
 	def __init__(self, login_credential, target_server, ldap_query_page_size = 1000):
 		self.login_credential = login_credential
-		self.target_server = target_server
-		self.auth_handler = AuthHandler(self.login_credential, self.target_server)
-		self.proxy_handler = Proxyhandler(self.target_server)
+		self.target = target_server
+		self.auth_handler = AuthHandler(self.login_credential, self.target)
+		self.proxy_handler = Proxyhandler(self.target)
 
 		self.ldap_query_page_size = ldap_query_page_size #default for MSAD
 		self._tree = None
@@ -36,21 +36,36 @@ class MSLDAPConnection:
 			logger.debug('Already connected!')
 			return
 
-		#setting up authentication
-		self.login_credential = self.auth_handler.select()
+		try:
+			#setting up authentication
+			self.login_credential = self.auth_handler.select()
 
-		#setting up connection
-		self.target_server = self.proxy_handler.select()
-		self._tree = self.target_server.tree
+			#setting up connection
+			self.target = self.proxy_handler.select()
+			self._tree = self.target.tree
+		except Exception as e:
+			logger.exception('Failed getting authentication or target to work.')
+			return False
 
 		if self.login_credential.is_anonymous() == True:
-			logger.debug('Getting server info via Anonymous BIND on server %s' % self.target_server.get_host())
-			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)
-			self._con = Connection(self._srv, auto_bind=True)
+			logger.debug('Getting server info via Anonymous BIND on server %s' % self.target.get_host())
+			self._srv = Server(self.target.get_host(), use_ssl=self.target.is_ssl(), get_info=ALL)
+			self._con = Connection(
+				self._srv, 
+				receive_timeout = self.target.timeout, 
+				auto_bind=True
+			)
 		else:
-			self._srv = Server(self.target_server.get_host(), use_ssl=self.target_server.is_ssl(), get_info=ALL)			
-			self._con = Connection(self._srv, user=self.login_credential.get_msuser(), password=self.login_credential.password, authentication=self.login_credential.get_authmethod(), auto_bind=True)
-			logger.debug('Performing BIND to server %s' % self.target_server.get_host())
+			self._srv = Server(self.target.get_host(), use_ssl=self.target.is_ssl(), get_info=ALL)			
+			self._con = Connection(
+				self._srv, 
+				user=self.login_credential.get_msuser(), 
+				password=self.login_credential.password, 
+				authentication=self.login_credential.get_authmethod(), 
+				receive_timeout = self.target.timeout, 
+				auto_bind=True
+			)
+			logger.debug('Performing BIND to server %s' % self.target.get_host())
 		
 		if not self._con.bind():
 			if 'description' in self._con.result:
@@ -70,6 +85,7 @@ class MSLDAPConnection:
 		
 		
 		logger.debug('Connected to server!')
+		return True
 
 	def get_server_info(self):
 		"""

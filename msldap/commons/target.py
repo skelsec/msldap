@@ -15,12 +15,13 @@ class LDAPProtocol(enum.Enum):
 
 
 class MSLDAPTarget:
-	def __init__(self, host, port = 389, proto = 'ldap', tree = None, proxy = None):
+	def __init__(self, host, port = 389, proto = 'ldap', tree = None, proxy = None, timeout = 5):
 		self.proto = proto
 		self.host = host
 		self.tree = tree
 		self.port = port
 		self.proxy = proxy
+		self.timeout = timeout
 
 	def get_host(self):
 		return '%s://%s:%s' % (self.proto, self.host, self.port)

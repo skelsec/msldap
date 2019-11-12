@@ -40,6 +40,7 @@ class MSLDAPURLDecoder:
 		self.ldap_host = None
 		self.ldap_port = None
 		self.ldap_tree = None
+		self.target_timeout = 5
 
 		self.proxy_domain = None
 		self.proxy_username = None
@@ -48,15 +49,28 @@ class MSLDAPURLDecoder:
 		self.proxy_ip = None
 		self.proxy_port = None
 		self.proxy_settings = {}
+		self.proxy_timeout = 5
 
 		self.parse()
 
 
 	def get_credential(self):
-		return MSLDAPCredential(domain=self.domain, username=self.username, password = self.password, auth_method=self.auth_scheme, settings = self.auth_settings)
+		return MSLDAPCredential(
+			domain=self.domain, 
+			username=self.username, 
+			password = self.password, 
+			auth_method=self.auth_scheme, 
+			settings = self.auth_settings
+		)
 
 	def get_target(self):
-		target = MSLDAPTarget(self.ldap_host, port = self.ldap_port, proto = self.ldap_proto.lower(), tree=self.ldap_tree)
+		target = MSLDAPTarget(
+			self.ldap_host, 
+			port = self.ldap_port, 
+			proto = self.ldap_proto.lower(), 
+			tree=self.ldap_tree,
+			timeout = self.target_timeout	
+		)
 		if self.proxy_scheme is not None:
 			proxy = MSLDAPProxy()
 			proxy.ip = self.proxy_ip
@@ -66,6 +80,7 @@ class MSLDAPURLDecoder:
 			proxy.username = self.proxy_username
 			proxy.domain = self.proxy_domain
 			proxy.settings = self.proxy_settings
+			proxy.timeout = self.proxy_timeout
 
 			target.proxy = proxy
 		return target
@@ -156,7 +171,8 @@ class MSLDAPURLDecoder:
 					self.dns = query[k] #multiple dns can be set, so not trimming here
 				elif k.startswith('auth'):
 					self.auth_settings[k[len('auth'):]] = query[k] #the result is a list for each entry because this preprocessor is not aware which elements should be lists!
-
+				elif k == 'timeout':
+					self.target_timeout = int(query[k])
 				elif k.startswith('proxy'):
 					if k == 'proxytype':
 						self.proxy_scheme = LDAPProxyType(query[k][0].upper())
@@ -169,6 +185,8 @@ class MSLDAPURLDecoder:
 							self.proxy_username = query[k][0]
 					elif k == 'proxypass':
 						self.proxy_password = query[k][0]
+					elif k == 'proxytimeout':
+						self.proxy_timeout = int(query[k][0])
 					elif k == 'proxyport':
 						self.proxy_port = int(query[k][0])
 					else:
@@ -181,6 +199,8 @@ class MSLDAPURLDecoder:
 						self.proxy_scheme = LDAPProxyType(query[k][0].upper())
 					elif k == 'samehost':
 						self.proxy_ip = query[k][0]
+					elif k == 'sametimeout':
+						self.proxy_timeout = int(query[k][0])
 					elif k == 'sameuser':
 						if query[k][0].find('\\') != -1:
 							self.proxy_domain, self.proxy_username = query[k][0].split('\\')

@@ -61,6 +61,7 @@ class AuthHandler:
 			else:
 				con_str = 'wss://%s:%s' % (self.login_credential.settings['host'][0], self.login_credential.settings['port'][0])
 			
+			print('auth_connecting')
 			agent_id = self.login_credential.settings['agentid'][0]
 			#print(con_str)
 			#input(agent_id)
@@ -68,6 +69,8 @@ class AuthHandler:
 			if isinstance(server_info, Exception):
 				raise Exception('Failed to create socks proxy Reason: %s '% server_info)
 			
+			print('auth server info %s' % server_info)
+
 			self.monkeypatch(LDAP3NTLMSSPI)
 			##
 			## Since this is a monkey patching object, we cannot control the input parameter count

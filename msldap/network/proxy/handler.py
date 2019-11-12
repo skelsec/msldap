@@ -56,10 +56,10 @@ class Proxyhandler:
 					await self.operator.connect()
 					#creating socks5 proxy
 					server_info = await self.operator.start_socks5(agent_id)
-					await self.operator.terminate()
+					asyncio.create_task(self.operator.terminate())
 					return server_info
 				except Exception as e:
-					await self.operator.terminate()
+					asyncio.create_task(self.operator.terminate())
 					return e
 
 			#creating connection string
@@ -74,8 +74,9 @@ class Proxyhandler:
 			#	agent_id = self.target.proxy.username
 			#else:
 			#	agent_id = self.target.proxy.domain
-			
+			print('proxy_connecting')
 			server_info = asyncio.run(create_proxy(con_str, self.target.proxy.settings['agentid'][0]))
+			print('socks5 server info %s' % server_info)
 			if isinstance(server_info, Exception):
 				raise Exception('Failed to create socks proxy Reason: %s '% server_info)
 			#copying the original target, then feeding it to socks5proxy object. it will hold the actual socks5 proxy server address we created before
@@ -92,7 +93,8 @@ class Proxyhandler:
 
 			sl = SOCKS5Line(proxy, self.target.host, self.target.port)
 			sl.run_newthread(s)
-
+			
+			print('socks5 socks5line ready')
 			newtarget = copy.deepcopy(self.target)
 			newtarget.proxy = None
 			newtarget.host = '127.0.0.1'
