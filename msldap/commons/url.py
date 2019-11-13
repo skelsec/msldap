@@ -17,14 +17,31 @@ from msldap.connection import MSLDAPConnection
 class MSLDAPURLDecoder:
 
 	help_epilog = """
-	MSLDAP URL Format: <protocol>+<auth>://<username>:<password>@<ip_or_host>:<port>/?<authhost>
-
+	MSLDAP URL Format: <protocol>+<auth>://<username>:<password>@<ip_or_host>:<port>/<tree>/?<param>=<value>
+	<protocol> sets the ldap protocol following values supported:
+		- ldap
+		- ldaps (ldap over SSL) << known to be problematic because of the underlying library (ldap3)
+	<auth> can be omitted if plaintext authentication is to be performed, otherwise:
+		- ntlm
+		- sspi (windows only!)
+		- anonymous
+		- plain
+	<param> can be:
+		- timeout : connction timeout in seconds
+		- proxytype: currently only socks5 proxy is supported
+		- proxyhost: Ip or hostname of the proxy server
+		- proxyport: port of the proxy server
+		- proxytimeout: timeout ins ecodns for the proxy connection
 
 	Examples:
 	ldap://10.10.10.2
 	ldaps://test.corp
-	ldap+ntlm://TEST\\victim:@10.10.10.2
+	ldap+sspi:///test.corp
+	ldap+ntlm://TEST\\victim:password@10.10.10.2
+	ldap://TEST\\victim:password@10.10.10.2/DC=test,DC=corp/
+	ldap://TEST\\victim:password@10.10.10.2/DC=test,DC=corp/?timeout=99&proxytype=socks5&proxyhost=127.0.0.1&proxyport=1080&proxytimeout=44
 	"""
+	
 	def __init__(self, url):
 		self.url = url
 		self.ldap_scheme = None
