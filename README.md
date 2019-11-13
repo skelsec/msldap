@@ -1,6 +1,17 @@
 # msldap
 LDAP library for MS AD
 
+# Features
+ - Comes with a built-in console LDAP client
+ - All parameters can be conrolled via a conveinent URL (see below)
+ - Supports integrated windows authentication
+ - Supports SOCKS5 proxy withot the need of extra proxifyer
+ - Minimal footprint
+ - A lot of pre-built queries for convenient information polling
+ - Easy to integrate to your project
+ - Completely missing documentation
+ - No testing suite
+
 # Installation
 Via GIT  
 `python3 setup.py install`  
