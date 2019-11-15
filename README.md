@@ -1,6 +1,17 @@
 # msldap
 LDAP library for MS AD
 
+# Features
+ - Comes with a built-in console LDAP client
+ - All parameters can be conrolled via a conveinent URL (see below)
+ - Supports integrated windows authentication
+ - Supports SOCKS5 proxy withot the need of extra proxifyer
+ - Minimal footprint
+ - A lot of pre-built queries for convenient information polling
+ - Easy to integrate to your project
+ - Completely missing documentation
+ - No testing suite
+
 # Installation
 Via GIT  
 `python3 setup.py install`  
@@ -25,18 +36,28 @@ The new connection string is composed in the following manner:
 `<protocol>+<auth_method>://<domain>\<username>:<password>@<ip>:<port>/?<param>=<value>&<param>=<value>&...`  
 Detailed explanation with examples:  
 ```
-<protocol>: "ldap" or "ldaps"
-<auth_method> (opt): "ntlm" or "sspi" default is ntlm
+	MSLDAP URL Format: <protocol>+<auth>://<username>:<password>@<ip_or_host>:<port>/<tree>/?<param>=<value>
+	<protocol> sets the ldap protocol following values supported:
+		- ldap
+		- ldaps (ldap over SSL) << known to be problematic because of the underlying library (ldap3)
+	<auth> can be omitted if plaintext authentication is to be performed, otherwise:
+		- ntlm
+		- sspi (windows only!)
+		- anonymous
+		- plain
+	<param> can be:
+		- timeout : connction timeout in seconds
+		- proxytype: currently only socks5 proxy is supported
+		- proxyhost: Ip or hostname of the proxy server
+		- proxyport: port of the proxy server
+		- proxytimeout: timeout ins ecodns for the proxy connection
 
-<param> (opt): <proxtype> <proxyauth> <proxyhost> <proxyport> <proxyuser> <proxpass>
-
-Examples:
-   ldap://10.10.10.2
-   ldap://TEST\\victim:password@10.10.10.2
-   ldap+ntlm://TEST\\victim:password@10.10.10.2
-   ldap+ntlm://TEST\\victim:<NT_hash>@10.10.10.2
-   ldap+sspi://10.10.10.2
-   ldap://TEST\\victim:password@10.10.10.2/?proxytype=socks5&proxyhost=127.0.0.1&proxyport=1080
-
-IMPORTANT! Based on your shell, the backslash operator (separating the user and domain) can be destorying the url. Be careful
+	Examples:
+	ldap://10.10.10.2
+	ldaps://test.corp
+	ldap+sspi:///test.corp
+	ldap+ntlm://TEST\\victim:password@10.10.10.2
+	ldap://TEST\\victim:password@10.10.10.2/DC=test,DC=corp/
+	ldap://TEST\\victim:password@10.10.10.2/DC=test,DC=corp/?timeout=99&proxytype=socks5&proxyhost=127.0.0.1&proxyport=1080&proxytimeout=44
 ```
+
