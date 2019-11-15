@@ -11,14 +11,14 @@ from msldap.ldap_objects.common import MSLDAP_UAC, vn
 class MSADUser:
 	ATTRS = [ 	'accountExpires', 'badPasswordTime', 'badPwdCount', 'cn', 'codePage', 
 				'countryCode', 'displayName', 'distinguishedName', 'givenName', 'initials', 
-				'lastLogoff', 'lastLogon', 'lastLogonTimestamp', 'logonCount', 'name', 
+				'lastLogoff', 'lastLogon', 'lastLogonTimestamp', 'logonCount', 'name', 'description',
 				'objectCategory', 'objectClass', 'objectGUID', 'objectSid', 'primaryGroupID', 
 				'pwdLastSet', 'sAMAccountName', 'sAMAccountType', 'sn', 'userAccountControl', 
 				'userPrincipalName', 'whenChanged', 'whenCreated','memberOf','member', 'servicePrincipalName',
 				'msDS-AllowedToDelegateTo',
 				]
 
-	TSV_ATTRS = [  	'sAMAccountName', 'userPrincipalName' ,'canLogon', 'badPasswordTime', 
+	TSV_ATTRS = [  	'sAMAccountName', 'userPrincipalName' ,'canLogon', 'badPasswordTime', 'description',
 					'badPwdCount', 'when_pw_change', 'when_pw_expires', 'pwdLastSet', 'lastLogonTimestamp',
 					'whenCreated', 'whenChanged', 'member', 'memberOf', 'servicePrincipalName', 
 					'objectSid', 'cn', 'UAC_SCRIPT', 'UAC_ACCOUNTDISABLE', 'UAC_LOCKOUT', 'UAC_PASSWD_NOTREQD', 
@@ -37,6 +37,7 @@ class MSADUser:
 		self.givenName = None #str
 		self.displayName = None #str
 		self.name = None #str
+		self.description = None
 
 		self.objectCategory = None #dn
 		self.objectClass = None #str
@@ -126,6 +127,7 @@ class MSADUser:
 		adi.sn = entry['attributes'].get('sn') 
 		adi.cn = entry['attributes'].get('cn') 
 		adi.distinguishedName = entry['attributes'].get('distinguishedName')
+		adi.description = entry['attributes'].get('description')
 		adi.initials = entry['attributes'].get('initials')
 		adi.givenName = entry['attributes'].get('givenName')
 		adi.displayName = entry['attributes'].get('displayName')
@@ -178,6 +180,7 @@ class MSADUser:
 		t['initials'] = vn(self.initials)
 		t['givenName'] = vn(self.givenName)
 		t['displayName'] = vn(self.displayName)
+		t['description'] = vn(self.description)
 		t['name'] = vn(self.name)
 		t['objectCategory'] = vn(self.objectCategory)
 		t['objectClass'] = vn(self.objectClass)

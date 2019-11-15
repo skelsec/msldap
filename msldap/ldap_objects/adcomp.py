@@ -9,7 +9,7 @@ from msldap.ldap_objects.common import MSLDAP_UAC, vn
 
 
 class MSADMachine:
-	ATTRS = [ 	'accountExpires', 'badPasswordTime', 'badPwdCount', 'cn', 'codePage', 
+	ATTRS = [ 	'accountExpires', 'badPasswordTime', 'badPwdCount', 'cn', 'description', 'codePage', 
 				'countryCode', 'displayName', 'distinguishedName', 'dNSHostName',
 				'instanceType', 'isCriticalSystemObject','lastLogoff', 'lastLogon', 
 				'lastLogonTimestamp', 'logonCount', 'localPolicyFlags',	'msDS-SupportedEncryptionTypes',
@@ -21,7 +21,7 @@ class MSADMachine:
 			
 	TSV_ATTRS = [  	'sAMAccountName', 'dNSHostName', 'operatingSystem', 'operatingSystemVersion', 'badPasswordTime', 
 					'badPwdCount', 'pwdLastSet', 'lastLogonTimestamp', 'whenCreated', 'whenChanged', 'servicePrincipalName', 
-					'objectSid', 'cn', 'UAC_SCRIPT', 'UAC_ACCOUNTDISABLE', 'UAC_LOCKOUT', 'UAC_PASSWD_NOTREQD', 
+					'objectSid', 'cn', 'description', 'UAC_SCRIPT', 'UAC_ACCOUNTDISABLE', 'UAC_LOCKOUT', 'UAC_PASSWD_NOTREQD', 
 					'UAC_PASSWD_CANT_CHANGE', 'UAC_ENCRYPTED_TEXT_PASSWORD_ALLOWED', 'UAC_DONT_EXPIRE_PASSWD', 'UAC_USE_DES_KEY_ONLY', 
 					'UAC_DONT_REQUIRE_PREAUTH', 'UAC_PASSWORD_EXPIRED'
 
@@ -38,6 +38,7 @@ class MSADMachine:
 		self.countryCode = None
 		self.displayName = None
 		self.dNSHostName = None
+		self.description = None
 		self.instanceType = None
 		self.isCriticalSystemObject = None
 		self.lastLogoff = None
@@ -75,6 +76,7 @@ class MSADMachine:
 		adi.badPwdCount = entry['attributes'].get('badPwdCount')
 		adi.codePage = entry['attributes'].get('codePage')
 		adi.countryCode = entry['attributes'].get('countryCode')
+		adi.description = entry['attributes'].get('description')
 		adi.displayName = entry['attributes'].get('displayName')
 		adi.dNSHostName = entry['attributes'].get('dNSHostName')
 		adi.instanceType = entry['attributes'].get('instanceType')
@@ -117,6 +119,7 @@ class MSADMachine:
 		t['badPwdCount'] = vn(self.badPwdCount)
 		t['codePage'] = vn(self.codePage)
 		t['countryCode'] = vn(self.countryCode)
+		t['description'] = vn(self.description)
 		t['displayName'] = vn(self.displayName)
 		t['dNSHostName'] = vn(self.dNSHostName)
 		t['instanceType'] = vn(self.instanceType)
