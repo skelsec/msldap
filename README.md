@@ -61,3 +61,5 @@ Detailed explanation with examples:
 	ldap://TEST\\victim:password@10.10.10.2/DC=test,DC=corp/?timeout=99&proxytype=socks5&proxyhost=127.0.0.1&proxyport=1080&proxytimeout=44
 ```
 
+# Kudos
+This project is built on top of the [ldap3](https://github.com/cannatag/ldap3) project.
