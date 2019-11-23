@@ -9,7 +9,7 @@ class MSADOU:
 		self.description = None #dunno
 		self.distinguishedName = None #datetime
 		self.dSCorePropagationData = None #str
-		self.gPLink = None #string
+		self.gPLink = None #list
 		self.instanceType = None #int
 		self.isCriticalSystemObject = None #int
 		self.name = None #int
@@ -31,7 +31,7 @@ class MSADOU:
 		adi.description = entry['attributes'].get('description') #dunno
 		adi.distinguishedName = entry['attributes'].get('distinguishedName') #datetime
 		adi.dSCorePropagationData = entry['attributes'].get('dSCorePropagationData') #str
-		adi.gPLink = entry['attributes'].get('gPLink') #string
+		adi.gPLink = entry['attributes'].get('gPLink') #list
 		adi.instanceType = entry['attributes'].get('instanceType') #int
 		adi.isCriticalSystemObject = entry['attributes'].get('isCriticalSystemObject') #int
 		adi.name = entry['attributes'].get('name') #str
@@ -72,7 +72,7 @@ class MSADOU:
 
 
 	def __str__(self):
-		t = 'MSADOU\n'
+		t = 'MSADOU\r\n'
 		d = self.to_dict()
 		for k in d:
 			t += '%s: %s\r\n' % (k, d[k])

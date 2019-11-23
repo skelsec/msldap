@@ -5,7 +5,7 @@ setup(
 	name="msldap",
 
 	# Version number (initial):
-	version="0.2.4",
+	version="0.2.5",
 
 	# Application author details:
 	author="Tamas Jos",

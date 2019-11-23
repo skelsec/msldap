@@ -165,6 +165,16 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 		except Exception as e:
 			traceback.print_exc()
 
+	async def do_gpos(self):
+		"""Feteches security info for a given DN"""
+		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
+			for gpo in self.connection.get_all_gpos():
+				print(gpo)
+		except Exception as e:
+			traceback.print_exc()
+
 	async def do_groupmembership(self, dn):
 		"""Feteches names all groupnames the user is a member of for a given DN"""
 		try:

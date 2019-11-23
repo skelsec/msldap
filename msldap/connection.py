@@ -157,6 +157,12 @@ class MSLDAPConnection:
 		for entry in self.pagedsearch(ldap_filter, attributes):
 			yield MSADMachine.from_ldap(entry, self._ldapinfo)
 		logger.debug('Finished polling for entries!')
+	
+	def get_all_gpos(self):
+		ldap_filter = r'(objectCategory=groupPolicyContainer)'
+		attributes = MSADGPO.ATTRS
+		for entry in self.pagedsearch(ldap_filter, attributes):
+			yield MSADGPO.from_ldap(entry)
 
 	def get_user(self, sAMAccountName):
 		"""
@@ -164,7 +170,6 @@ class MSLDAPConnection:
 		"""
 		logger.debug('Polling AD for user %s'% sAMAccountName)
 		ldap_filter = r'(&(objectClass=user)(sAMAccountName=%s))' % sAMAccountName
-		print(ldap_filter)
 		attributes = MSADUser.ATTRS
 		for entry in self.pagedsearch(ldap_filter, attributes):
 			# TODO: return ldapuser object
@@ -424,4 +429,5 @@ class MSLDAPConnection:
 			if entry['attributes']['tokenGroups']:
 				for sid_data in entry['attributes']['tokenGroups']:
 					yield str(SID.from_bytes(sid_data))
+
 			
