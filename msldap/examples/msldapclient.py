@@ -11,6 +11,7 @@ import csv
 
 from aiocmd import aiocmd
 from asciitree import LeftAligned
+import ldap3
 
 from msldap.connection import MSLDAPConnection
 from msldap.commons.url import MSLDAPURLDecoder
@@ -172,6 +173,16 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 			await self.do_adinfo(False)
 			for gpo in self.connection.get_all_gpos():
 				print(gpo)
+		except Exception as e:
+			traceback.print_exc()
+
+	async def do_laps(self):
+		"""Feteches all laps passwords"""
+		try:
+			for entry in self.connection.get_all_laps():
+				print(entry)
+		except ldap3.core.exceptions.LDAPAttributeError:
+			print('Attribute error! LAPS is probably not used. If it is used, and you see this error please submit an issue on GitHub')
 		except Exception as e:
 			traceback.print_exc()
 

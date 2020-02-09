@@ -164,6 +164,18 @@ class MSLDAPConnection:
 		for entry in self.pagedsearch(ldap_filter, attributes):
 			yield MSADGPO.from_ldap(entry)
 
+	def get_all_laps(self):
+		ldap_filter = r'(&(sAMAccountType=805306369))'
+		attributes = ['cn','ms-mcs-AdmPwd']
+		for entry in self.pagedsearch(ldap_filter, attributes):
+			yield entry
+
+	def get_laps(self, sAMAccountName):
+		ldap_filter = r'(&(sAMAccountType=805306369)(sAMAccountName=%s))' % sAMAccountName
+		attributes = ['cn','ms-mcs-AdmPwd']
+		for entry in self.pagedsearch(ldap_filter, attributes):
+			yield entry
+
 	def get_user(self, sAMAccountName):
 		"""
 		Fetches one user object from the AD, based on the sAMAccountName attribute (read: username) 
