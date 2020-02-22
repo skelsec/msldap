@@ -4,7 +4,7 @@
 #  Tamas Jos (@skelsec)
 #
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime #, timedelta, timezone
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
 
 
@@ -163,8 +163,8 @@ class MSADUser:
 			adi.userAccountControl = MSLDAP_UAC(temp)
 
 			if adinfo:
-				adi.when_pw_change = (adi.pwdLastSet - timedelta(seconds = adinfo.minPwdAge/10000000)).replace(tzinfo=None)
-				adi.when_pw_expires = (adi.pwdLastSet - timedelta(seconds = adinfo.maxPwdAge/10000000)).replace(tzinfo=None)
+				adi.when_pw_change = (adi.pwdLastSet - adinfo.minPwdAge/10000000).replace(tzinfo=None)
+				adi.when_pw_expires = (adi.pwdLastSet - adinfo.maxPwdAge/10000000).replace(tzinfo=None)
 				adi.must_change_pw = adi.calc_PasswordMustChange() #datetime
 				if adi.sAMAccountName[-1] != '$':
 					adi.canLogon = adi.calc_CanLogon() #bool

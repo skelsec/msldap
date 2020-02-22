@@ -5,7 +5,6 @@
 #
 
 from msldap.wintypes import *
-from datetime import datetime, timedelta, timezone
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
 
 class MSADGroup:

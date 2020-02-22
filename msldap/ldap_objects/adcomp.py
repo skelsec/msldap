@@ -4,7 +4,6 @@
 #  Tamas Jos (@skelsec)
 #
 
-from datetime import datetime, timedelta, timezone
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
 
 

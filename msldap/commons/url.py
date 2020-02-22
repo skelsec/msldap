@@ -58,6 +58,7 @@ class MSLDAPURLDecoder:
 		self.ldap_port = None
 		self.ldap_tree = None
 		self.target_timeout = 5
+		self.target_pagesize = 1000
 
 		self.proxy_domain = None
 		self.proxy_username = None
@@ -105,7 +106,7 @@ class MSLDAPURLDecoder:
 	def get_connection(self):
 		cred = self.get_credential()
 		target = self.get_target()
-		return MSLDAPConnection(cred, target)
+		return MSLDAPConnection(cred, target, ldap_query_page_size = self.target_pagesize)
 
 	def scheme_decoder(self, scheme):
 		schemes = scheme.upper().split('+')
@@ -189,7 +190,9 @@ class MSLDAPURLDecoder:
 				elif k.startswith('auth'):
 					self.auth_settings[k[len('auth'):]] = query[k] #the result is a list for each entry because this preprocessor is not aware which elements should be lists!
 				elif k == 'timeout':
-					self.target_timeout = int(query[k])
+					self.target_timeout = int(query[k][0])
+				elif k == 'pagesize':
+					self.target_pagesize = int(query[k][0])
 				elif k.startswith('proxy'):
 					if k == 'proxytype':
 						self.proxy_scheme = LDAPProxyType(query[k][0].upper())

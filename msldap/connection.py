@@ -139,7 +139,7 @@ class MSLDAPConnection:
 		Fetches all user objects from the AD, and returns MSADUser object
 		"""
 		logger.debug('Polling AD for all user objects')
-		ldap_filter = r'(objectClass=user)'
+		ldap_filter = r'(sAMAccountType=805306368)'
 
 		attributes = MSADUser.ATTRS
 		for entry in self.pagedsearch(ldap_filter, attributes):
@@ -151,7 +151,7 @@ class MSLDAPConnection:
 		Fetches all machine objects from the AD, and returns MSADMachine object
 		"""
 		logger.debug('Polling AD for all user objects')
-		ldap_filter = r'(&(sAMAccountType=805306369))'
+		ldap_filter = r'(sAMAccountType=805306369)'
 
 		attributes = MSADMachine.ATTRS
 		for entry in self.pagedsearch(ldap_filter, attributes):
@@ -165,7 +165,7 @@ class MSLDAPConnection:
 			yield MSADGPO.from_ldap(entry)
 
 	def get_all_laps(self):
-		ldap_filter = r'(&(sAMAccountType=805306369))'
+		ldap_filter = r'(sAMAccountType=805306369)'
 		attributes = ['cn','ms-mcs-AdmPwd']
 		for entry in self.pagedsearch(ldap_filter, attributes):
 			yield entry
