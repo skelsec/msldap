@@ -436,10 +436,15 @@ class MSLDAPConnection:
 		ldap_filter = r'(distinguishedName=%s)' % escape_filter_chars(dn)
 		attributes=['tokenGroups']
 		
-		self._con.search(dn, ldap_filter, attributes=attributes, search_scope=BASE)
-		for entry in self._con.response:
+		#self._con.search(dn, ldap_filter, attributes=attributes, search_scope=BASE)
+		#for entry in self._con.response:
+		#	if entry['attributes']['tokenGroups']:
+		#		for sid_data in entry['attributes']['tokenGroups']:
+		#			yield str(SID.from_bytes(sid_data))
+
+		entries = self._con.extend.standard.paged_search(dn, ldap_filter, attributes = attributes, paged_size = self.ldap_query_page_size, search_scope=BASE)
+		for entry in entries:
 			if entry['attributes']['tokenGroups']:
 				for sid_data in entry['attributes']['tokenGroups']:
 					yield str(SID.from_bytes(sid_data))
-
 			
