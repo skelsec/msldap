@@ -106,14 +106,21 @@ class MSLDAPConnection:
 		"""
 		logger.debug('Paged search, filter: %s attributes: %s' % (ldap_filter, ','.join(attributes)))
 		ctr = 0
-		entries = self._con.extend.standard.paged_search(self._tree, ldap_filter, attributes = attributes, paged_size = self.ldap_query_page_size, controls = controls)
-		for entry in entries:
-			if 'raw_attributes' in entry and 'attributes' in entry:
-				# TODO: return ldapuser object
-				ctr += 1
-				if ctr % self.ldap_query_page_size == 0:
-					logger.debug('New page requested. Result count: %d' % ctr)
-				yield entry
+		#entries = 
+		for entry in self._con.extend.standard.paged_search(
+			self._tree, 
+			ldap_filter, 
+			attributes = attributes, 
+			paged_size = self.ldap_query_page_size, 
+			controls = controls, 
+			generator=True
+			):
+				if 'raw_attributes' in entry and 'attributes' in entry:
+					# TODO: return ldapuser object
+					ctr += 1
+					if ctr % self.ldap_query_page_size == 0:
+						logger.debug('New page requested. Result count: %d' % ctr)
+					yield entry
 
 	def get_tree_plot(self, dn, level = 2):
 		logger.debug('Tree, dn: %s level: %s' % (dn, level))
