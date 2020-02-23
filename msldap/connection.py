@@ -125,19 +125,27 @@ class MSLDAPConnection:
 	def get_tree_plot(self, dn, level = 2):
 		logger.debug('Tree, dn: %s level: %s' % (dn, level))
 		tree = {}
-		entries = self._con.extend.standard.paged_search(dn, '(distinguishedName=*)', attributes = 'distinguishedName', paged_size = self.ldap_query_page_size, search_scope=LEVEL, controls = None)
-		for entry in entries:
+		#entries = 
+		for entry in self._con.extend.standard.paged_search(
+			dn, 
+			'(distinguishedName=*)', 
+			attributes = 'distinguishedName', 
+			paged_size = self.ldap_query_page_size, 
+			search_scope=LEVEL, 
+			controls = None, 
+			generator=True
+			):
 			
-			if 'raw_attributes' in entry and 'attributes' in entry:
-				# TODO: return ldapuser object
-				if level == 0:
-					return {}
-				
-				#print(entry['attributes']['distinguishedName'])
-				if entry['attributes']['distinguishedName'] is None or entry['attributes']['distinguishedName'] == []:
-					continue
-				subtree = self.get_tree_plot(entry['attributes']['distinguishedName'], level = level -1)
-				tree[entry['attributes']['distinguishedName']] = subtree
+				if 'raw_attributes' in entry and 'attributes' in entry:
+					# TODO: return ldapuser object
+					if level == 0:
+						return {}
+					
+					#print(entry['attributes']['distinguishedName'])
+					if entry['attributes']['distinguishedName'] is None or entry['attributes']['distinguishedName'] == []:
+						continue
+					subtree = self.get_tree_plot(entry['attributes']['distinguishedName'], level = level -1)
+					tree[entry['attributes']['distinguishedName']] = subtree
 		return {dn : tree}
 
 
@@ -449,9 +457,16 @@ class MSLDAPConnection:
 		#		for sid_data in entry['attributes']['tokenGroups']:
 		#			yield str(SID.from_bytes(sid_data))
 
-		entries = self._con.extend.standard.paged_search(dn, ldap_filter, attributes = attributes, paged_size = self.ldap_query_page_size, search_scope=BASE)
-		for entry in entries:
-			if entry['attributes']['tokenGroups']:
-				for sid_data in entry['attributes']['tokenGroups']:
-					yield str(SID.from_bytes(sid_data))
+		#entries = 
+		for entry in self._con.extend.standard.paged_search(
+			dn, 
+			ldap_filter, 
+			attributes = attributes, 
+			paged_size = self.ldap_query_page_size, 
+			search_scope=BASE, 
+			generator=True
+			):
+				if entry['attributes']['tokenGroups']:
+					for sid_data in entry['attributes']['tokenGroups']:
+						yield str(SID.from_bytes(sid_data))
 			
