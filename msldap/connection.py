@@ -112,7 +112,7 @@ class MSLDAPConnection:
 				# TODO: return ldapuser object
 				ctr += 1
 				if ctr % self.ldap_query_page_size == 0:
-					logger.info('New page requested. Result count: %d' % ctr)
+					logger.debug('New page requested. Result count: %d' % ctr)
 				yield entry
 
 	def get_tree_plot(self, dn, level = 2):
