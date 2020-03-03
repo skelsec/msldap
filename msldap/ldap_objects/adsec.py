@@ -51,7 +51,7 @@ class MSADSecurityInfo:
 		self.objectGUID = None
 		self.objectSid = None
 		
-		
+	@staticmethod
 	def from_ldap(entry):
 		adi = MSADSecurityInfo()
 		adi.sn = entry['attributes'].get('sn') 

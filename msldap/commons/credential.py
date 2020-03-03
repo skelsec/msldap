@@ -15,6 +15,7 @@ class LDAPAuthProtocol(enum.Enum):
 	SSPI = 'SSPI'
 	MULTIPLEXOR = 'MULTIPLEXOR'
 	MULTIPLEXOR_SSL = 'MULTIPLEXOR_SSL'
+	GSSAPI = 'GSSAPI'
 
 
 class MSLDAPCredential:

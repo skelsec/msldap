@@ -52,6 +52,7 @@ setup(
 		'socks5line>=0.0.3',
 		'aiocmd',
 		'asciitree',
+		'ldap_filter'
 	],
 	entry_points={
 		'console_scripts': [

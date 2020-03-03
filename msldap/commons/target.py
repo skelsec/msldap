@@ -15,7 +15,7 @@ class LDAPProtocol(enum.Enum):
 
 
 class MSLDAPTarget:
-	def __init__(self, host, port = 389, proto = 'ldap', tree = None, proxy = None, timeout = 5):
+	def __init__(self, host, port = 389, proto = 'ldap', tree = None, proxy = None, timeout = 10):
 		self.proto = proto
 		self.host = host
 		self.tree = tree

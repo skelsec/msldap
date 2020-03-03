@@ -101,8 +101,14 @@ class MSLDAPConnection:
 		"""
 		Performs a paged search on the AD, using the filter and attributes as a normal query does.
 		Needs to connect to the server first!
-		ldap_filter: str : LDAP query filter
-		attributes: list : Attributes list to recieve in the result
+
+		Parameters:
+			ldap_filter (str): LDAP query filter
+			attributes (list): Attributes list to recieve in the result
+			controls (obj): Additional control object to be passed to ldap3 paged_search function
+		
+		Returns:
+			generator
 		"""
 		logger.debug('Paged search, filter: %s attributes: %s' % (ldap_filter, ','.join(attributes)))
 		ctr = 0
@@ -123,6 +129,14 @@ class MSLDAPConnection:
 					yield entry
 
 	def get_tree_plot(self, dn, level = 2):
+		"""
+		Returns a dictionary representing a tree starting from 'dn' containing all subtrees.
+		Parameters:
+			dn (str): Distinguished name of the root of the tree
+			level (int): Recursion level
+		Returns:
+			dict
+		"""
 		logger.debug('Tree, dn: %s level: %s' % (dn, level))
 		tree = {}
 		#entries = 
@@ -160,6 +174,16 @@ class MSLDAPConnection:
 		for entry in self.pagedsearch(ldap_filter, attributes):
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
 		logger.debug('Finished polling for entries!')
+
+	def get_all_user_raw(self):
+		"""
+		Fetches all user objects from the AD, and returns MSADUser object
+		"""
+		logger.debug('Polling AD for all user objects')
+		ldap_filter = r'(sAMAccountType=805306368)'
+
+		attributes = MSADUser.ATTRS
+		return self.pagedsearch(ldap_filter, attributes)
 
 	def get_all_machine_objects(self):
 		"""
@@ -229,7 +253,6 @@ class MSLDAPConnection:
 
 		attributes = MSADUser.ATTRS
 		for entry in self.pagedsearch(ldap_filter, attributes):
-			# TODO: return ldapuser object
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
 		logger.debug('Finished polling for entries!')
 
@@ -246,7 +269,6 @@ class MSLDAPConnection:
 
 		attributes = MSADUser.ATTRS
 		for entry in self.pagedsearch(ldap_filter, attributes):
-			# TODO: return ldapuser object
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
 		logger.debug('Finished polling for entries!')
 		

@@ -71,7 +71,7 @@ class MSADGroup:
 		
 		temp = entry['attributes'].get('nTSecurityDescriptor')
 		if temp:
-			self.nTSecurityDescriptor = SID.from_bytes(temp)
+			t.nTSecurityDescriptor = SID.from_bytes(temp)
 		return t
 		
 
