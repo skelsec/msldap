@@ -113,11 +113,18 @@ class URI(LDAPString):
 class Referral(core.SequenceOf):
 	_child_spec = URI
 
+# https://www.ietf.org/rfc/rfc2696.txt
+class SearchControlValue(core.Sequence):
+	_fields = [
+		('size' , core.Integer),
+		('cookie' , core.OctetString)
+	]
+
 class Control(core.Sequence):
 	_fields = [
-		('controlType', LDAPOID, {'tag_type': TAG, 'tag': 0}),
-		('criticality', core.Boolean, {'tag_type': TAG, 'tag': 1}),
-		('controlValue', core.OctetString, {'tag_type': TAG, 'tag': 2, 'optional': True}),	
+		('controlType', LDAPOID),
+		('criticality', core.Boolean, {'implicit': (CONTEXT , 1), 'default' : False }),
+		('controlValue', core.OctetString, {'optional': True })	,
 	]
 	
 class Controls(core.SequenceOf):
@@ -184,24 +191,27 @@ class AttributeValueAssertion(core.Sequence):
 
 class SubString(core.Choice):
 	_alternatives = [
-		('initial', AssertionValue, {'implicit': (APPLICATION , 0) }  ),
-		('any', AssertionValue, {'implicit': (APPLICATION , 1) }  ),
-		('final', AssertionValue, {'implicit': (APPLICATION , 2) }  ),
+		('initial', AssertionValue, {'implicit': (CONTEXT , 0) }  ),
+		('any', AssertionValue, {'implicit': (CONTEXT , 1) }  ),
+		('final', AssertionValue, {'implicit': (CONTEXT , 2) }  ),
 	]
+	
 
+class Substrings(core.SequenceOf):
+	_child_spec = SubString
 
 class SubstringFilter(core.Sequence):
 	_fields = [
 		('type', AttributeDescription),
-		('substrings', AssertionValue),
+		('substrings', Substrings),
 	]
 
 class MatchingRuleAssertion(core.Sequence):
 	_fields = [
-		('matchingRule', MatchingRuleId, {'implicit': (APPLICATION, 1), 'optional' : True}  ),
-		('type', AttributeDescription, {'implicit': (APPLICATION, 2), 'optional' : True}  ),
-		('matchValue', AssertionValue, {'implicit': (APPLICATION, 3), 'optional' : False}  ),
-		('dnAttributes', core.Boolean, {'implicit': (APPLICATION, 4), 'optional' : False}  ),
+		('matchingRule', MatchingRuleId, {'implicit': (CONTEXT, 1), 'optional' : True}  ),
+		('type', AttributeDescription, {'implicit': (CONTEXT, 2), 'optional' : True}  ),
+		('matchValue', AssertionValue, {'implicit': (CONTEXT, 3)}  ),
+		('dnAttributes', core.Boolean, {'implicit': (CONTEXT, 4), 'default' : False}  ),
 	]
 
 # keep this Filter definition here! It is needed because filter class contains itself!

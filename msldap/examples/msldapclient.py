@@ -207,6 +207,15 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 				 MUST be DN format eg. 'DC=test,DC=corp'
 				 !DANGER! Switching tree to a tree outside of the domain will trigger a connection to that domain, leaking credentials!"""
 		self.connection._tree = newtree
+
+	async def do_asrep(self):
+		"""a"""
+		try:
+			for entry in self.connection.get_all_knoreq_user_objects(include_machine = False):
+				print(entry)
+		
+		except Exception as e:
+			traceback.print_exc()
 	
 	"""
 	async def do_info(self):

@@ -40,7 +40,7 @@ class MSLDAPTCPNetwork:
 				else:
 					remaining_length = int.from_bytes(lb[:4], byteorder = 'big', signed = False)
 					remaining_length = (remaining_length + 4) - preread
-				print('Reading %s' % remaining_length)
+				#print('Reading %s' % remaining_length)
 
 				remaining_data = await asyncio.wait_for(self.reader.readexactly(remaining_length), self.target.timeout)
 				
