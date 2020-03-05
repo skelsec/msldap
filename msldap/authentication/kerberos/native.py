@@ -24,10 +24,9 @@ from minikerberos.aioclient import AIOKerberosClient
 
 # SMBKerberosCredential
 
-class SMBKerberos:
+class MSLDAPKerberos:
 	def __init__(self, settings):
 		self.settings = settings
-		self.mode = None
 		self.ccred = None
 		self.target = None
 		self.spn = None
@@ -56,7 +55,6 @@ class SMBKerberos:
 		return self.gssapi.GSS_Unwrap(data, message_no, direction=direction, auth_data=auth_data)
 		
 	def setup(self):
-		self.mode = self.settings.mode
 		self.ccred = self.settings.ccred
 		self.spn = self.settings.spn
 		self.target = self.settings.target

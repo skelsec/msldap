@@ -42,11 +42,11 @@ class SPNEGO:
 		return copy.deepcopy(self.original_authentication_contexts[ctx_name])
 	
 	def signing_needed(self):
-		return False
+		return self.selected_authentication_context.signing_needed()
 	
 	def encryption_needed(self):
-		return True
-		
+		return self.selected_authentication_context.encryption_needed()
+
 	async def unsign(self, data):
 		#TODO: IMPLEMENT THIS
 		return data

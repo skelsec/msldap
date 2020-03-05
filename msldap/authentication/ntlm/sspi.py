@@ -5,7 +5,7 @@
 from winsspi.sspi import NTLMSMBSSPI
 from msldap.authentication.ntlm.native import NTLMAUTHHandler, NTLMHandlerSettings
 
-class SMBNTLMSSPI:
+class MSLDAPNTLMSSPI:
 	def __init__(self, settings):
 		self.settings = settings
 		self.mode = None #'CLIENT'

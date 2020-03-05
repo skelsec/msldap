@@ -13,12 +13,12 @@ from aiocmd import aiocmd
 from asciitree import LeftAligned
 import ldap3
 
-from msldap.connection import MSLDAPConnection
+from msldap.client import MSLDAPClient
 from msldap.commons.url import MSLDAPURLDecoder
 from msldap.ldap_objects import MSADUser, MSADMachine
 
 
-class MSLDAPClient(aiocmd.PromptToolkitCmd):
+class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 	def __init__(self, url = None):
 		aiocmd.PromptToolkitCmd.__init__(self, ignore_sigint=False) #Setting this to false, since True doesnt work on windows...
 		self.conn_url = None
@@ -42,8 +42,8 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 			print(self.conn_url.get_target())
 			
 			
-			self.connection = self.conn_url.get_connection()
-			self.connection.connect()
+			self.connection = self.conn_url.get_client()
+			await self.connection.connect()
 			print(self.connection._tree)
 			
 		except Exception as e:
@@ -73,7 +73,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 		"""Fetches kerberoastable user accounts"""
 		try:
 			await self.do_ldapinfo(False)
-			for user in self.connection.get_all_service_user_objects():
+			async for user in self.connection.get_all_service_user_objects():
 				print(user.sAMAccountName)
 		except Exception as e:
 			traceback.print_exc()
@@ -82,7 +82,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 		"""Fetches ASREP-roastable user accounts"""
 		try:
 			await self.do_ldapinfo(False)
-			for user in self.connection.get_all_knoreq_user_objects():
+			async for user in self.connection.get_all_knoreq_user_objects():
 				print(user.sAMAccountName)
 		except Exception as e:
 			traceback.print_exc()
@@ -93,7 +93,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 		try:
 			await self.do_adinfo(False)
 			await self.do_ldapinfo(False)
-			for user in self.connection.get_all_user_objects():
+			async for user in self.connection.get_all_user_objects():
 				print(user.get_row(MSADUser.TSV_ATTRS))
 			#with open(args.outfile, 'w', newline='', encoding = 'utf8') as f:
 			#	writer = csv.writer(f, delimiter = '\t')
@@ -113,7 +113,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 				attributes = attributes.split(',')
 			logging.debug('Query: %s' % (query))
 			logging.debug('Attributes: %s' % (attributes))
-			for entry in self.connection.pagedsearch(query, attributes):
+			async for entry in self.connection.pagedsearch(query, attributes):
 				print(entry)
 		except Exception as e:
 			traceback.print_exc()
@@ -138,7 +138,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 				await self.do_ldapinfo(False)
 				dn = self.connection._tree
 			logging.debug('Tree on %s' % dn)
-			tree_data = self.connection.get_tree_plot(dn, level)
+			tree_data = await self.connection.get_tree_plot(dn, level)
 			tr = LeftAligned()
 			print(tr(tree_data))
 
@@ -151,7 +151,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 		try:
 			await self.do_ldapinfo(False)
 			await self.do_adinfo(False)
-			for user in self.connection.get_user(samaccountname):
+			async for user in self.connection.get_user(samaccountname):
 				print(user)
 		except Exception as e:
 			traceback.print_exc()
@@ -161,7 +161,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 		try:
 			await self.do_ldapinfo(False)
 			await self.do_adinfo(False)
-			for sec_info in self.connection.get_objectacl_by_dn(dn):
+			async for sec_info in self.connection.get_objectacl_by_dn(dn):
 				print(sec_info)
 		except Exception as e:
 			traceback.print_exc()
@@ -171,7 +171,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 		try:
 			await self.do_ldapinfo(False)
 			await self.do_adinfo(False)
-			for gpo in self.connection.get_all_gpos():
+			async for gpo in self.connection.get_all_gpos():
 				print(gpo)
 		except Exception as e:
 			traceback.print_exc()
@@ -179,7 +179,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 	async def do_laps(self):
 		"""Feteches all laps passwords"""
 		try:
-			for entry in self.connection.get_all_laps():
+			async for entry in self.connection.get_all_laps():
 				print(entry)
 		except ldap3.core.exceptions.LDAPAttributeError:
 			print('Attribute error! LAPS is probably not used. If it is used, and you see this error please submit an issue on GitHub')
@@ -192,7 +192,7 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 			await self.do_ldapinfo(False)
 			await self.do_adinfo(False)
 			group_sids = []
-			for group_sid in self.connection.get_tokengroups(dn):
+			async for group_sid in self.connection.get_tokengroups(dn):
 				group_sids.append(group_sids)
 				group_dn = self.connection.get_dn_for_objectsid(group_sid)
 				print('%s - %s' % (group_dn, group_sid))
@@ -207,15 +207,6 @@ class MSLDAPClient(aiocmd.PromptToolkitCmd):
 				 MUST be DN format eg. 'DC=test,DC=corp'
 				 !DANGER! Switching tree to a tree outside of the domain will trigger a connection to that domain, leaking credentials!"""
 		self.connection._tree = newtree
-
-	async def do_asrep(self):
-		"""a"""
-		try:
-			for entry in self.connection.get_all_knoreq_user_objects(include_machine = False):
-				print(entry)
-		
-		except Exception as e:
-			traceback.print_exc()
 	
 	"""
 	async def do_info(self):
@@ -240,7 +231,7 @@ def main():
 	else:
 		logging.basicConfig(level=logging.DEBUG)
 
-	asyncio.get_event_loop().run_until_complete(MSLDAPClient(args.url).run())
+	asyncio.get_event_loop().run_until_complete(MSLDAPClientConsole(args.url).run())
 
 if __name__ == '__main__':
 	main()

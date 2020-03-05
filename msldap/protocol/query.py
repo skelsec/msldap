@@ -1,25 +1,10 @@
 from ldap_filter import Filter as LF
+from ldap_filter.filter import LDAPBase
 from asn1crypto.core import ObjectIdentifier
 from msldap.protocol.messages import Filter, Filters, \
 	AttributeDescription, SubstringFilter, MatchingRuleAssertion, \
 	SubstringFilter
 
-
-
-
-#Filter._alternatives = [
-#		('and', Filters, {'implicit': (CONTEXT , 0) }  ),
-#		('or', Filters, {'implicit': (CONTEXT , 1) }  ),
-#		('not', Filter, {'implicit': (CONTEXT , 2) }  ),
-#		('equalityMatch', AttributeValueAssertion, {'implicit': (CONTEXT , 3) }  ),
-#		('substrings', SubstringFilter, {'implicit': (CONTEXT , 4) }  ),
-#		('greaterOrEqual', AttributeValueAssertion, {'implicit': (CONTEXT , 5) }  ),
-#		('lessOrEqual', AttributeValueAssertion, {'implicit': (CONTEXT , 6) }  ),
-#		('present', AttributeDescription, {'implicit': (CONTEXT , 7) }  ),
-#		('approxMatch', AttributeValueAssertion, {'implicit': (CONTEXT , 8) }  ),
-#		('extensibleMatch', MatchingRuleAssertion, {'implicit': (CONTEXT , 9) }  ),
-#
-#	]
 
 def equality(attr, value):
 	print(attr)
@@ -85,9 +70,7 @@ def query_syntax_converter_inner(ftr):
 				elif ftr.comp == '|':
 					key = 'or'
 				
-				x = [query_syntax_converter_inner(f) for f in ftr.filters]
-				print(x)
-				Filters(x)
+				#x = [query_syntax_converter_inner(f) for f in ftr.filters]
 				return Filter({
 					key : Filters([query_syntax_converter_inner(f) for f in ftr.filters])
 				})
@@ -103,3 +86,7 @@ def query_syntax_converter(ldap_query_string):
 	"""
 	flt = LF.parse(ldap_query_string)
 	return query_syntax_converter_inner(flt)
+
+
+def escape_filter_chars(text):
+    return LDAPBase.escape(text)

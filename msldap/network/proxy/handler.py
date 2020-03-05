@@ -1,7 +1,7 @@
 import copy
 import asyncio
 
-from msldap.commons.proxy import LDAPProxyType
+from msldap.commons.proxy import MSLDAPProxyType
 
 
 class Proxyhandler:
@@ -12,7 +12,7 @@ class Proxyhandler:
 		if self.target.proxy is None:
 			return self.target
 		
-		if self.target.proxy.proxy_type in [LDAPProxyType.SOCKS5, LDAPProxyType.SOCKS5_SSL]:
+		if self.target.proxy.proxy_type in [MSLDAPProxyType.SOCKS5, MSLDAPProxyType.SOCKS5_SSL]:
 			import socket
 			try:
 				from socks5line.socks5line import Socks5LineProxyServer,SOCKS5Line 

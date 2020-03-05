@@ -12,7 +12,7 @@ from minikerberos.gssapi.gssapi import get_gssapi
 from minikerberos.protocol.asn1_structs import AP_REQ, AP_REP
 from minikerberos.protocol.encryption import Enctype, Key, _enctype_table
 
-class SMBKerberosSSPI:
+class MSLDAPKerberosSSPI:
 	def __init__(self, settings):
 		self.iterations = 0
 		self.settings = settings

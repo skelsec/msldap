@@ -20,7 +20,9 @@ class MSLDAPTCPNetwork:
 		self.is_plain_msg = True
 
 	async def terminate(self):
-		pass
+		self.handle_in_task.cancel()
+		self.handle_out_task.cancel()
+
 
 	async def handle_in_q(self):
 		try:
@@ -47,10 +49,10 @@ class MSLDAPTCPNetwork:
 				await self.in_queue.put((lb+remaining_data, None))
 				
 		
-		except asyncio.CancelledError:
-			return
+		#except asyncio.CancelledError:
+		#	return
 		except Exception as e:
-			logger.exception('handle_in_q')
+			#logger.exception('handle_in_q')
 			await self.in_queue.put((None, e))
 
 		finally:

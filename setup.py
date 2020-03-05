@@ -46,13 +46,14 @@ setup(
 		"Operating System :: OS Independent",
 	),
 	install_requires=[
-		'ldap3>=2.6.1',
+		#'ldap3>=2.6.1',
 		'asn1crypto',
 		'winsspi;platform_system=="Windows"',
-		'socks5line>=0.0.3',
+		#'socks5line>=0.0.3',
 		'aiocmd',
 		'asciitree',
-		'ldap_filter'
+		'ldap_filter',
+		'asysocks',
 	],
 	entry_points={
 		'console_scripts': [

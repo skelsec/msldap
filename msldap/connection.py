@@ -1,494 +1,595 @@
-#!/usr/bin/env python3
-#
-# Author:
-#  Tamas Jos (@skelsec)
-#
-
-from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE, ALL_ATTRIBUTES, LEVEL
-from ldap3.utils.conv import escape_filter_chars
+import asyncio
 
 from msldap import logger
-from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest, SDFlagsRequestValue
-from msldap.wintypes.security_descriptor import SECURITY_DESCRIPTOR
-from msldap.wintypes.sid import SID
+from msldap.protocol.messages import LDAPMessage, BindRequest, \
+	protocolOp, AuthenticationChoice, SaslCredentials, \
+	SearchRequest, AttributeDescription, Filter, Filters, \
+	Controls, Control, SearchControlValue
 
-from msldap.ldap_objects import *
-from msldap.network.proxy.handler import Proxyhandler
-from msldap.authentication.handler import AuthHandler
+from msldap.protocol.utils import calcualte_length
+from msldap.protocol.typeconversion import convert_result
+from msldap.commons.authbuilder import AuthenticatorBuilder
+from msldap.commons.credential import MSLDAP_GSS_METHODS
+from msldap.network.selector import MSLDAPNetworkSelector
 
+class MSLDAPClientConnection:
+	def __init__(self, target, creds):
+		self.target = target
+		self.creds = creds
+		self.auth = AuthenticatorBuilder(self.creds, self.target).build()
+		self.connected = False
+		self.bind_ok = False
+		self.__sign_messages = False
+		self.__encrypt_messages = False
+		self.network = None
 
-class MSLDAPConnection:
-	def __init__(self, login_credential, target_server, ldap_query_page_size = 1000):
-		self.login_credential = login_credential
-		self.target = target_server
-		self.auth_handler = AuthHandler(self.login_credential, self.target)
-		self.proxy_handler = Proxyhandler(self.target)
+		self.handle_incoming_task = None
 
-		self.ldap_query_page_size = ldap_query_page_size #default for MSAD
-		self._tree = None
-		self._ldapinfo = None
-		self._srv = None
-		self._con = None
+		self.message_id = 0
+		self.message_table = {}
+		self.message_table_notify = {}
+
+	async def __handle_incoming(self):
+		try:
+			while True:
+				message_data, err = await self.network.in_queue.get()
+				if err is not None:
+					logger.debug('Client terminating bc __handle_incoming!')
+					raise err
+				
+				################################
+				#                              #
+				#  ADD CHANNEL BINDING  HERE!  #
+				################################
+
+				if self.bind_ok is True:
+					if self.__encrypt_messages is True:
+						#print('Encrypted %s' % message_data)
+						#removing size
+						message_data = message_data[4:]
+						try:
+							message_data = await self.auth.decrypt(message_data, 0)
+							#print('Decrypted %s' % message_data.hex())
+						except:
+							import traceback
+							traceback.print_exc()
+						
+					elif self.__sign_messages is True:
+						#print('Signed %s' % message_data)
+						message_data = message_data[4:]
+						try:
+							message_data = await self.auth.unsign(message_data)
+						#	print('Unsinged %s' % message_data)
+						except:
+							import traceback
+							traceback.print_exc()
+				
+				msg_len = calcualte_length(message_data)
+				msg_total_len = len(message_data)
+				messages = []
+				if msg_len == msg_total_len:
+					message = LDAPMessage.load(message_data)
+					messages.append(message.native)
+				else:
+					#print('multi-message!')
+					while len(message_data) > 0:
+						msg_len = calcualte_length(message_data)
+						message = LDAPMessage.load(message_data[:msg_len])
+						messages.append(message.native)
+						
+						message_data = message_data[msg_len:]
+
+				#print(messages)
+				message_id = messages[0]['messageID']
+				if message_id not in self.message_table:
+					self.message_table[message_id] = []
+				self.message_table[message_id].extend(messages)
+				if message_id not in self.message_table_notify:
+					self.message_table_notify[message_id] = asyncio.Event()
+				self.message_table_notify[message_id].set()
 		
-
-	def connect(self):
-		if self._con is not None:
-			logger.debug('Already connected!')
+		except asyncio.CancelledError:
+			#not notifying clients, at this point the client is terminating
 			return
 
-		try:
-			#setting up authentication
-			self.login_credential = self.auth_handler.select()
-
-			#setting up connection
-			self.target = self.proxy_handler.select()
-			self._tree = self.target.tree
 		except Exception as e:
-			logger.exception('Failed getting authentication or target to work.')
-			return False
+			import traceback
+			traceback.print_exc()
+			for msgid in self.message_table_notify:
+				self.message_table[msgid] = [e]
+				self.message_table_notify[msgid].set()
 
-		if self.login_credential.is_anonymous() == True:
-			logger.debug('Getting server info via Anonymous BIND on server %s' % self.target.get_host())
-			self._srv = Server(self.target.get_host(), use_ssl=self.target.is_ssl(), get_info=ALL)
-			self._con = Connection(
-				self._srv, 
-				receive_timeout = self.target.timeout, 
-				auto_bind=True
-			)
-		else:
-			self._srv = Server(self.target.get_host(), use_ssl=self.target.is_ssl(), get_info=ALL)			
-			self._con = Connection(
-				self._srv, 
-				user=self.login_credential.get_msuser(), 
-				password=self.login_credential.password, 
-				authentication=self.login_credential.get_authmethod(), 
-				receive_timeout = self.target.timeout, 
-				auto_bind=True
-			)
-			logger.debug('Performing BIND to server %s' % self.target.get_host())
-		
-		if not self._con.bind():
-			if 'description' in self._con.result:
-				raise Exception('Failed to bind to server! Reason: %s' % self._con.result['description'])
-			raise Exception('Failed to bind to server! Reason: %s' % self._con.result)
-		
-		if not self._tree:
-			logger.debug('Search tree base not defined, selecting root tree')
-			info = self.get_server_info()
-			if 'defaultNamingContext' not in info.other:
-				#really rare cases, the DC doesnt reply to DSA requests!!!
-				#in this case you will need to manually instruct the connection object on which tree it should perform the searches on	
-				raise Exception('Could not get the defaultNamingContext! You will need to specify the "tree" parameter manually!')
-			
-			self._tree = info.other['defaultNamingContext'][0]
-			logger.debug('Selected tree: %s' % self._tree)
-		
-		
-		logger.debug('Connected to server!')
-		return True
 
-	def get_server_info(self):
-		"""
-		Performs bind on the server and grabs the DSA info object.
-		If anonymous is set to true, then it will perform anonymous bind, not using user credentials
-		Otherwise it will use the credentials set in the object constructor.
-		"""
-		if not self._con:
-			self.connect()
-		return self._srv.info
+	async def send_message(self, message):
+		curr_msg_id = self.message_id
+		self.message_id += 1
 
-	def pagedsearch(self, ldap_filter, attributes, controls = None):
-		"""
-		Performs a paged search on the AD, using the filter and attributes as a normal query does.
-		Needs to connect to the server first!
+		message['messageID'] = curr_msg_id
+		message_data = LDAPMessage(message).dump()
 
-		Parameters:
-			ldap_filter (str): LDAP query filter
-			attributes (list): Attributes list to recieve in the result
-			controls (obj): Additional control object to be passed to ldap3 paged_search function
+		if self.bind_ok is True:
+			if self.__encrypt_messages is True:
+				message_data, signature = await self.auth.encrypt(message_data, 0)
+				message_data = signature + message_data
+				message_data = len(message_data).to_bytes(4, byteorder = 'big', signed = False) + message_data
+			elif self.__sign_messages is True:
+				signature = await self.auth.sign(message_data, 0)
+				message_data = signature + message_data
+				message_data = len(message_data).to_bytes(4, byteorder = 'big', signed = False) + message_data
 		
-		Returns:
-			generator
-		"""
-		logger.debug('Paged search, filter: %s attributes: %s' % (ldap_filter, ','.join(attributes)))
-		ctr = 0
-		#entries = 
-		for entry in self._con.extend.standard.paged_search(
-			self._tree, 
-			ldap_filter, 
-			attributes = attributes, 
-			paged_size = self.ldap_query_page_size, 
-			controls = controls, 
-			generator=True
-			):
-				if 'raw_attributes' in entry and 'attributes' in entry:
-					# TODO: return ldapuser object
-					ctr += 1
-					if ctr % self.ldap_query_page_size == 0:
-						logger.debug('New page requested. Result count: %d' % ctr)
-					yield entry
+		self.message_table_notify[curr_msg_id] = asyncio.Event()
+		await self.network.out_queue.put(message_data)
 
-	def get_tree_plot(self, dn, level = 2):
+		return curr_msg_id
+
+	async def recv_message(self, message_id):
+		if message_id not in self.message_table_notify:
+			logger.debug('Requested message id %s which is not in the message notify table!' % message_id)
+			return None
+		#print('Waiting for %s' % message_id)
+		await self.message_table_notify[message_id].wait()
+		#print(self.message_table)
+		messages = self.message_table[message_id]
+
+		#print('%s arrived!' % message_id)
+
+		self.message_table[message_id] = []
+		self.message_table_notify[message_id].clear()
+
+		return messages
+
+	async def connect(self):
+		logger.debug('Connecting!')
+		self.network = MSLDAPNetworkSelector.select(self.target)
+		res, err = await self.network.run()
+		if res is False:
+			raise err
+
+		self.handle_incoming_task = asyncio.create_task(self.__handle_incoming())
+		logger.debug('Connection succsessful!')
+
+	async def disconnect(self):
+		logger.debug('Disconnecting!')
+		self.bind_ok = False
+		self.handle_incoming_task.cancel()
+		await self.network.terminate()
+
+
+	def __bind_success(self):
 		"""
-		Returns a dictionary representing a tree starting from 'dn' containing all subtrees.
-		Parameters:
-			dn (str): Distinguished name of the root of the tree
-			level (int): Recursion level
-		Returns:
-			dict
+		Internal function invoked after bind finished. 
+		Instructs the network layer that upcoming messages might be wrapped
 		"""
-		logger.debug('Tree, dn: %s level: %s' % (dn, level))
-		tree = {}
-		#entries = 
-		for entry in self._con.extend.standard.paged_search(
-			dn, 
-			'(distinguishedName=*)', 
-			attributes = 'distinguishedName', 
-			paged_size = self.ldap_query_page_size, 
-			search_scope=LEVEL, 
-			controls = None, 
-			generator=True
-			):
-			
-				if 'raw_attributes' in entry and 'attributes' in entry:
-					# TODO: return ldapuser object
-					if level == 0:
-						return {}
+		logger.debug('BIND Success!')
+		self.bind_ok = True
+		if self.creds.auth_method in MSLDAP_GSS_METHODS or self.creds.auth_method == LDAPAuthProtocol.SICILY:
+			self.__sign_messages = self.auth.signing_needed()
+			self.__encrypt_messages = self.auth.encryption_needed()
+			if self.__encrypt_messages or self.__sign_messages:
+				self.network.is_plain_msg = False
+
+	async def bind(self):
+		logger.debug('BIND in progress...')
+		try:
+			if self.creds.auth_method == LDAPAuthProtocol.SICILY:
+				data, _ = await self.auth.authenticate(None)
+				
+				auth = {
+					'sicily_disco' : b''
+				}
+
+				bindreq = {
+					'version' : 3,
+					'name' : 'NTLM'.encode(),
+					'authentication': AuthenticationChoice(auth), 
+				}
+
+				br = { 'bindRequest' : BindRequest( bindreq	)}
+				msg = { 'protocolOp' : protocolOp(br)}
+				
+				msg_id = await self.send_message(msg)
+				res = await self.recv_message(msg_id)
+				res = res[0]
+				if isinstance(res, Exception):
+					return False, res
+				if res['protocolOp']['resultCode'] != 'success':
+					return False, Exception(
+						'BIND failed! Result code: "%s" Reason: "%s"' % (
+							res['protocolOp']['resultCode'], 
+							res['protocolOp']['diagnosticMessage']
+						))
+				
+				auth = {
+					'sicily_nego' : data
+				}
+
+				bindreq = {
+					'version' : 3,
+					'name' : 'NTLM'.encode(),
+					'authentication': AuthenticationChoice(auth), 
+				}
+
+				br = { 'bindRequest' : BindRequest( bindreq	)}
+				msg = { 'protocolOp' : protocolOp(br)}
+				
+				msg_id = await self.send_message(msg)
+				res = await self.recv_message(msg_id)
+				res = res[0]
+				if isinstance(res, Exception):
+					return False, res
+				if res['protocolOp']['resultCode'] != 'success':
+					return False, Exception(
+						'BIND failed! Result code: "%s" Reason: "%s"' % (
+							res['protocolOp']['resultCode'], 
+							res['protocolOp']['diagnosticMessage']
+						))
+
+				data, _ = await self.auth.authenticate(res['protocolOp']['matchedDN'])
+
+				auth = {
+					'sicily_resp' : data
+				}
+
+				bindreq = {
+					'version' : 3,
+					'name' : 'NTLM'.encode(),
+					'authentication': AuthenticationChoice(auth), 
+				}
+
+				br = { 'bindRequest' : BindRequest( bindreq	)}
+				msg = { 'protocolOp' : protocolOp(br)}
+				
+				msg_id = await self.send_message(msg)
+				res = await self.recv_message(msg_id)
+				res = res[0]
+				if isinstance(res, Exception):
+					return False, res
+				if res['protocolOp']['resultCode'] != 'success':
+					return False, Exception(
+						'BIND failed! Result code: "%s" Reason: "%s"' % (
+							res['protocolOp']['resultCode'], 
+							res['protocolOp']['diagnosticMessage']
+						))
+				
+
+				self.__bind_success()
+				return True, None
+
+			elif self.creds.auth_method == LDAPAuthProtocol.SIMPLE:
+				pw = b''
+				if self.auth.password != None:
+					pw = self.auth.password.encode()
+
+				user = b''
+				if self.auth.username != None:
+					user = self.auth.username.encode()
+
+				auth = {
+					'simple' : pw
+				}
+
+				bindreq = {
+					'version' : 3,
+					'name': user,
+					'authentication': AuthenticationChoice(auth), 
+				}
+
+				br = { 'bindRequest' : BindRequest( bindreq	)}
+				msg = { 'protocolOp' : protocolOp(br)}
 					
-					#print(entry['attributes']['distinguishedName'])
-					if entry['attributes']['distinguishedName'] is None or entry['attributes']['distinguishedName'] == []:
+				msg_id = await self.send_message(msg)
+				res = await self.recv_message(msg_id)
+				res = res[0]
+				if isinstance(res, Exception):
+					return False, res
+				if res['protocolOp']['resultCode'] == 'success':
+					self.__bind_success()
+					return True, None
+				
+				else:
+					return False, Exception(
+						'BIND failed! Result code: "%s" Reason: "%s"' % (
+							res['protocolOp']['resultCode'], 
+							res['protocolOp']['diagnosticMessage']
+						))
+
+			elif self.creds.auth_method in MSLDAP_GSS_METHODS:
+				challenge = None
+				while True:
+					data, _ = await self.auth.authenticate(challenge)
+					
+					sasl = {
+						'mechanism' : 'GSS-SPNEGO'.encode(),
+						'credentials' : data,
+					}
+					auth = {
+						'sasl' : SaslCredentials(sasl)
+					}
+
+					bindreq = {
+						'version' : 3,
+						'name': ''.encode(),
+						'authentication': AuthenticationChoice(auth), 
+					}
+
+					br = { 'bindRequest' : BindRequest( bindreq	)}
+					msg = { 'protocolOp' : protocolOp(br)}
+					
+					msg_id = await self.send_message(msg)
+					res = await self.recv_message(msg_id)
+					res = res[0]
+					if isinstance(res, Exception):
+						return False, res
+					if res['protocolOp']['resultCode'] == 'success':
+						self.__bind_success()
+						return True, None
+
+					elif res['protocolOp']['resultCode'] == 'saslBindInProgress':
+						challenge = res['protocolOp']['serverSaslCreds']
 						continue
-					subtree = self.get_tree_plot(entry['attributes']['distinguishedName'], level = level -1)
-					tree[entry['attributes']['distinguishedName']] = subtree
-		return {dn : tree}
 
-
-	def get_all_user_objects(self):
-		"""
-		Fetches all user objects from the AD, and returns MSADUser object
-		"""
-		logger.debug('Polling AD for all user objects')
-		ldap_filter = r'(sAMAccountType=805306368)'
-
-		attributes = MSADUser.ATTRS
-		for entry in self.pagedsearch(ldap_filter, attributes):
-			yield MSADUser.from_ldap(entry, self._ldapinfo)
-		logger.debug('Finished polling for entries!')
-
-	def get_all_user_raw(self):
-		"""
-		Fetches all user objects from the AD, and returns MSADUser object
-		"""
-		logger.debug('Polling AD for all user objects')
-		ldap_filter = r'(sAMAccountType=805306368)'
-
-		attributes = MSADUser.ATTRS
-		return self.pagedsearch(ldap_filter, attributes)
-
-	def get_all_machine_objects(self):
-		"""
-		Fetches all machine objects from the AD, and returns MSADMachine object
-		"""
-		logger.debug('Polling AD for all user objects')
-		ldap_filter = r'(sAMAccountType=805306369)'
-
-		attributes = MSADMachine.ATTRS
-		for entry in self.pagedsearch(ldap_filter, attributes):
-			yield MSADMachine.from_ldap(entry, self._ldapinfo)
-		logger.debug('Finished polling for entries!')
-	
-	def get_all_gpos(self):
-		ldap_filter = r'(objectCategory=groupPolicyContainer)'
-		attributes = MSADGPO.ATTRS
-		for entry in self.pagedsearch(ldap_filter, attributes):
-			yield MSADGPO.from_ldap(entry)
-
-	def get_all_laps(self):
-		ldap_filter = r'(sAMAccountType=805306369)'
-		attributes = ['cn','ms-mcs-AdmPwd']
-		for entry in self.pagedsearch(ldap_filter, attributes):
-			yield entry
-
-	def get_laps(self, sAMAccountName):
-		ldap_filter = r'(&(sAMAccountType=805306369)(sAMAccountName=%s))' % sAMAccountName
-		attributes = ['cn','ms-mcs-AdmPwd']
-		for entry in self.pagedsearch(ldap_filter, attributes):
-			yield entry
-
-	def get_user(self, sAMAccountName):
-		"""
-		Fetches one user object from the AD, based on the sAMAccountName attribute (read: username) 
-		"""
-		logger.debug('Polling AD for user %s'% sAMAccountName)
-		ldap_filter = r'(&(objectClass=user)(sAMAccountName=%s))' % sAMAccountName
-		attributes = MSADUser.ATTRS
-		for entry in self.pagedsearch(ldap_filter, attributes):
-			# TODO: return ldapuser object
-			yield MSADUser.from_ldap(entry, self._ldapinfo)
-		logger.debug('Finished polling for entries!')
-
-	def get_ad_info(self):
-		"""
-		Polls for basic AD information (needed for determine password usage characteristics!)
-		"""
-		logger.debug('Polling AD for basic info')
-		ldap_filter = r'(distinguishedName=%s)' % self._tree
-		attributes = MSADInfo.ATTRS
-		for entry in self.pagedsearch(ldap_filter, attributes):
-			self._ldapinfo = MSADInfo.from_ldap(entry)
-			return self._ldapinfo
-
-		logger.debug('Poll finished!')
-
-	def get_all_service_user_objects(self, include_machine = False):
-		"""
-		Fetches all service user objects from the AD, and returns MSADUser object.
-		Service user refers to an user whith SPN (servicePrincipalName) attribute set
-		"""
-		logger.debug('Polling AD for all user objects, machine accounts included: %s'% include_machine)
-		if include_machine == True:
-			ldap_filter = r'(servicePrincipalName=*)'
-		else:
-			ldap_filter = r'(&(servicePrincipalName=*)(!(sAMAccountName = *$)))'
-
-		attributes = MSADUser.ATTRS
-		for entry in self.pagedsearch(ldap_filter, attributes):
-			yield MSADUser.from_ldap(entry, self._ldapinfo)
-		logger.debug('Finished polling for entries!')
-
-	def get_all_knoreq_user_objects(self, include_machine = False):
-		"""
-		Fetches all user objects with useraccountcontrol DONT_REQ_PREAUTH flag set from the AD, and returns MSADUser object.
-		
-		"""
-		logger.debug('Polling AD for all user objects, machine accounts included: %s'% include_machine)
-		if include_machine == True:
-			ldap_filter = r'(userAccountControl:1.2.840.113556.1.4.803:=4194304)'
-		else:
-			ldap_filter = r'(&(userAccountControl:1.2.840.113556.1.4.803:=4194304)(!(sAMAccountName = *$)))'
-
-		attributes = MSADUser.ATTRS
-		for entry in self.pagedsearch(ldap_filter, attributes):
-			yield MSADUser.from_ldap(entry, self._ldapinfo)
-		logger.debug('Finished polling for entries!')
-		
-		
-	def get_all_objectacl(self):
-		"""
-		Returns all ACL info for all AD objects
-		"""
-		
-		flags_value = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION
-		req_flags = SDFlagsRequestValue({'Flags' : flags_value})
-		
-		ldap_filter = r'(objectClass=*)'
-		attributes = MSADSecurityInfo.ATTRS
-		controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
-		
-		for entry in self.pagedsearch(ldap_filter, attributes, controls = controls):
-			yield MSADSecurityInfo.from_ldap(entry)
-			
-	def get_objectacl_by_dn(self, dn):
-		"""
-		Returns all ACL info for all AD objects
-		"""
-		
-		flags_value = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION
-		req_flags = SDFlagsRequestValue({'Flags' : flags_value})
-		
-		ldap_filter = r'(distinguishedName=%s)' % escape_filter_chars(dn)
-		attributes = MSADSecurityInfo.ATTRS
-		controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
-		
-		for entry in self.pagedsearch(ldap_filter, attributes, controls = controls):
-			yield MSADSecurityInfo.from_ldap(entry)
-
-			
-	def get_all_tokengroups(self):
-		"""
-		returns the tokengroups attribute for all user and machine on the server
-		"""
-		dns = []
-		
-		ldap_filters = [r'(objectClass=user)', r'(sAMAccountType=805306369)']
-		attributes = ['distinguishedName']
-		
-		for ldap_filter in ldap_filters:
-			print(ldap_filter)
-			for entry in self.pagedsearch(ldap_filter, attributes):
-				print(entry['attributes']['distinguishedName'])
-				dns.append(entry['attributes']['distinguishedName'])
-
-		attributes=['tokenGroups', 'sn', 'cn', 'distinguishedName','objectGUID', 'objectSid']
-		for dn in dns:
-			ldap_filter = r'(distinguishedName=%s)' % dn
-			self._con.search(dn, ldap_filter, attributes=attributes, search_scope=BASE)
-			for entry in self._con.response:
-				#yield MSADTokenGroup.from_ldap(entry)
-				print(str(MSADTokenGroup.from_ldap(entry)))
-	
-	def get_pdcroleowner(self):
-		#http://adcoding.com/how-to-determine-the-fsmo-role-holder-fsmoroleowner-attribute/
-		#get adinfo -> get ridmanagerreference attr -> look up the dn of ridmanagerreference -> get fsmoroleowner attr (which is a DN)
-		if not self._ldapinfo:
-			self.get_ad_info()
-		
-		ldap_filter = r'(distinguishedName=%s)' % self._ldapinfo.rIDManagerReference
-		for entry in self.pagedsearch(ldap_filter, ['fSMORoleOwner']):
-			return entry['attributes']['fSMORoleOwner']
-		
-	def get_infrastructureowner(self):
-		#http://adcoding.com/how-to-determine-the-fsmo-role-holder-fsmoroleowner-attribute/
-		#"CN=Infrastructure,DC=concorp,DC=contoso,DC=com" -l fSMORoleOwner
-		if not self._ldapinfo:
-			self.get_ad_info()
-		
-		ldap_filter = r'(distinguishedName=%s)' % ('CN=Infrastructure,' + self._ldapinfo.distinguishedName)
-		for entry in self.pagedsearch(ldap_filter, ['fSMORoleOwner']):
-			return entry['attributes']['fSMORoleOwner']
-			
-	def get_ridroleowner(self):
-		#http://adcoding.com/how-to-determine-the-fsmo-role-holder-fsmoroleowner-attribute/
-		if not self._ldapinfo:
-			self.get_ad_info()
-		
-		ldap_filter = r'(distinguishedName=%s)' % ('CN=RID Manager$,CN=System,' + self._ldapinfo.distinguishedName)
-		for entry in self.pagedsearch(ldap_filter, ['fSMORoleOwner']):
-			return entry['attributes']['fSMORoleOwner']		
-		
-	
-	def get_netdomain(self):
-		def nameconvert(x):
-			return x.split(',CN=')[1]
-		"""
-		gets the name of the current user's domain
-		"""
-		if not self._ldapinfo:
-			self.get_ad_info()
-		print(self._ldapinfo)
-		dname = self._ldapinfo.distinguishedName.replace('DC','').replace('=','').replace(',','.')
-		domain_controllers = ','.join(nameconvert(x) + '.' +dname  for x in self._ldapinfo.masteredBy)
-		
-		ridroleowner = nameconvert(self.get_ridroleowner()) + '.' +dname
-		infraowner = nameconvert(self.get_infrastructureowner()) + '.' +dname
-		pdcroleowner = nameconvert(self.get_pdcroleowner()) + '.' +dname
-		
-		print('name : %s' % dname)
-		print('Domain Controllers : %s' % domain_controllers)
-		print('DomainModeLevel : %s' % self._ldapinfo.domainmodelevel)
-		print('PdcRoleOwner : %s' % pdcroleowner)
-		print('RidRoleOwner : %s' % ridroleowner)
-		print('InfrastructureRoleOwner : %s' % infraowner)
-		
-	def get_domaincontroller(self):
-		ldap_filter = r'(userAccountControl:1.2.840.113556.1.4.803:=8192)'
-		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
-			print('Forest: %s' % '')
-			print('Name: %s' % entry['attributes'].get('dNSHostName'))
-			print('OSVersion: %s' % entry['attributes'].get('operatingSystem'))
-			print(entry['attributes'])
-		
-		
-	def get_all_groups(self):
-		ldap_filter = r'(objectClass=group)'
-		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
-			yield MSADGroup.from_ldap(entry)
-			
-	def get_all_ous(self):
-		ldap_filter = r'(objectClass=organizationalUnit)'
-		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
-			yield MSADOU.from_ldap(entry)
-			
-	def get_group_by_dn(self, dn):
-		ldap_filter = r'(&(objectClass=group)(distinguishedName=%s))' % escape_filter_chars(dn)
-		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
-			yield MSADGroup.from_ldap(entry)
-			
-	def get_object_by_dn(self, dn, expected_class = None):
-		ldap_filter = r'(distinguishedName=%s)' % dn
-		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
-			temp = entry['attributes'].get('objectClass')
-			if expected_class:
-				yield expected_class.from_ldap(entry)
-			
-			if not temp:
-				yield entry
-			elif 'user' in temp:
-				yield MSADUser.from_ldap(entry)
-			elif 'group' in temp:
-				yield MSADGroup.from_ldap(entry)
-			
-	def get_user_by_dn(self, dn):
-		ldap_filter = r'(&(objectClass=user)(distinguishedName=%s))' % dn
-		for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
-			yield MSADUser.from_ldap(entry)
-			
-	def get_group_members(self, dn, recursive = False):
-		for group in self.get_group_by_dn(dn):
-			for member in group.member:
-				for result in self.get_object_by_dn(member):
-					if isinstance(result, MSADGroup) and recursive:
-						for user in self.get_group_members(result.distinguishedName, recursive = True):
-							yield(user)
 					else:
-						yield(result)
-						
-	def get_dn_for_objectsid(self, objectsid):
-		ldap_filter = r'(objectSid=%s)' % str(objectsid)
-		for entry in self.pagedsearch(ldap_filter, ['distinguishedName']):
-			return entry['attributes']['distinguishedName']
-						
-	def get_permissions_for_dn(self, dn):
+						return False, Exception(
+							'BIND failed! Result code: "%s" Reason: "%s"' % (
+								res['protocolOp']['resultCode'], 
+								res['protocolOp']['diagnosticMessage']
+							))
+					
+					#print(res)
+		except Exception as e:
+			print(str(e))
+			return False, e
+	
+	async def search(self, base, filter, attributes, search_scope = 2, paged_size = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None, return_done = False):
 		"""
-		Lists all users who can modify the specified dn
+		This function is a generator!!!!! Dont just call it but use it with "async for"
 		"""
-		for secinfo in self.get_objectacl_by_dn(dn):
-			for secdata in secinfo.nTSecurityDescriptor:
-				sids_to_lookup = {}
-				sdec = SECURITY_DESCRIPTOR.from_bytes(secdata)
-				if not sdec.Dacl:
+		try:
+			if timeLimit is None:
+				timeLimit = 600 #not sure
+			
+			searchreq = {
+				'baseObject' : base,
+				'scope': search_scope,
+				'derefAliases': derefAliases, 
+				'sizeLimit': paged_size,
+				'timeLimit': timeLimit,
+				'typesOnly': typesOnly,
+				'filter': filter,
+				'attributes': attributes,
+			}
+
+			br = { 'searchRequest' : SearchRequest( searchreq	)}
+			msg = { 'protocolOp' : protocolOp(br)}
+			if controls is not None:
+				msg['controls'] = controls
+
+			msg_id = await self.send_message(msg)
+			
+			while True:
+				results = await self.recv_message(msg_id)
+				for message in results:
+					if 'resultCode' in message['protocolOp']:
+						#print(message)
+						#print('BREAKING!')
+						if return_done is True:
+							yield (message, None)
+						break
+					yield (message, None)
+				else:
 					continue
 				
-				for ace in sdec.Dacl.aces:
-					sids_to_lookup[str(ace.Sid)] = 1
-				
-				for sid in sids_to_lookup:
-					sids_to_lookup[sid] = self.get_dn_for_objectsid(sid)
-					
-				print(sids_to_lookup)
-				
-				for ace in sdec.Dacl.aces:
-					if not sids_to_lookup[str(ace.Sid)]:
-						print(str(ace.Sid))
-					#print('===== %s =====' % sids_to_lookup[str(ace.Sid)])
-					#if 
-					#print(str(ace))
-					
-					
-					
-	def get_tokengroups(self, dn):
-		"""
-		returns the tokengroups attribute for a given DN
-		"""
-		ldap_filter = r'(distinguishedName=%s)' % escape_filter_chars(dn)
-		attributes=['tokenGroups']
+				break
 		
-		#self._con.search(dn, ldap_filter, attributes=attributes, search_scope=BASE)
-		#for entry in self._con.response:
-		#	if entry['attributes']['tokenGroups']:
-		#		for sid_data in entry['attributes']['tokenGroups']:
-		#			yield str(SID.from_bytes(sid_data))
+		except Exception as e:
+			yield (None, e)
 
-		#entries = 
-		for entry in self._con.extend.standard.paged_search(
-			dn, 
-			ldap_filter, 
-			attributes = attributes, 
-			paged_size = self.ldap_query_page_size, 
-			search_scope=BASE, 
-			generator=True
-			):
-				if entry['attributes']['tokenGroups']:
-					for sid_data in entry['attributes']['tokenGroups']:
-						yield str(SID.from_bytes(sid_data))
+	async def pagedsearch(self, base, filter, attributes, search_scope = 2, paged_size = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None):
+		try:
+			cookie = b''
+			while True:
+				
+				ctrl_list_temp = [
+					Control({
+						'controlType' : b'1.2.840.113556.1.4.319',
+						'controlValue': SearchControlValue({
+							'size' : paged_size,
+							'cookie': cookie
+						}).dump()
+					})
+				]
+				if controls is not None:
+					ctrl_list_temp.extend(controls)
+				
+				ctrs = Controls(
+					ctrl_list_temp
+				)
+
+
+				async for res, err in self.search(
+					base, 
+					filter, 
+					attributes, 
+					search_scope = search_scope, 
+					paged_size=paged_size, 
+					typesOnly=typesOnly, 
+					derefAliases=derefAliases, 
+					timeLimit=timeLimit, 
+					controls = ctrs,
+					return_done = True
+					):
+						if err is not None:
+							yield (None, err)
+							return
+
+						if 'resultCode' in res['protocolOp']:
+							for control in res['controls']:
+								if control['controlType'] == b'1.2.840.113556.1.4.319':
+									try:
+										cookie = SearchControlValue.load(control['controlValue']).native['cookie']
+									except Exception as e:
+										raise e
+									break
+							else:
+								raise Exception('SearchControl missing from server response!')
+						else:
+							yield (res, None)
+
+				if cookie == b'':
+					break
+		
+		except Exception as e:
+			yield (None, e)
+
+
+	async def get_serverinfo(self):
+		attributes = [
+			b'subschemaSubentry',
+    		b'dsServiceName',
+    		b'namingContexts',
+    		b'defaultNamingContext',
+    		b'schemaNamingContext',
+    		b'configurationNamingContext',
+    		b'rootDomainNamingContext',
+    		b'supportedControl',
+    		b'supportedLDAPVersion',
+    		b'supportedLDAPPolicies',
+    		b'supportedSASLMechanisms',
+    		b'dnsHostName',
+    		b'ldapServiceName',
+    		b'serverName',
+    		b'supportedCapabilities'
+		]
+
+		filt = { 'present' : 'objectClass'.encode() }
+		searchreq = {
+			'baseObject' : b'',
+			'scope': 0,
+			'derefAliases': 0, 
+			'sizeLimit': 1,
+			'timeLimit': self.target.timeout - 1,
+			'typesOnly': False,
+			'filter': Filter(filt),
+			'attributes': attributes,
+		}
+
+		br = { 'searchRequest' : SearchRequest( searchreq	)}
+		msg = { 'protocolOp' : protocolOp(br)}
+
+		msg_id = await self.send_message(msg)
+		res = await self.recv_message(msg_id)
+		res = res[0]
+		if isinstance(res, Exception):
+			return None, res
+		
+		return convert_result(res['protocolOp']['attributes']), None
+
+
+async def amain():
+	import traceback
+	from msldap.commons.url import MSLDAPURLDecoder
+
+	base = 'DC=TEST,DC=CORP'
+
+	#ip = 'WIN2019AD'
+	#domain = 'TEST'
+	#username = 'victim'
+	#password = 'Passw0rd!1'
+	##auth_method = LDAPAuthProtocol.SICILY
+	#auth_method = LDAPAuthProtocol.SIMPLE
+
+	#cred = MSLDAPCredential(domain, username, password , auth_method)
+	#target = MSLDAPTarget(ip)
+	#target.dc_ip = '10.10.10.2'
+	#target.domain = 'TEST'
+
+	url = 'ldap+kerberos-password://test\\victim:Passw0rd!1@WIN2019AD/?dc=10.10.10.2'
+
+	dec = MSLDAPURLDecoder(url)
+	cred = dec.get_credential()
+	target = dec.get_target()
+
+	print(cred)
+	print(target)
+
+	input()
+
+	client = MSLDAPClientConnection(target, cred)
+	await client.connect()
+	res, err = await client.bind()
+	if err is not None:
+		raise err
+
+	#res = await client.search_test_2()
+	#pprint.pprint(res)
+	#search = bytes.fromhex('30840000007702012663840000006e043c434e3d3430392c434e3d446973706c6179537065636966696572732c434e3d436f6e66696775726174696f6e2c44433d746573742c44433d636f72700a01000a010002010002020258010100870b6f626a656374436c61737330840000000d040b6f626a656374436c617373')
+	#msg = LDAPMessage.load(search)
+
+	
+	
+	qry = r'(sAMAccountName=*)' #'(userAccountControl:1.2.840.113556.1.4.803:=4194304)' #'(sAMAccountName=*)'
+	#qry = r'(sAMAccountType=805306368)'
+	#a = query_syntax_converter(qry)
+	#print(a.native)
+	#input('press bacon!')
+	
+	flt = query_syntax_converter(qry)
+	i = 0
+	async for res, err in client.pagedsearch(base.encode(), flt, ['*'.encode()], derefAliases=3, typesOnly=False):
+		if err is not None:
+			print('Error!')
+			raise err
+		i += 1
+		if i % 1000 == 0:
+			print(i)
+		#pprint.pprint(res)
+
+	await client.disconnect()
+
+
+
+if __name__ == '__main__':
+	from msldap import logger
+	from msldap.commons.credential import MSLDAPCredential, LDAPAuthProtocol
+	from msldap.commons.target import MSLDAPTarget
+	from msldap.protocol.query import query_syntax_converter
+
+	logger.setLevel(2)
+
+	#from asn1crypto.core import ObjectIdentifier
+
+	#o = ObjectIdentifier('1.2.840.113556.1.4.803')
+	#print(o.dump())
+
+	#from pprint import pprint
+	#a = bytes.fromhex('3082026202010b63820235040f44433d746573742c44433d636f72700a01020a0103020100020100010100a050a9358116312e322e3834302e3131333535362e312e342e3830338212757365724163636f756e74436f6e74726f6c830734313934333034a217a415040e73414d4163636f756e744e616d653003820124308201bf040e6163636f756e7445787069726573040f62616450617373776f726454696d65040b626164507764436f756e740402636e0408636f646550616765040b636f756e747279436f6465040b646973706c61794e616d65041164697374696e677569736865644e616d650409676976656e4e616d650408696e697469616c73040a6c6173744c6f676f666604096c6173744c6f676f6e04126c6173744c6f676f6e54696d657374616d70040a6c6f676f6e436f756e7404046e616d65040b6465736372697074696f6e040e6f626a65637443617465676f7279040b6f626a656374436c617373040a6f626a6563744755494404096f626a656374536964040e7072696d61727947726f75704944040a7077644c617374536574040e73414d4163636f756e744e616d65040e73414d4163636f756e74547970650402736e0412757365724163636f756e74436f6e74726f6c0411757365725072696e636970616c4e616d65040b7768656e4368616e676564040b7768656e4372656174656404086d656d6265724f6604066d656d6265720414736572766963655072696e636970616c4e616d6504186d7344532d416c6c6f776564546f44656c6567617465546fa02430220416312e322e3834302e3131333535362e312e342e33313904083006020203e80400')
+	#msg = LDAPMessage.load(a)
+	#pprint.pprint(msg.native)
+	
+	#input()
+
+	asyncio.run(amain())
+
+	
+	#qry = '(&(sAMAccountType=805306369)(sAMAccountName=test))'
+	#qry = '(sAMAccountName=*)'
+	#flt = LF.parse(qry)
+	#print(flt)
+	#print(flt.__dict__)
+	#for f in flt.filters:
+	#	print(f.__dict__)
+
+	#x = convert(flt)
+	#print(x)
+	#print(x.native)
+
+	#qry = '(sAMAccountType=0x100)'
+	#flt = Filter.parse(qry)
+	#print(flt)
+	#print(flt.__dict__)
+	#print(flt.filters)
+
 			
+			
+
+		
