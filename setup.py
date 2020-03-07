@@ -54,6 +54,7 @@ setup(
 		'asciitree',
 		'ldap_filter',
 		'asysocks',
+		'winacl>=0.0.2'
 	],
 	entry_points={
 		'console_scripts': [

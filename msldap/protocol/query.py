@@ -3,15 +3,16 @@ from ldap_filter.filter import LDAPBase
 from asn1crypto.core import ObjectIdentifier
 from msldap.protocol.messages import Filter, Filters, \
 	AttributeDescription, SubstringFilter, MatchingRuleAssertion, \
-	SubstringFilter
+	Substrings, Substring
 
 
 def equality(attr, value):
-	print(attr)
+	#print(attr)
+	#print(value)
 	if attr[-1] == ':':
 		#possible OID
 		name, oid_raw = attr[:-1].split(':')
-		print(oid_raw)
+		#print(oid_raw)
 		return Filter({
 				'extensibleMatch' : MatchingRuleAssertion({
 						'matchingRule' : oid_raw.encode(),
@@ -26,14 +27,29 @@ def equality(attr, value):
 				'present' : AttributeDescription(attr.encode())
 			})
 
-	#elif value.startswith('*'):
-	#	
-	#	return Filter({
-	#			'equalityMatch' : SubstringFilter({
-	#				'attributeDesc' : attr.encode(),
-	#				'assertionValue' : value.encode()
-	#			}
-	#		})
+	elif value.startswith('*') is True:
+		return Filter({
+				'substrings' : SubstringFilter({
+					'type' : attr.encode(),
+					'substrings' : Substrings([
+							Substring({
+								'final' : value[1:].encode()
+							})
+						])
+				})
+			})
+	
+	elif value.endswith('*') is True:
+		return Filter({
+				'substrings' : SubstringFilter({
+					'type' : attr.encode(),
+					'substrings' : Substrings([
+							Substring({
+								'initial' : value[:-1].encode()
+							})
+						])
+				})
+			})
 				
 	else:
 		return Filter({
@@ -45,6 +61,9 @@ def equality(attr, value):
 	
 
 def query_syntax_converter_inner(ftr):
+		#print(ftr.__dict__)
+		#print(ftr.comp)
+		#print(ftr.type)
 		if ftr.type == 'filter':
 			if ftr.comp == '=':
 				return equality(ftr.attr, ftr.val)
@@ -76,7 +95,8 @@ def query_syntax_converter_inner(ftr):
 				})
 			elif ftr.comp == '!':
 				return Filter({
-					'not' : Filter(ftr.filters[0])
+					#'not' : Filter(ftr.filters[0])
+					'not' : query_syntax_converter_inner(ftr.filters[0])
 				})
 
 def query_syntax_converter(ldap_query_string):

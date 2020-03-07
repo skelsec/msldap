@@ -115,7 +115,6 @@ class AuthenticatorBuilder:
 				raise Exception('NTLM authentication requres password!')
 
 			if self.creds.auth_method == LDAPAuthProtocol.NTLM_PASSWORD:
-				input('here!')
 				ntlmcred.password = self.creds.password
 			elif self.creds.auth_method == LDAPAuthProtocol.NTLM_NT:
 				ntlmcred.nt_hash = self.creds.password

@@ -10,13 +10,11 @@
 
 from msldap import logger
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest, SDFlagsRequestValue
-from msldap.wintypes.security_descriptor import SECURITY_DESCRIPTOR
-from msldap.wintypes.sid import SID
 from msldap.protocol.constants import BASE, ALL_ATTRIBUTES, LEVEL
 
-from msldap.protocol.query import escape_filter_chars
+from msldap.protocol.query import escape_filter_chars, query_syntax_converter
 from msldap.connection import MSLDAPClientConnection
-from msldap.protocol.query import query_syntax_converter
+from msldap.protocol.messages import Control
 from msldap.ldap_objects import *
 
 class MSLDAPClient:
@@ -39,6 +37,8 @@ class MSLDAPClient:
 			raise err
 		self._serverinfo = res
 		self._tree = res['defaultNamingContext']
+		self._ldapinfo = await self.get_ad_info()
+		return True, None
 
 	def get_server_info(self):
 		return self._serverinfo
@@ -60,7 +60,20 @@ class MSLDAPClient:
 		t = []
 		for x in attributes:
 			t.append(x.encode())
+		attributes = t
 		ldap_filter = query_syntax_converter(ldap_filter)
+
+		t = []
+		if controls is not None:
+			for control in controls:
+				t.append(Control({
+					'controlType': control[0].encode(),
+					'criticality': control[1],
+					'controlValue': control[2]
+				}))
+
+		controls = t
+
 		async for entry, err in self._con.pagedsearch(
 			self._tree.encode(), 
 			ldap_filter, 
@@ -68,8 +81,13 @@ class MSLDAPClient:
 			paged_size = self.ldap_query_page_size, 
 			controls = controls
 			):
+				
 				if err is not None:
 					raise err
+				if entry['objectName'] == '' and entry['attributes'] == '':
+					#searchresref...
+					continue
+				#print('et %s ' % entry)
 				yield entry
 
 	async def get_tree_plot(self, dn, level = 2):
@@ -85,9 +103,9 @@ class MSLDAPClient:
 		tree = {}
 		#entries = 
 		async for entry, err in self._con.pagedsearch(
-			dn, 
-			'(distinguishedName=*)', 
-			attributes = 'distinguishedName', 
+			dn.encode(), 
+			query_syntax_converter('(distinguishedName=*)'), 
+			attributes = [b'distinguishedName'], 
 			paged_size = self.ldap_query_page_size, 
 			search_scope=LEVEL, 
 			controls = None, 
@@ -97,11 +115,11 @@ class MSLDAPClient:
 
 				if level == 0:
 					return {}
-				
+				#print(entry)
 				#print(entry['attributes']['distinguishedName'])
-				if entry['attributes']['distinguishedName'] is None or entry['attributes']['distinguishedName'] == []:
+				if 'distinguishedName' not in entry['attributes'] or entry['attributes']['distinguishedName'] is None or entry['attributes']['distinguishedName'] == []:
 					continue
-				subtree = self.get_tree_plot(entry['attributes']['distinguishedName'], level = level -1)
+				subtree = await self.get_tree_plot(entry['attributes']['distinguishedName'], level = level -1)
 				tree[entry['attributes']['distinguishedName']] = subtree
 		return {dn : tree}
 
@@ -112,9 +130,7 @@ class MSLDAPClient:
 		"""
 		logger.debug('Polling AD for all user objects')
 		ldap_filter = r'(sAMAccountType=805306368)'
-
-		attributes = MSADUser.ATTRS
-		async for entry in self.pagedsearch(ldap_filter, attributes):
+		async for entry in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
 		logger.debug('Finished polling for entries!')
 
@@ -125,8 +141,7 @@ class MSLDAPClient:
 		logger.debug('Polling AD for all user objects')
 		ldap_filter = r'(sAMAccountType=805306368)'
 
-		attributes = MSADUser.ATTRS
-		return self.pagedsearch(ldap_filter, attributes)
+		return self.pagedsearch(ldap_filter, MSADUser_ATTRS)
 
 	async def get_all_machine_objects(self):
 		"""
@@ -135,15 +150,13 @@ class MSLDAPClient:
 		logger.debug('Polling AD for all user objects')
 		ldap_filter = r'(sAMAccountType=805306369)'
 
-		attributes = MSADMachine.ATTRS
-		async for entry in self.pagedsearch(ldap_filter, attributes):
+		async for entry in self.pagedsearch(ldap_filter, MSADMachine_ATTRS):
 			yield MSADMachine.from_ldap(entry, self._ldapinfo)
 		logger.debug('Finished polling for entries!')
 	
 	async def get_all_gpos(self):
 		ldap_filter = r'(objectCategory=groupPolicyContainer)'
-		attributes = MSADGPO.ATTRS
-		async for entry in self.pagedsearch(ldap_filter, attributes):
+		async for entry in self.pagedsearch(ldap_filter, MSADGPO_ATTRS):
 			yield MSADGPO.from_ldap(entry)
 
 	async def get_all_laps(self):
@@ -164,8 +177,7 @@ class MSLDAPClient:
 		"""
 		logger.debug('Polling AD for user %s'% sAMAccountName)
 		ldap_filter = r'(&(objectClass=user)(sAMAccountName=%s))' % sAMAccountName
-		attributes = MSADUser.ATTRS
-		async for entry in self.pagedsearch(ldap_filter, attributes):
+		async for entry in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
 			# TODO: return ldapuser object
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
 		logger.debug('Finished polling for entries!')
@@ -176,8 +188,7 @@ class MSLDAPClient:
 		"""
 		logger.debug('Polling AD for basic info')
 		ldap_filter = r'(distinguishedName=%s)' % self._tree
-		attributes = MSADInfo.ATTRS
-		async for entry in self.pagedsearch(ldap_filter, attributes):
+		async for entry in self.pagedsearch(ldap_filter, MSADInfo_ATTRS):
 			self._ldapinfo = MSADInfo.from_ldap(entry)
 			return self._ldapinfo
 
@@ -192,10 +203,9 @@ class MSLDAPClient:
 		if include_machine == True:
 			ldap_filter = r'(servicePrincipalName=*)'
 		else:
-			ldap_filter = r'(&(servicePrincipalName=*)(!(sAMAccountName = *$)))'
+			ldap_filter = r'(&(servicePrincipalName=*)(!(sAMAccountName=*$)))'
 
-		attributes = MSADUser.ATTRS
-		async for entry in self.pagedsearch(ldap_filter, attributes):
+		async for entry in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
 		logger.debug('Finished polling for entries!')
 
@@ -208,28 +218,27 @@ class MSLDAPClient:
 		if include_machine == True:
 			ldap_filter = r'(userAccountControl:1.2.840.113556.1.4.803:=4194304)'
 		else:
-			ldap_filter = r'(&(userAccountControl:1.2.840.113556.1.4.803:=4194304)(!(sAMAccountName = *$)))'
+			ldap_filter = r'(&(userAccountControl:1.2.840.113556.1.4.803:=4194304)(!(sAMAccountName=*$)))'
 
-		attributes = MSADUser.ATTRS
-		async for entry in self.pagedsearch(ldap_filter, attributes):
+		async for entry in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
 			yield MSADUser.from_ldap(entry, self._ldapinfo)
 		logger.debug('Finished polling for entries!')
 		
 		
-	async def get_all_objectacl(self):
-		"""
-		Returns all ACL info for all AD objects
-		"""
-		
-		flags_value = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION
-		req_flags = SDFlagsRequestValue({'Flags' : flags_value})
-		
-		ldap_filter = r'(objectClass=*)'
-		attributes = MSADSecurityInfo.ATTRS
-		controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
-		
-		async for entry in self.pagedsearch(ldap_filter, attributes, controls = controls):
-			yield MSADSecurityInfo.from_ldap(entry)
+	#async def get_all_objectacl(self):
+	#	"""
+	#	Returns all ACL info for all AD objects
+	#	"""
+	#	
+	#	flags_value = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION
+	#	req_flags = SDFlagsRequestValue({'Flags' : flags_value})
+	#	
+	#	ldap_filter = r'(objectClass=*)'
+	#	attributes = MSADSecurityInfo.ATTRS
+	#	controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
+	#	
+	#	async for entry in self.pagedsearch(ldap_filter, attributes, controls = controls):
+	#		yield MSADSecurityInfo.from_ldap(entry)
 			
 	async def get_objectacl_by_dn(self, dn):
 		"""
@@ -386,9 +395,8 @@ class MSLDAPClient:
 		Lists all users who can modify the specified dn
 		"""
 		async for secinfo in self.get_objectacl_by_dn(dn):
-			for secdata in secinfo.nTSecurityDescriptor:
+			for sdec in secinfo.nTSecurityDescriptor:
 				sids_to_lookup = {}
-				sdec = SECURITY_DESCRIPTOR.from_bytes(secdata)
 				if not sdec.Dacl:
 					continue
 				
@@ -413,24 +421,74 @@ class MSLDAPClient:
 		"""
 		returns the tokengroups attribute for a given DN
 		"""
-		ldap_filter = r'(distinguishedName=%s)' % escape_filter_chars(dn)
-		attributes=['tokenGroups']
-		
-		#self._con.search(dn, ldap_filter, attributes=attributes, search_scope=BASE)
-		#for entry in self._con.response:
-		#	if entry['attributes']['tokenGroups']:
-		#		for sid_data in entry['attributes']['tokenGroups']:
-		#			yield str(SID.from_bytes(sid_data))
+		ldap_filter = query_syntax_converter( r'(distinguishedName=%s)' % escape_filter_chars(dn) )
+		attributes=[b'tokenGroups']
 
-		#entries = 
 		async for entry, err in self._con.pagedsearch(
-			dn, 
+			dn.encode(), 
 			ldap_filter, 
 			attributes = attributes, 
 			paged_size = self.ldap_query_page_size, 
 			search_scope=BASE, 
 			):
-				if entry['attributes']['tokenGroups']:
-					for sid_data in entry['attributes']['tokenGroups']:
-						yield str(SID.from_bytes(sid_data))
+				if err is not None:
+					yield None, err
+					break
+				
+				#print(entry['attributes'])
+				if 'tokenGroups' in entry:
+					for sid_data in entry['tokenGroups']:
+						yield sid_data
 			
+	async def get_all_tokengroups(self):
+		"""
+		returns the tokengroups attribute for a given DN
+		"""
+		ldap_filter = r'(|(sAMAccountType=805306369)(objectClass=group)(sAMAccountType=805306368))'
+		async for entry in self.pagedsearch(
+			ldap_filter, 
+			attributes = ['dn', 'cn', 'objectSid','objectClass', 'objectGUID']
+			):				
+
+				if 'objectName' in entry:
+					#print(entry['objectName'])
+					async for entry2, err in self._con.pagedsearch(
+						entry['objectName'].encode(), 
+						query_syntax_converter( r'(distinguishedName=%s)' % escape_filter_chars(entry['objectName']) ), 
+						attributes = [b'tokenGroups'], 
+						paged_size = self.ldap_query_page_size, 
+						search_scope=BASE, 
+						):
+							
+							#print(entry2)
+							if err is not None:
+								yield None, err
+								break
+							if 'tokenGroups' in entry2['attributes']:
+								for token in entry2['attributes']['tokenGroups']:
+									yield {
+										'cn' : entry['attributes']['cn'],
+										'dn' : entry['objectName'],
+										'guid' : entry['attributes']['objectGUID'],
+										'sid' : entry['attributes']['objectSid'],
+										'type' : entry['attributes']['objectClass'][-1],
+										'token' : token
+
+									}
+
+	async def get_all_objectacl(self):
+		"""
+		bbbbbb
+		"""
+		
+		flags_value = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION
+		req_flags = SDFlagsRequestValue({'Flags' : flags_value})
+		
+		ldap_filter = r'(|(objectClass=organizationalUnit)(objectCategory=groupPolicyContainer)(sAMAccountType=805306369)(objectClass=group)(sAMAccountType=805306368))'
+		async for entry in self.pagedsearch(ldap_filter, attributes = ['dn']):
+			ldap_filter = r'(distinguishedName=%s)' % escape_filter_chars(entry['objectName'])
+			attributes = MSADSecurityInfo.ATTRS
+			controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
+			
+			async for entry2 in self.pagedsearch(ldap_filter, attributes, controls = controls):
+				yield MSADSecurityInfo.from_ldap(entry2)

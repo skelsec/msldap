@@ -7,10 +7,11 @@ from msldap.protocol.messages import LDAPMessage, BindRequest, \
 	Controls, Control, SearchControlValue
 
 from msldap.protocol.utils import calcualte_length
-from msldap.protocol.typeconversion import convert_result
+from msldap.protocol.typeconversion import convert_result, convert_attributes
 from msldap.commons.authbuilder import AuthenticatorBuilder
 from msldap.commons.credential import MSLDAP_GSS_METHODS
 from msldap.network.selector import MSLDAPNetworkSelector
+from msldap.commons.credential import LDAPAuthProtocol
 
 class MSLDAPClientConnection:
 	def __init__(self, target, creds):
@@ -69,18 +70,19 @@ class MSLDAPClientConnection:
 				messages = []
 				if msg_len == msg_total_len:
 					message = LDAPMessage.load(message_data)
-					messages.append(message.native)
+					messages.append(message)
+				
 				else:
 					#print('multi-message!')
 					while len(message_data) > 0:
 						msg_len = calcualte_length(message_data)
 						message = LDAPMessage.load(message_data[:msg_len])
-						messages.append(message.native)
+						messages.append(message)
 						
 						message_data = message_data[msg_len:]
 
 				#print(messages)
-				message_id = messages[0]['messageID']
+				message_id = messages[0]['messageID'].native
 				if message_id not in self.message_table:
 					self.message_table[message_id] = []
 				self.message_table[message_id].extend(messages)
@@ -192,6 +194,7 @@ class MSLDAPClientConnection:
 				res = res[0]
 				if isinstance(res, Exception):
 					return False, res
+				res = res.native
 				if res['protocolOp']['resultCode'] != 'success':
 					return False, Exception(
 						'BIND failed! Result code: "%s" Reason: "%s"' % (
@@ -217,6 +220,7 @@ class MSLDAPClientConnection:
 				res = res[0]
 				if isinstance(res, Exception):
 					return False, res
+				res = res.native
 				if res['protocolOp']['resultCode'] != 'success':
 					return False, Exception(
 						'BIND failed! Result code: "%s" Reason: "%s"' % (
@@ -244,6 +248,7 @@ class MSLDAPClientConnection:
 				res = res[0]
 				if isinstance(res, Exception):
 					return False, res
+				res = res.native
 				if res['protocolOp']['resultCode'] != 'success':
 					return False, Exception(
 						'BIND failed! Result code: "%s" Reason: "%s"' % (
@@ -282,6 +287,7 @@ class MSLDAPClientConnection:
 				res = res[0]
 				if isinstance(res, Exception):
 					return False, res
+				res = res.native
 				if res['protocolOp']['resultCode'] == 'success':
 					self.__bind_success()
 					return True, None
@@ -320,6 +326,7 @@ class MSLDAPClientConnection:
 					res = res[0]
 					if isinstance(res, Exception):
 						return False, res
+					res = res.native
 					if res['protocolOp']['resultCode'] == 'success':
 						self.__bind_success()
 						return True, None
@@ -369,13 +376,23 @@ class MSLDAPClientConnection:
 			while True:
 				results = await self.recv_message(msg_id)
 				for message in results:
-					if 'resultCode' in message['protocolOp']:
+					msg_type = message['protocolOp'].name
+					message = message.native
+					if msg_type == 'searchResDone':
 						#print(message)
 						#print('BREAKING!')
 						if return_done is True:
 							yield (message, None)
 						break
-					yield (message, None)
+					
+					elif msg_type == 'searchResRef':
+						#TODO: Check if we need to deal with this further
+						continue
+
+					if return_done is True:
+						yield (message, None)
+					else:
+						yield (convert_result(message['protocolOp']), None)
 				else:
 					continue
 				
@@ -433,7 +450,7 @@ class MSLDAPClientConnection:
 							else:
 								raise Exception('SearchControl missing from server response!')
 						else:
-							yield (res, None)
+							yield (convert_result(res['protocolOp']), None)
 
 				if cookie == b'':
 					break
@@ -478,11 +495,14 @@ class MSLDAPClientConnection:
 
 		msg_id = await self.send_message(msg)
 		res = await self.recv_message(msg_id)
-		res = res[0]
+		res = res[0].native
+
 		if isinstance(res, Exception):
 			return None, res
 		
-		return convert_result(res['protocolOp']['attributes']), None
+		print('res')
+		print(res)
+		return convert_attributes(res['protocolOp']['attributes']), None
 
 
 async def amain():

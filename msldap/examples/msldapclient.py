@@ -8,6 +8,7 @@ import asyncio
 import traceback
 import logging
 import csv
+import shlex
 
 from aiocmd import aiocmd
 from asciitree import LeftAligned
@@ -15,7 +16,7 @@ import ldap3
 
 from msldap.client import MSLDAPClient
 from msldap.commons.url import MSLDAPURLDecoder
-from msldap.ldap_objects import MSADUser, MSADMachine
+from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
 
 
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
@@ -63,7 +64,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		"""Prints detailed Active Driectory info"""
 		try:
 			if self.adinfo is None:
-				self.adinfo = self.connection.get_ad_info()
+				self.adinfo = self.connection._ldapinfo
 			if show is True:
 				print(self.adinfo)
 		except Exception as e:
@@ -94,7 +95,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			await self.do_adinfo(False)
 			await self.do_ldapinfo(False)
 			async for user in self.connection.get_all_user_objects():
-				print(user.get_row(MSADUser.TSV_ATTRS))
+				print(user.get_row(MSADUser_TSV_ATTRS))
 			#with open(args.outfile, 'w', newline='', encoding = 'utf8') as f:
 			#	writer = csv.writer(f, delimiter = '\t')
 			#	writer.writerow(MSADUser.TSV_ATTRS)
@@ -194,7 +195,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			group_sids = []
 			async for group_sid in self.connection.get_tokengroups(dn):
 				group_sids.append(group_sids)
-				group_dn = self.connection.get_dn_for_objectsid(group_sid)
+				group_dn = await self.connection.get_dn_for_objectsid(group_sid)
 				print('%s - %s' % (group_dn, group_sid))
 				
 			if len(group_sids) == 0:
@@ -208,6 +209,17 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				 !DANGER! Switching tree to a tree outside of the domain will trigger a connection to that domain, leaking credentials!"""
 		self.connection._tree = newtree
 	
+	async def do_test(self):
+		"""Feteches all laps passwords"""
+		try:
+			async for entry in self.connection.get_all_objectacl():
+				if entry.objectClass[-1] != 'user':
+					print(entry.objectClass)
+		except ldap3.core.exceptions.LDAPAttributeError:
+			print('Attribute error! LAPS is probably not used. If it is used, and you see this error please submit an issue on GitHub')
+		except Exception as e:
+			traceback.print_exc()
+
 	"""
 	async def do_info(self):
 		try:
@@ -216,11 +228,27 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 	"""
 
+
+async def amain(args):
+	client = MSLDAPClientConsole(args.url)
+
+	if len(args.commands) == 0:
+		if args.no_interactive is True:
+			print('Not starting interactive!')
+			return
+		await client.run()
+	else:
+		for command in args.commands:
+			cmd = shlex.split(command)
+			await client._run_single_command(cmd[0], cmd[1:])
+
 def main():
 	import argparse
 	parser = argparse.ArgumentParser(description='MS LDAP library')
 	parser.add_argument('-v', '--verbose', action='count', default=0, help='Verbosity, can be stacked')
+	parser.add_argument('-n', '--no-interactive', action='store_true')
 	parser.add_argument('url', help='Connection string in URL format.')
+	parser.add_argument('commands', nargs='*')
 
 	args = parser.parse_args()
 	
@@ -231,7 +259,9 @@ def main():
 	else:
 		logging.basicConfig(level=logging.DEBUG)
 
-	asyncio.get_event_loop().run_until_complete(MSLDAPClientConsole(args.url).run())
+	asyncio.run(amain(args))
+
+	
 
 if __name__ == '__main__':
 	main()

@@ -123,7 +123,7 @@ class SearchControlValue(core.Sequence):
 class Control(core.Sequence):
 	_fields = [
 		('controlType', LDAPOID),
-		('criticality', core.Boolean, {'implicit': (CONTEXT , 1), 'default' : False }),
+		('criticality', core.Boolean, {'default' : False }),
 		('controlValue', core.OctetString, {'optional': True })	,
 	]
 	
@@ -189,7 +189,7 @@ class AttributeValueAssertion(core.Sequence):
 		('assertionValue', AssertionValue),
 	]
 
-class SubString(core.Choice):
+class Substring(core.Choice):
 	_alternatives = [
 		('initial', AssertionValue, {'implicit': (CONTEXT , 0) }  ),
 		('any', AssertionValue, {'implicit': (CONTEXT , 1) }  ),
@@ -198,7 +198,7 @@ class SubString(core.Choice):
 	
 
 class Substrings(core.SequenceOf):
-	_child_spec = SubString
+	_child_spec = Substring
 
 class SubstringFilter(core.Sequence):
 	_fields = [
@@ -224,7 +224,7 @@ class Filters(core.SequenceOf):
 Filter._alternatives = [
 		('and', Filters, {'implicit': (CONTEXT , 0) }  ),
 		('or', Filters, {'implicit': (CONTEXT , 1) }  ),
-		('not', Filter, {'implicit': (CONTEXT , 2) }  ),
+		('not', Filter, {'explicit': (CONTEXT , 2) }  ), # https://tools.ietf.org/html/rfc4511#section-4.5.1.8
 		('equalityMatch', AttributeValueAssertion, {'implicit': (CONTEXT , 3) }  ),
 		('substrings', SubstringFilter, {'implicit': (CONTEXT , 4) }  ),
 		('greaterOrEqual', AttributeValueAssertion, {'implicit': (CONTEXT , 5) }  ),

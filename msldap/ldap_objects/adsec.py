@@ -37,11 +37,9 @@ class MSADTokenGroup:
 
 		return t
 	
-	
-	
 
 class MSADSecurityInfo:
-	ATTRS = [ 'sn', 'cn', 'distinguishedName', 'nTSecurityDescriptor', 'objectGUID', 'objectSid']
+	ATTRS = [ 'sn', 'cn', 'objectClass','distinguishedName', 'nTSecurityDescriptor', 'objectGUID', 'objectSid']
 
 	def __init__(self):
 		self.sn = None #str
@@ -50,6 +48,7 @@ class MSADSecurityInfo:
 		self.nTSecurityDescriptor = None
 		self.objectGUID = None
 		self.objectSid = None
+		self.objectClass = None
 		
 	@staticmethod
 	def from_ldap(entry):
@@ -59,11 +58,9 @@ class MSADSecurityInfo:
 		adi.distinguishedName = entry['attributes'].get('distinguishedName')
 		adi.objectGUID = entry['attributes'].get('objectGUID')
 		adi.objectSid = entry['attributes'].get('objectSid')
-		
-		decdesc_data =  entry['attributes'].get('nTSecurityDescriptor')
-		if decdesc_data:
-			adi.nTSecurityDescriptor = SECURITY_DESCRIPTOR.from_bytes(decdesc_data)
-		
+		adi.objectClass = entry['attributes'].get('objectClass')
+		adi.nTSecurityDescriptor = entry['attributes'].get('nTSecurityDescriptor')
+
 		return adi
 		
 		

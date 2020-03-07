@@ -7,6 +7,7 @@ from msldap.protocol.utils import calcualte_length
 class MSLDAPTCPNetwork:
 	def __init__(self, target):
 		self.target = target
+		self.timeout = None
 		self.ssl = None
 		self.in_queue = None
 		self.out_queue = None
@@ -29,7 +30,7 @@ class MSLDAPTCPNetwork:
 			while True:
 				
 				preread = 6
-				lb = await asyncio.wait_for(self.reader.readexactly(preread), self.target.timeout)
+				lb = await asyncio.wait_for(self.reader.readexactly(preread), self.timeout)
 				if lb is None:
 					logger.debug('Server timed out!')
 					return
@@ -44,7 +45,7 @@ class MSLDAPTCPNetwork:
 					remaining_length = (remaining_length + 4) - preread
 				#print('Reading %s' % remaining_length)
 
-				remaining_data = await asyncio.wait_for(self.reader.readexactly(remaining_length), self.target.timeout)
+				remaining_data = await asyncio.wait_for(self.reader.readexactly(remaining_length), self.timeout)
 				
 				await self.in_queue.put((lb+remaining_data, None))
 				
@@ -82,7 +83,10 @@ class MSLDAPTCPNetwork:
 		try:
 			self.in_queue = asyncio.Queue()
 			self.out_queue = asyncio.Queue()
-			self.reader, self.writer = await asyncio.open_connection(self.target.host, self.target.port, ssl=self.ssl)
+			self.reader, self.writer = await asyncio.wait_for(
+				asyncio.open_connection(self.target.host, self.target.port, ssl=self.ssl),
+				timeout = self.target.timeout
+			)
 
 			self.handle_in_task = asyncio.create_task(self.handle_in_q())
 			self.handle_out_task = asyncio.create_task(self.handle_out_q())
