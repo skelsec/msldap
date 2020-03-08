@@ -6,7 +6,7 @@
 
 # https://tools.ietf.org/html/rfc4511
 # https://msdn.microsoft.com/en-us/library/cc223501.aspx
-# https://ldap3.readthedocs.io/bind.html
+
 
 from asn1crypto import core
 import enum

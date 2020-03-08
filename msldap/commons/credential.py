@@ -6,8 +6,6 @@
 
 import enum
 
-from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE, ALL_ATTRIBUTES
-
 # https://tools.ietf.org/html/rfc4513
 # simple auth: 
 # 	- anonymous

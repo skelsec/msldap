@@ -9,7 +9,7 @@ from pyasn1.codec.der import decoder, encoder
 from msldap.protocol.query import query_syntax_converter
 from msldap.protocol.messages import LDAPMessage, Filter
 
-
+# https://ldap3.readthedocs.io/bind.html
 if __name__ == '__main__':
 
 	qry = r'(&(servicePrincipalName=*)(!(sAMAccountName=*$)))'

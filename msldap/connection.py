@@ -500,8 +500,8 @@ class MSLDAPClientConnection:
 		if isinstance(res, Exception):
 			return None, res
 		
-		print('res')
-		print(res)
+		#print('res')
+		#print(res)
 		return convert_attributes(res['protocolOp']['attributes']), None
 
 

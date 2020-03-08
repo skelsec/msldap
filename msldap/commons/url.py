@@ -20,7 +20,7 @@ class MSLDAPURLDecoder:
 	MSLDAP URL Format: <protocol>+<auth>://<username>:<password>@<ip_or_host>:<port>/<tree>/?<param>=<value>
 	<protocol> sets the ldap protocol following values supported:
 		- ldap
-		- ldaps (ldap over SSL) << known to be problematic because of the underlying library (ldap3)
+		- ldaps
 	<auth> can be omitted if plaintext authentication is to be performed, otherwise:
 		- ntlm
 		- sspi (windows only!)

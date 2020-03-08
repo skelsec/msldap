@@ -4,10 +4,6 @@
 #  Tamas Jos (@skelsec)
 #
 
-#from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, BASE, ALL_ATTRIBUTES, LEVEL
-#from ldap3.utils.conv import escape_filter_chars
-
-
 from msldap import logger
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest, SDFlagsRequestValue
 from msldap.protocol.constants import BASE, ALL_ATTRIBUTES, LEVEL
@@ -51,7 +47,7 @@ class MSLDAPClient:
 		Parameters:
 			ldap_filter (str): LDAP query filter
 			attributes (list): Attributes list to recieve in the result
-			controls (obj): Additional control object to be passed to ldap3 paged_search function
+			controls (obj): Additional control dict
 		
 		Returns:
 			generator
@@ -193,6 +189,14 @@ class MSLDAPClient:
 			return self._ldapinfo
 
 		logger.debug('Poll finished!')
+
+	async def get_all_spn_entries(self):
+		logger.debug('Polling AD for all SPN entries')
+		ldap_filter = r'(&(sAMAccountType=805306369))'
+		attributes = ['objectSid','sAMAccountName', 'servicePrincipalName']
+
+		async for entry in self.pagedsearch(ldap_filter, attributes):
+			yield entry
 
 	async def get_all_service_user_objects(self, include_machine = False):
 		"""

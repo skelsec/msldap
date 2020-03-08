@@ -12,7 +12,6 @@ import shlex
 
 from aiocmd import aiocmd
 from asciitree import LeftAligned
-import ldap3
 
 from msldap.client import MSLDAPClient
 from msldap.commons.url import MSLDAPURLDecoder
@@ -47,7 +46,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			await self.connection.connect()
 			print(self.connection._tree)
 			
-		except Exception as e:
+		except:
 			traceback.print_exc()
 
 	async def do_ldapinfo(self, show = True):
@@ -57,7 +56,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				self.ldapinfo = self.connection.get_server_info()
 			if show is True:
 				print(self.ldapinfo)
-		except Exception as e:
+		except:
 			traceback.print_exc()
 
 	async def do_adinfo(self, show = True):
@@ -67,7 +66,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				self.adinfo = self.connection._ldapinfo
 			if show is True:
 				print(self.adinfo)
-		except Exception as e:
+		except:
 			traceback.print_exc()
 
 	async def do_spns(self):
@@ -76,7 +75,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			await self.do_ldapinfo(False)
 			async for user in self.connection.get_all_service_user_objects():
 				print(user.sAMAccountName)
-		except Exception as e:
+		except:
 			traceback.print_exc()
 	
 	async def do_asrep(self):
@@ -85,7 +84,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			await self.do_ldapinfo(False)
 			async for user in self.connection.get_all_knoreq_user_objects():
 				print(user.sAMAccountName)
-		except Exception as e:
+		except:
 			traceback.print_exc()
 
 
@@ -101,7 +100,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			#	writer.writerow(MSADUser.TSV_ATTRS)
 			#	for user in connection.get_all_user_objects():
 			#		writer.writerow(user.get_row(MSADUser.TSV_ATTRS))
-		except Exception as e:
+		except:
 			traceback.print_exc()
 		
 	async def do_query(self, query, attributes = None):
@@ -116,7 +115,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			logging.debug('Attributes: %s' % (attributes))
 			async for entry in self.connection.pagedsearch(query, attributes):
 				print(entry)
-		except Exception as e:
+		except:
 			traceback.print_exc()
 
 	async def do_tree(self, dn = None, level = 1):
@@ -144,7 +143,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			print(tr(tree_data))
 
 
-		except Exception as e:
+		except:
 			traceback.print_exc()
 
 	async def do_user(self, samaccountname):
@@ -154,7 +153,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			await self.do_adinfo(False)
 			async for user in self.connection.get_user(samaccountname):
 				print(user)
-		except Exception as e:
+		except:
 			traceback.print_exc()
 
 	async def do_acl(self, dn):
@@ -164,7 +163,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			await self.do_adinfo(False)
 			async for sec_info in self.connection.get_objectacl_by_dn(dn):
 				print(sec_info)
-		except Exception as e:
+		except:
 			traceback.print_exc()
 
 	async def do_gpos(self):
@@ -174,7 +173,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			await self.do_adinfo(False)
 			async for gpo in self.connection.get_all_gpos():
 				print(gpo)
-		except Exception as e:
+		except:
 			traceback.print_exc()
 
 	async def do_laps(self):
@@ -182,9 +181,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		try:
 			async for entry in self.connection.get_all_laps():
 				print(entry)
-		except ldap3.core.exceptions.LDAPAttributeError:
-			print('Attribute error! LAPS is probably not used. If it is used, and you see this error please submit an issue on GitHub')
-		except Exception as e:
+		except:
 			traceback.print_exc()
 
 	async def do_groupmembership(self, dn):
@@ -200,7 +197,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				
 			if len(group_sids) == 0:
 				print('No memberships found')
-		except Exception as e:
+		except:
 			traceback.print_exc()
 
 	async def do_bindtree(self, newtree):
@@ -215,9 +212,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			async for entry in self.connection.get_all_objectacl():
 				if entry.objectClass[-1] != 'user':
 					print(entry.objectClass)
-		except ldap3.core.exceptions.LDAPAttributeError:
-			print('Attribute error! LAPS is probably not used. If it is used, and you see this error please submit an issue on GitHub')
-		except Exception as e:
+		except:
 			traceback.print_exc()
 
 	"""
