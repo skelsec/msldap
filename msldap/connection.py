@@ -29,6 +29,7 @@ class MSLDAPClientConnection:
 		self.message_id = 0
 		self.message_table = {}
 		self.message_table_notify = {}
+		self.encryption_sequence_counter = 0 #for whatever reason it's only used during encryption, but decryption always uses 0
 
 	async def __handle_incoming(self):
 		try:
@@ -81,7 +82,6 @@ class MSLDAPClientConnection:
 						
 						message_data = message_data[msg_len:]
 
-				#print(messages)
 				message_id = messages[0]['messageID'].native
 				if message_id not in self.message_table:
 					self.message_table[message_id] = []
@@ -111,13 +111,15 @@ class MSLDAPClientConnection:
 
 		if self.bind_ok is True:
 			if self.__encrypt_messages is True:
-				message_data, signature = await self.auth.encrypt(message_data, 0)
+				message_data, signature = await self.auth.encrypt(message_data, self.encryption_sequence_counter)
 				message_data = signature + message_data
 				message_data = len(message_data).to_bytes(4, byteorder = 'big', signed = False) + message_data
+				self.encryption_sequence_counter += 1
 			elif self.__sign_messages is True:
-				signature = await self.auth.sign(message_data, 0)
+				signature = await self.auth.sign(message_data, self.encryption_sequence_counter)
 				message_data = signature + message_data
 				message_data = len(message_data).to_bytes(4, byteorder = 'big', signed = False) + message_data
+				self.encryption_sequence_counter += 1
 		
 		self.message_table_notify[curr_msg_id] = asyncio.Event()
 		await self.network.out_queue.put(message_data)

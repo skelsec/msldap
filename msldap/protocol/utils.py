@@ -10,7 +10,7 @@ def calcualte_length(data):
 		return data[1] + 2
 	else:
 		bcount = data[1] - 128
-		if (bcount +2 ) > len(data):
-			raise Exception('LDAP data too larage! Length byte count: %s' % bcount)
+		#if (bcount +2 ) > len(data):
+		#	raise Exception('LDAP data too larage! Length byte count: %s' % bcount)
 		return int.from_bytes(data[2:2+bcount], byteorder = 'big', signed = False) + bcount + 2
 

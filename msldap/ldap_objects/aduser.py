@@ -221,7 +221,7 @@ class MSADUser:
 
 	def get_row(self, attrs):
 		t = self.to_dict()
-		return [t.get(x) if x[:4]!='UAC_' else self.uac_to_textflag(x) for x in attrs]
+		return [str(t.get(x)) if x[:4]!='UAC_' else str(self.uac_to_textflag(x)) for x in attrs]
 
 	def __str__(self):
 		t = 'MSADUser\n'

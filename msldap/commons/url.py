@@ -5,6 +5,7 @@
 #  Tamas Jos (@skelsec)
 #
 
+import platform
 import hashlib
 from urllib.parse import urlparse, parse_qs
 
@@ -191,7 +192,15 @@ class MSLDAPURLDecoder:
 		if proxy_present is True:
 			self.proxy = MSLDAPProxy.from_params(self.url)
 
-
+		if self.auth_scheme in [LDAPAuthProtocol.SSPI_NTLM, LDAPAuthProtocol.SSPI_KERBEROS]:
+			if platform.system().upper() != 'WINDOWS':
+				raise Exception('SSPI auth only works on Windows!')
+			if self.username is None:
+				self.username = '<CURRENT>'
+			if self.password is None:
+				self.password = '<CURRENT>'
+			if self.domain is None:
+				self.domain = '<CURRENT>'
 
 
 

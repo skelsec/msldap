@@ -43,7 +43,7 @@ class MSLDAPKerberos:
 		return False
 	
 	def encryption_needed(self):
-		return False
+		return False #change to true to enable encryption channel binding
 				
 	async def sign(self, data, message_no, direction = 'init'):
 		return self.gssapi.GSS_GetMIC(data, message_no, direction = direction)	
@@ -71,6 +71,7 @@ class MSLDAPKerberos:
 			#tgt = await self.kc.get_TGT(override_etype=[18])
 			tgt = await self.kc.get_TGT()
 			tgs, encpart, self.session_key = await self.kc.get_TGS(self.spn)
+			self.gssapi = get_gssapi(self.session_key)
 		ap_opts = []
 		if is_rpc == True:
 			if self.iterations == 0:

@@ -39,7 +39,6 @@ class MSLDAPProxy:
 		proxy.type = MSLDAPProxyType(query['proxytype'][0].upper())
 		if proxy.type in [MSLDAPProxyType.SOCKS4, MSLDAPProxyType.SOCKS4_SSL, MSLDAPProxyType.SOCKS5, MSLDAPProxyType.SOCKS5_SSL]:
 			cu = SocksClientURL.from_params(url_str)
-			cu.endpoint_port = 445
 		else:
 			raise Exception('Multiplexor not yet implemented as a proxy!')
 			#cu = SocksClientURL.from_params(url_str)

@@ -6,8 +6,7 @@
 #
 
 import enum
-from urllib.parse import urlparse, parse_qs
-
+import ssl
 
 class LDAPProtocol(enum.Enum):
 	TCP = 'TCP'
@@ -25,6 +24,14 @@ class MSLDAPTarget:
 		self.timeout = timeout
 		self.dc_ip = None
 		self.domain = None
+		self.sslctx = None
+
+	def get_ssl_context(self):
+		if self.proto == LDAPProtocol.SSL:
+			if self.sslctx is None:
+				self.sslctx = ssl.create_default_context()
+			return self.sslctx
+		return None
 
 	def to_target_string(self):
 		return 'ldap/%s@%s' % (self.host,self.domain)  #ldap/WIN2019AD.test.corp @ TEST.CORP

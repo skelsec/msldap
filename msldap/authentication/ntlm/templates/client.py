@@ -17,7 +17,7 @@ NTLMClientTemplates = {
 			'workstation_name' : None,
 			'ntlm_downgrade'   : False,
 		},
-		"Windows10_15063_channelbinding" : {
+		"Windows10_15063_channel" : {
 			'flags'            :  NegotiateFlags.NEGOTIATE_KEY_EXCH|
 								  NegotiateFlags.NEGOTIATE_128|
 								  NegotiateFlags.NEGOTIATE_VERSION|

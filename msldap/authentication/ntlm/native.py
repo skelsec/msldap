@@ -194,7 +194,14 @@ class NTLMAUTHHandler:
 	#	return self.SIGN(self.SignKey_client, data, message_no, RC4(self.SignKey_client).encrypt )
 
 	async def encrypt(self, data, sequence_no):
-		return self.SEAL(self.SignKey_client, self.SealKey_client, data, data, sequence_no, self.crypthandle_client.encrypt)
+		return self.SEAL(
+			self.SignKey_client, 
+			self.SealKey_client, 
+			data, 
+			data, 
+			sequence_no, 
+			self.crypthandle_client.encrypt
+		)
 
 	async def decrypt(self, data, sequence_no, direction='init', auth_data=None):		
 		data = data[16:]

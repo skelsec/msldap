@@ -242,9 +242,6 @@ LDAP_ATTRIBUTE_TYPES = {
 	'versionNumber' : list_int_one,
 	'versionNumber' : list_int_one,
 	'versionNumber' : list_int_one,
-
-
-#dSCorePropagationData dSCorePropagationData data: [b'20190222013712.0Z', b'16010101000001.0Z']
 	
 }
 

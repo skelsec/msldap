@@ -9,13 +9,19 @@ import traceback
 import logging
 import csv
 import shlex
+import datetime
 
 from aiocmd import aiocmd
 from asciitree import LeftAligned
+from tqdm import tqdm
 
+from msldap import logger
+from asysocks import logger as sockslogger
 from msldap.client import MSLDAPClient
 from msldap.commons.url import MSLDAPURLDecoder
 from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
+
+from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
 
 
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
@@ -93,13 +99,22 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		try:
 			await self.do_adinfo(False)
 			await self.do_ldapinfo(False)
-			async for user in self.connection.get_all_user_objects():
-				print(user.get_row(MSADUser_TSV_ATTRS))
-			#with open(args.outfile, 'w', newline='', encoding = 'utf8') as f:
-			#	writer = csv.writer(f, delimiter = '\t')
-			#	writer.writerow(MSADUser.TSV_ATTRS)
-			#	for user in connection.get_all_user_objects():
-			#		writer.writerow(user.get_row(MSADUser.TSV_ATTRS))
+			
+			users_filename = 'users_%s.tsv' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+			pbar = tqdm(desc = 'Writing users to file %s' % users_filename)
+			with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+				async for user in self.connection.get_all_user_objects():
+					pbar.update()
+					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS)))
+			print('Users dump was written to %s' % users_filename)
+			
+			users_filename = 'computers_%s.tsv' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+			pbar = tqdm(desc = 'Writing computers to file %s' % users_filename)
+			with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+				async for user in self.connection.get_all_machine_objects():
+					pbar.update()
+					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS)))
+			print('Computer dump was written to %s' % users_filename)
 		except:
 			traceback.print_exc()
 		
@@ -162,7 +177,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			await self.do_ldapinfo(False)
 			await self.do_adinfo(False)
 			async for sec_info in self.connection.get_objectacl_by_dn(dn):
-				print(sec_info)
+				print(str(SECURITY_DESCRIPTOR.from_bytes(sec_info.nTSecurityDescriptor)))
 		except:
 			traceback.print_exc()
 
@@ -180,7 +195,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		"""Feteches all laps passwords"""
 		try:
 			async for entry in self.connection.get_all_laps():
-				print(entry)
+				pwd = '<MISSING>'
+				if 'ms-mcs-AdmPwd' in entry['attributes']:
+					pwd = entry['attributes']['ms-mcs-AdmPwd']
+				print('%s : %s' % (entry['attributes']['cn'], pwd))
 		except:
 			traceback.print_exc()
 
@@ -252,6 +270,8 @@ def main():
 	if args.verbose == 0:
 		logging.basicConfig(level=logging.INFO)
 	else:
+		sockslogger.setLevel(logging.DEBUG)
+		logger.setLevel(logging.DEBUG)
 		logging.basicConfig(level=logging.DEBUG)
 
 	asyncio.run(amain(args))
