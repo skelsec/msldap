@@ -6,26 +6,26 @@
 
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
 
+MSADMachine_ATTRS = [
+	'accountExpires', 'badPasswordTime', 'badPwdCount', 'cn', 'description', 'codePage', 
+	'countryCode', 'displayName', 'distinguishedName', 'dNSHostName',
+	'instanceType', 'isCriticalSystemObject','lastLogoff', 'lastLogon', 
+	'lastLogonTimestamp', 'logonCount', 'localPolicyFlags',	'msDS-SupportedEncryptionTypes',
+	'name', 'objectCategory', 'objectClass', 'objectGUID', 'objectSid', 
+	'operatingSystem', 'operatingSystemVersion','primaryGroupID', 
+	'pwdLastSet', 'sAMAccountName', 'sAMAccountType', 'sn', 'userAccountControl', 
+	'whenChanged', 'whenCreated', 'servicePrincipalName','msDS-AllowedToDelegateTo',
+]
+			
+MSADMachine_TSV_ATTRS = [
+	'sAMAccountName', 'dNSHostName', 'operatingSystem', 'operatingSystemVersion', 'badPasswordTime', 
+	'badPwdCount', 'pwdLastSet', 'lastLogonTimestamp', 'whenCreated', 'whenChanged', 'servicePrincipalName', 
+	'objectSid', 'cn', 'description', 'UAC_SCRIPT', 'UAC_ACCOUNTDISABLE', 'UAC_LOCKOUT', 'UAC_PASSWD_NOTREQD', 
+	'UAC_PASSWD_CANT_CHANGE', 'UAC_ENCRYPTED_TEXT_PASSWORD_ALLOWED', 'UAC_DONT_EXPIRE_PASSWD', 'UAC_USE_DES_KEY_ONLY', 
+	'UAC_DONT_REQUIRE_PREAUTH', 'UAC_PASSWORD_EXPIRED'
+]
 
 class MSADMachine:
-	ATTRS = [ 	'accountExpires', 'badPasswordTime', 'badPwdCount', 'cn', 'description', 'codePage', 
-				'countryCode', 'displayName', 'distinguishedName', 'dNSHostName',
-				'instanceType', 'isCriticalSystemObject','lastLogoff', 'lastLogon', 
-				'lastLogonTimestamp', 'logonCount', 'localPolicyFlags',	'msDS-SupportedEncryptionTypes',
-				'name', 'objectCategory', 'objectClass', 'objectGUID', 'objectSid', 
-				'operatingSystem', 'operatingSystemVersion','primaryGroupID', 
-				'pwdLastSet', 'sAMAccountName', 'sAMAccountType', 'sn', 'userAccountControl', 
-				'whenChanged', 'whenCreated', 'servicePrincipalName','msDS-AllowedToDelegateTo',
-			]
-			
-	TSV_ATTRS = [  	'sAMAccountName', 'dNSHostName', 'operatingSystem', 'operatingSystemVersion', 'badPasswordTime', 
-					'badPwdCount', 'pwdLastSet', 'lastLogonTimestamp', 'whenCreated', 'whenChanged', 'servicePrincipalName', 
-					'objectSid', 'cn', 'description', 'UAC_SCRIPT', 'UAC_ACCOUNTDISABLE', 'UAC_LOCKOUT', 'UAC_PASSWD_NOTREQD', 
-					'UAC_PASSWD_CANT_CHANGE', 'UAC_ENCRYPTED_TEXT_PASSWORD_ALLOWED', 'UAC_DONT_EXPIRE_PASSWD', 'UAC_USE_DES_KEY_ONLY', 
-					'UAC_DONT_REQUIRE_PREAUTH', 'UAC_PASSWORD_EXPIRED'
-
-				]
-
 	def __init__(self):
 		self.sn = None #str
 		self.cn = None #str
@@ -156,4 +156,4 @@ class MSADMachine:
 		
 	def get_row(self, attrs):
 		t = self.to_dict()
-		return [t.get(x) if x[:4]!='UAC_' else self.uac_to_textflag(x) for x in attrs]
+		return [str(t.get(x)) if x[:4]!='UAC_' else str(self.uac_to_textflag(x)) for x in attrs]

@@ -4,29 +4,28 @@
 #  Tamas Jos (@skelsec)
 #
 
-from datetime import datetime #, timedelta, timezone
+import datetime #, timedelta, timezone
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
 
+MSADUser_ATTRS = [ 	
+	'accountExpires', 'badPasswordTime', 'badPwdCount', 'cn', 'codePage', 
+	'countryCode', 'displayName', 'distinguishedName', 'givenName', 'initials', 
+	'lastLogoff', 'lastLogon', 'lastLogonTimestamp', 'logonCount', 'name', 'description',
+	'objectCategory', 'objectClass', 'objectGUID', 'objectSid', 'primaryGroupID', 
+	'pwdLastSet', 'sAMAccountName', 'sAMAccountType', 'sn', 'userAccountControl', 
+	'userPrincipalName', 'whenChanged', 'whenCreated','memberOf','member', 'servicePrincipalName',
+	'msDS-AllowedToDelegateTo',
+]
+MSADUser_TSV_ATTRS = [
+	'sAMAccountName', 'userPrincipalName' ,'canLogon', 'badPasswordTime', 'description',
+	'badPwdCount', 'when_pw_change', 'when_pw_expires', 'pwdLastSet', 'lastLogonTimestamp',
+	'whenCreated', 'whenChanged', 'member', 'memberOf', 'servicePrincipalName', 
+	'objectSid', 'cn', 'UAC_SCRIPT', 'UAC_ACCOUNTDISABLE', 'UAC_LOCKOUT', 'UAC_PASSWD_NOTREQD', 
+	'UAC_PASSWD_CANT_CHANGE', 'UAC_ENCRYPTED_TEXT_PASSWORD_ALLOWED', 'UAC_DONT_EXPIRE_PASSWD', 
+	'UAC_USE_DES_KEY_ONLY', 'UAC_DONT_REQUIRE_PREAUTH', 'UAC_PASSWORD_EXPIRED'
+]
 
 class MSADUser:
-	ATTRS = [ 	'accountExpires', 'badPasswordTime', 'badPwdCount', 'cn', 'codePage', 
-				'countryCode', 'displayName', 'distinguishedName', 'givenName', 'initials', 
-				'lastLogoff', 'lastLogon', 'lastLogonTimestamp', 'logonCount', 'name', 'description',
-				'objectCategory', 'objectClass', 'objectGUID', 'objectSid', 'primaryGroupID', 
-				'pwdLastSet', 'sAMAccountName', 'sAMAccountType', 'sn', 'userAccountControl', 
-				'userPrincipalName', 'whenChanged', 'whenCreated','memberOf','member', 'servicePrincipalName',
-				'msDS-AllowedToDelegateTo',
-				]
-
-	TSV_ATTRS = [  	'sAMAccountName', 'userPrincipalName' ,'canLogon', 'badPasswordTime', 'description',
-					'badPwdCount', 'when_pw_change', 'when_pw_expires', 'pwdLastSet', 'lastLogonTimestamp',
-					'whenCreated', 'whenChanged', 'member', 'memberOf', 'servicePrincipalName', 
-					'objectSid', 'cn', 'UAC_SCRIPT', 'UAC_ACCOUNTDISABLE', 'UAC_LOCKOUT', 'UAC_PASSWD_NOTREQD', 
-					'UAC_PASSWD_CANT_CHANGE', 'UAC_ENCRYPTED_TEXT_PASSWORD_ALLOWED', 'UAC_DONT_EXPIRE_PASSWD', 'UAC_USE_DES_KEY_ONLY', 
-					'UAC_DONT_REQUIRE_PREAUTH', 'UAC_PASSWORD_EXPIRED'
-
-				]
-
 	def __init__(self):
 		## ID
 		self.sn = None #str
@@ -86,14 +85,14 @@ class MSADUser:
 		flags = [MSLDAP_UAC.DONT_EXPIRE_PASSWD, MSLDAP_UAC.SMARTCARD_REQUIRED, MSLDAP_UAC.INTERDOMAIN_TRUST_ACCOUNT, MSLDAP_UAC.WORKSTATION_TRUST_ACCOUNT, MSLDAP_UAC.SERVER_TRUST_ACCOUNT]
 		for flag in flags:
 			if flag & self.userAccountControl:
-				return datetime(3000,1,1) #never
+				return datetime.datetime.max #never
 
 		#criteria 2
 		if self.pwdLastSet == 0:
-			return datetime(1601,1,1)
+			return datetime.datetime.min
 
-		if (self.when_pw_expires - datetime.now()).total_seconds() > 0:
-			return datetime(3000,1,1) #never
+		if (self.when_pw_expires - datetime.datetime.now()).total_seconds() > 0:
+			return datetime.datetime.max #never
 
 		return self.pwdLastSet.replace(tzinfo=None)
 
@@ -105,18 +104,18 @@ class MSADUser:
 			if flag & self.userAccountControl:
 				return False
 
-		if (self.accountExpires.replace(tzinfo=None) - datetime.now()).total_seconds() < 0:
+		if (self.accountExpires.replace(tzinfo=None) - datetime.datetime.now()).total_seconds() < 0:
 			return False
 
 		#
 		# TODO: logonHours check!
 		#
 		
-		if self.must_change_pw == datetime(1601,1,1):
+		if self.must_change_pw == datetime.datetime.min:
 			#can logon, but must change the password!
 			return True
 
-		if (self.must_change_pw - datetime.now()).total_seconds() < 0:
+		if (self.must_change_pw - datetime.datetime.now()).total_seconds() < 0:
 			return False
 
 		return True
@@ -222,7 +221,7 @@ class MSADUser:
 
 	def get_row(self, attrs):
 		t = self.to_dict()
-		return [t.get(x) if x[:4]!='UAC_' else self.uac_to_textflag(x) for x in attrs]
+		return [str(t.get(x)) if x[:4]!='UAC_' else str(self.uac_to_textflag(x)) for x in attrs]
 
 	def __str__(self):
 		t = 'MSADUser\n'

@@ -6,14 +6,13 @@
 
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
 
+MSADGPO_ATTRS = [
+	'cn', 'displayName', 'distinguishedName', 'flags', 'gPCFileSysPath', 
+	'gPCFunctionalityVersion', 'gPCMachineExtensionNames', 'objectClass',
+	'objectGUID', 'systemFlags', 'versionNumber', 'whenChanged', 'whenCreated',
+]
 
 class MSADGPO:
-	ATTRS = [ 	
-		'cn', 'displayName', 'distinguishedName', 'flags', 'gPCFileSysPath', 
-		'gPCFunctionalityVersion', 'gPCMachineExtensionNames', 'objectClass',
-		'objectGUID', 'systemFlags', 'versionNumber', 'whenChanged', 'whenCreated',
-	]
-
 	def __init__(self):
 		self.cn = None
 		self.displayName = None

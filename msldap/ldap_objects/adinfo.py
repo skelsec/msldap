@@ -4,16 +4,16 @@
 #  Tamas Jos (@skelsec)
 #
 
+MSADInfo_ATTRS = [
+	'auditingPolicy', 'creationTime', 'dc', 'distinguishedName', 
+	'forceLogoff', 'instanceType', 'lockoutDuration', 'lockOutObservationWindow', 
+	'lockoutThreshold', 'masteredBy', 'maxPwdAge', 'minPwdAge', 'minPwdLength', 
+	'name', 'nextRid', 'nTSecurityDescriptor', 'objectCategory', 'objectClass', 
+	'objectGUID', 'objectSid', 'pwdHistoryLength', 
+	'pwdProperties', 'serverState', 'systemFlags', 'uASCompat', 'uSNChanged', 
+	'uSNCreated', 'whenChanged', 'whenCreated', 'rIDManagerReference','msDS-Behavior-Version'
+]
 class MSADInfo:
-	ATTRS = [ 	'auditingPolicy', 'creationTime', 'dc', 'distinguishedName', 
-				'forceLogoff', 'instanceType', 'lockoutDuration', 'lockOutObservationWindow', 
-				'lockoutThreshold', 'masteredBy', 'maxPwdAge', 'minPwdAge', 'minPwdLength', 
-				'name', 'nextRid', 'nTSecurityDescriptor', 'objectCategory', 'objectClass', 
-				'objectGUID', 'objectSid', 'pwdHistoryLength', 
-				'pwdProperties', 'serverState', 'systemFlags', 'uASCompat', 'uSNChanged', 
-				'uSNCreated', 'whenChanged', 'whenCreated', 'rIDManagerReference','msDS-Behavior-Version'
-			]
-	
 	def __init__(self):
 		self.auditingPolicy = None #dunno
 		self.creationTime = None #datetime
