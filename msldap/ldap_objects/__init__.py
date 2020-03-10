@@ -12,6 +12,7 @@ from msldap.ldap_objects.common import MSLDAP_UAC
 from msldap.ldap_objects.adgroup import MSADGroup
 from msldap.ldap_objects.adou import MSADOU
 from msldap.ldap_objects.adgpo import MSADGPO, MSADGPO_ATTRS
+from msldap.ldap_objects.adtrust import MSADDomainTrust, MSADDomainTrust_ATTRS
 
 __all__ = [
     'MSADUser', 
@@ -28,6 +29,7 @@ __all__ = [
     'MSADGroup',
     'MSADOU', 
     'MSADGPO',
-    'MSADGPO_ATTRS'
-
+    'MSADGPO_ATTRS',
+    'MSADDomainTrust',
+    'MSADDomainTrust_ATTRS',
 ]

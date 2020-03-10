@@ -237,10 +237,14 @@ LDAP_ATTRIBUTE_TYPES = {
 	'member' : list_str,
 	'adminCount' : list_int_one,
 	'msDS-AllowedToDelegateTo' : list_str,
-	'dSCorePropagationData' : list_ts2dt,
-	'versionNumber' : list_int_one,
-	'versionNumber' : list_int_one,
-	'versionNumber' : list_int_one,
+	'dSCorePropagationData' : ts2dt,
+	'trustDirection' : list_int_one,
+	'trustType' : list_int_one,
+	'trustAttributes' : list_int_one,
+	'flatName' : list_str_one,
+	'trustPosixOffset' : list_int_one,
+	'trustPartner' : list_str_one,
+	'securityIdentifier' : list_bytes_one,
 	'versionNumber' : list_int_one,
 	
 }

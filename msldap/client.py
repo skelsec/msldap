@@ -496,3 +496,9 @@ class MSLDAPClient:
 			
 			async for entry2 in self.pagedsearch(ldap_filter, attributes, controls = controls):
 				yield MSADSecurityInfo.from_ldap(entry2)
+
+
+	async def get_all_trusts(self):
+		ldap_filter = r'(objectClass=trustedDomain)'
+		async for entry in self.pagedsearch(ldap_filter, attributes = MSADDomainTrust_ATTRS):
+			yield MSADDomainTrust.from_ldap(entry)

@@ -224,8 +224,16 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				 !DANGER! Switching tree to a tree outside of the domain will trigger a connection to that domain, leaking credentials!"""
 		self.connection._tree = newtree
 	
+	async def do_trusts(self):
+		"""Feteches gives back domain trusts"""
+		try:
+			async for entry in self.connection.get_all_trusts():
+				print(entry.get_line())
+		except:
+			traceback.print_exc()
+
 	async def do_test(self):
-		"""Feteches all laps passwords"""
+		"""testing, dontuse"""
 		try:
 			async for entry in self.connection.get_all_objectacl():
 				if entry.objectClass[-1] != 'user':

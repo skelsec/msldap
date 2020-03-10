@@ -5,7 +5,7 @@
 #
 
 
-from msldap.wintypes import *
+from winacl.dtyp.sid import SID
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
 
 class MSADTokenGroup:

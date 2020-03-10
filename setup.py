@@ -50,7 +50,7 @@ setup(
 		'winsspi;platform_system=="Windows"',
 		'aiocmd',
 		'asciitree',
-		'ldap_filter',
+		#'ldap_filter',
 		'asysocks',
 		'winacl>=0.0.2'
 	],
