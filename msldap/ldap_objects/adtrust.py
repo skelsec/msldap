@@ -91,6 +91,26 @@ class MSADDomainTrust:
 		if adi.trustDirection is not None:
 			adi.trustDirection = TrustDirection(adi.trustDirection)
 		return adi
+
+	def to_dict(self):
+		return {
+			'sn' : self.sn,
+			'cn' : self.cn,
+			'distinguishedName' : self.distinguishedName,
+			'objectGUID' : self.objectGUID,
+			'instanceType' : self.instanceType,
+			'whenCreated' : self.whenCreated,
+			'whenChanged' : self.whenChanged,
+			'name' : self.name,
+			'securityIdentifier' : self.securityIdentifier,
+			'trustDirection' : self.trustDirection,
+			'trustPartner' : self.trustPartner,
+			'trustPosixOffset' : self.trustPosixOffset,
+			'trustType' : self.trustType,
+			'trustAttributes' : self.trustAttributes,
+			'flatName' : self.flatName,
+			'dSCorePropagationData' : self.dSCorePropagationData,
+		}
 		
 	def get_line(self):
 		return '%s %s %s %s' % (self.name, self.trustType, self.trustDirection, self.securityIdentifier)
@@ -105,7 +125,7 @@ class MSADDomainTrust:
 		t+= 'whenCreated : %s\r\n' % self.whenCreated
 		t+= 'whenChanged : %s\r\n' % self.whenChanged
 		t+= 'name : %s\r\n' % self.name
-		t+= 'securityIdentifier : %s\r\n' % self.securityIdentifier.hex()
+		t+= 'securityIdentifier : %s\r\n' % str(self.securityIdentifier)
 		t+= 'trustDirection : %s\r\n' % self.trustDirection
 		t+= 'trustPartner : %s\r\n' % self.trustPartner
 		t+= 'trustPosixOffset : %s\r\n' % self.trustPosixOffset

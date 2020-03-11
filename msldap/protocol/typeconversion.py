@@ -4,6 +4,7 @@ import re
 from winacl.dtyp.sid import SID
 from winacl.dtyp.guid import GUID
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
+from msldap import logger
 
 MSLDAP_DT_WIN_EPOCH = datetime.datetime(1601, 1, 1)
 
@@ -258,7 +259,7 @@ def convert_attributes(x):
 		if k in LDAP_ATTRIBUTE_TYPES:
 			t[k] = LDAP_ATTRIBUTE_TYPES[k](e['attributes'])
 		else:
-			print('Unknown type! %s data: %s' % (k, e['attributes']))
+			logger.debug('Unknown type! %s data: %s' % (k, e['attributes']))
 			t[k] = e['attributes']
 	return t
 

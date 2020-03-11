@@ -50,8 +50,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			
 			self.connection = self.conn_url.get_client()
 			await self.connection.connect()
-			print(self.connection._tree)
-			
+						
 		except:
 			traceback.print_exc()
 
