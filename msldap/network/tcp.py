@@ -82,7 +82,11 @@ class MSLDAPTCPNetwork:
 			self.in_queue = asyncio.Queue()
 			self.out_queue = asyncio.Queue()
 			self.reader, self.writer = await asyncio.wait_for(
-				asyncio.open_connection(self.target.host, self.target.port, ssl=self.target.get_ssl_context()),
+				asyncio.open_connection(
+					self.target.serverip if self.target.serverip is not None else self.target.host, 
+					self.target.port, 
+					ssl=self.target.get_ssl_context()
+					),
 				timeout = self.target.timeout
 			)
 

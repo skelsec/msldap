@@ -23,6 +23,7 @@ class MSLDAPTarget:
 		self.proxy = proxy
 		self.timeout = timeout
 		self.dc_ip = None
+		self.serverip = None
 		self.domain = None
 		self.sslctx = None
 

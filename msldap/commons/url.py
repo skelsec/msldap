@@ -71,6 +71,7 @@ class MSLDAPURLDecoder:
 		self.domain = None
 		self.username = None
 		self.password = None
+		self.channelbind = False
 		self.auth_settings = {}
 
 		self.ldap_proto = None
@@ -87,13 +88,16 @@ class MSLDAPURLDecoder:
 
 
 	def get_credential(self):
-		return MSLDAPCredential(
+		t = MSLDAPCredential(
 			domain=self.domain, 
 			username=self.username, 
 			password = self.password, 
 			auth_method=self.auth_scheme, 
 			settings = self.auth_settings
 		)
+		t.channelbind = self.channelbind
+		
+		return t
 
 	def get_target(self):
 		target = MSLDAPTarget(
@@ -106,6 +110,7 @@ class MSLDAPURLDecoder:
 		target.domain = self.domain
 		target.dc_ip = self.dc_ip
 		target.proxy = self.proxy
+		target.serverip = self.serverip
 		return target
 
 	def get_client(self):
@@ -194,9 +199,11 @@ class MSLDAPURLDecoder:
 				elif k == 'timeout':
 					self.timeout = int(query[k][0])
 				elif k == 'serverip':
-					self.server_ip = query[k][0]
+					self.serverip = query[k][0]
 				elif k == 'dns':
 					self.dns = query[k] #multiple dns can be set, so not trimming here
+				elif k == 'channelbind':
+					self.channelbind = bool(int(query[k][0]))
 				elif k.startswith('auth'):
 					self.auth_settings[k[len('auth'):]] = query[k]
 				#elif k.startswith('same'):

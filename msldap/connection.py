@@ -36,22 +36,18 @@ class MSLDAPClientConnection:
 			while True:
 				message_data, err = await self.network.in_queue.get()
 				if err is not None:
-					logger.debug('Client terminating bc __handle_incoming!')
+					logger.debug('Client terminating bc __handle_incoming got an error!')
 					raise err
 				
-				################################
-				#                              #
-				#  ADD CHANNEL BINDING  HERE!  #
-				################################
-
+				print('Incoming message data: %s' % message_data)
 				if self.bind_ok is True:
 					if self.__encrypt_messages is True:
-						#print('Encrypted %s' % message_data)
 						#removing size
 						message_data = message_data[4:]
 						try:
-							message_data = await self.auth.decrypt(message_data, 0)
+							message_data = await self.auth.decrypt(message_data, 0 )
 							#print('Decrypted %s' % message_data.hex())
+							#print('Decrypted %s' % message_data)
 						except:
 							import traceback
 							traceback.print_exc()
@@ -91,12 +87,9 @@ class MSLDAPClientConnection:
 				self.message_table_notify[message_id].set()
 		
 		except asyncio.CancelledError:
-			#not notifying clients, at this point the client is terminating
 			return
 
 		except Exception as e:
-			import traceback
-			traceback.print_exc()
 			for msgid in self.message_table_notify:
 				self.message_table[msgid] = [e]
 				self.message_table_notify[msgid].set()
@@ -176,8 +169,11 @@ class MSLDAPClientConnection:
 		logger.debug('BIND in progress...')
 		try:
 			if self.creds.auth_method == LDAPAuthProtocol.SICILY:
-				data, _ = await self.auth.authenticate(None)
-				
+				try:
+					data, _ = await self.auth.authenticate(None)
+				except Exception as e:
+					return False, e
+
 				auth = {
 					'sicily_disco' : b''
 				}
@@ -230,7 +226,10 @@ class MSLDAPClientConnection:
 							res['protocolOp']['diagnosticMessage']
 						))
 
-				data, _ = await self.auth.authenticate(res['protocolOp']['matchedDN'])
+				try:
+					data, _ = await self.auth.authenticate(res['protocolOp']['matchedDN'])
+				except Exception as e:
+					return False, e
 
 				auth = {
 					'sicily_resp' : data
@@ -304,7 +303,10 @@ class MSLDAPClientConnection:
 			elif self.creds.auth_method in MSLDAP_GSS_METHODS:
 				challenge = None
 				while True:
-					data, _ = await self.auth.authenticate(challenge)
+					try:
+						data, _ = await self.auth.authenticate(challenge)
+					except Exception as e:
+						return False, e
 					
 					sasl = {
 						'mechanism' : 'GSS-SPNEGO'.encode(),
@@ -330,7 +332,9 @@ class MSLDAPClientConnection:
 						return False, res
 					res = res.native
 					if res['protocolOp']['resultCode'] == 'success':
+						self.encryption_sequence_counter = self.auth.iteration_ctr
 						self.__bind_success()
+
 						return True, None
 
 					elif res['protocolOp']['resultCode'] == 'saslBindInProgress':
@@ -497,14 +501,13 @@ class MSLDAPClientConnection:
 
 		msg_id = await self.send_message(msg)
 		res = await self.recv_message(msg_id)
-		res = res[0].native
-
+		res = res[0]
 		if isinstance(res, Exception):
 			return None, res
 		
 		#print('res')
 		#print(res)
-		return convert_attributes(res['protocolOp']['attributes']), None
+		return convert_attributes(res.native['protocolOp']['attributes']), None
 
 
 async def amain():

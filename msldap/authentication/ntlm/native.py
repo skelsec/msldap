@@ -25,6 +25,8 @@ class NTLMHandlerSettings:
 		self.mode = mode
 		self.template_name = template_name
 		self.custom_template = custom_template #for custom templates, must be dict
+
+		self.channelbind = False
 		
 		self.template = None
 		self.ntlm_downgrade = False
@@ -41,13 +43,18 @@ class NTLMHandlerSettings:
 			
 			self.template = self.custom_template
 		
+		self.channelbind = self.credential.channelbind
+
+		if self.channelbind is True:
+			self.template_name = 'Windows10_15063_channel'
+		
 		if self.mode.upper() == 'SERVER':
 			if self.template_name in NTLMServerTemplates:
 				self.template = NTLMServerTemplates[self.template_name]
 			else:
 				raise Exception('No NTLM server template found with name %s' % self.template_name)
 	
-		else:
+		else:		
 			if self.template_name in NTLMClientTemplates:
 				self.template = NTLMClientTemplates[self.template_name]
 				if 'ntlm_downgrade' in self.template:
@@ -85,8 +92,8 @@ class NTLMAUTHHandler:
 
 		self.crypthandle_client = None
 		self.crypthandle_server = None
-		self.signhandle_server = None
-		self.signhandle_client = None
+		#self.signhandle_server = None doesnt exists, only crypthandle
+		#self.signhandle_client = None doesnt exists, only crypthandle
 		
 		
 		self.iteration_cnt = 0
@@ -110,19 +117,6 @@ class NTLMAUTHHandler:
 			self.RandomSessionKey = self.settings.template['session_key']
 		
 		self.timestamp = self.settings.template.get('timestamp') #used in unittest only!
-		
-					
-		if self.mode.upper() == 'SERVER':
-			version    = self.settings.template['version']
-			targetName = self.settings.template['targetname']
-			targetInfo = self.settings.template['targetinfo']
-
-			self.ntlmChallenge = NTLMChallenge.construct(challenge = self.challenge, targetName = targetName, targetInfo = targetInfo, version = version, flags = self.flags)
-		
-		#else:
-		#	domainname = self.settings.template['domain_name']
-		#	workstationname = self.settings.template['workstation_name']
-		#	version = self.settings.template.get('version')
 			
 	def load_negotiate(self, data):
 		self.ntlmNegotiate = NTLMNegotiate.from_bytes(data)
@@ -189,48 +183,67 @@ class NTLMAUTHHandler:
 			#msg.Checksum = struct.unpack('<I',handle(messageSignature['Checksum']))[0]
 			
 		return msg.to_bytes()
-	
-	#async def sign(self, data, message_no, direction=None):
-	#	return self.SIGN(self.SignKey_client, data, message_no, RC4(self.SignKey_client).encrypt )
 
 	async def encrypt(self, data, sequence_no):
 		return self.SEAL(
-			self.SignKey_client, 
+			#self.SignKey_client, 
+			self.SignKey_client,
 			self.SealKey_client, 
-			data, 
-			data, 
+			data,
+			data,
 			sequence_no, 
 			self.crypthandle_client.encrypt
 		)
 
-	async def decrypt(self, data, sequence_no, direction='init', auth_data=None):		
-		data = data[16:]
-		msg_struct, signature = self.SEAL(
-			self.SignKey_server, 
-			self.SealKey_server, 
-			data, 
-			data, 
-			sequence_no, 
-			self.crypthandle_server.encrypt
-		)
-		print(data[:16])
-		print(signature)
-		return msg_struct
+	async def decrypt(self, data, sequence_no, direction='init', auth_data=None):
+		"""
+		Decrypting messages comping from the server
+		"""
+		edata = data[16:]
+		srv_sig = NTLMSSP_MESSAGE_SIGNATURE.from_bytes(data[:16])
+		sealedMessage = self.crypthandle_server.encrypt(edata)
+		signature = self.MAC(self.crypthandle_server.encrypt, self.SignKey_server, srv_sig.SeqNum, sealedMessage)
+		#print('seqno     %s' % sequence_no)
+		#print('Srv  sig: %s' % data[:16])
+		#print('Calc sig: %s' % signature)
 
-	async def sign(self, data, message_no, direction=None):
-		return self.SIGN(
-			self.SealKey_client,
-			data,
-			message_no,
-			self.signhandle_client.encrypt
-		)
+		return sealedMessage
+
+	async def sign(self, data, message_no, direction=None, reset_cipher = False):
+		"""
+		Singing outgoing messages. The reset_cipher parameter is needed for calculating mechListMIC. 
+		"""
+		#print('sign data : %s' % data)
+		#print('sign message_no : %s' % message_no)
+		#print('sign direction : %s' % direction)
+		signature = self.MAC(self.crypthandle_client.encrypt, self.SignKey_client, message_no, data)
+		if reset_cipher is True:
+			self.crypthandle_client = RC4(self.SealKey_client)
+			self.crypthandle_server = RC4(self.SealKey_server)
+		return signature
+
+	async def verify(self, data, signature):
+		"""
+		Verifying incoming server message
+		"""
+		signature_struct = NTLMSSP_MESSAGE_SIGNATURE.from_bytes(signature)
+		calc_sig = self.MAC(self.crypthandle_server.encrypt, self.SignKey_server, signature_struct.SeqNum, data)
+		#print('server signature    : %s' % signature)
+		#print('calculates signature: %s' % calc_sig)
+		return signature == calc_sig
 
 	def SEAL(self, signingKey, sealingKey, messageToSign, messageToEncrypt, seqNum, cipher_encrypt):
+		"""
+		This is the official SEAL function.
+		"""
 		sealedMessage = cipher_encrypt(messageToEncrypt)
 		signature = self.MAC(cipher_encrypt, signingKey, seqNum, messageToSign)
 		return sealedMessage, signature
 		
 	def SIGN(self, signingKey, message, seqNum, cipher_encrypt):
+		"""
+		This is the official SIGN function.
+		"""
 		return self.MAC(cipher_encrypt, signingKey, seqNum, message)
 	
 	def signing_needed(self):
@@ -291,13 +304,9 @@ class NTLMAUTHHandler:
 			
 		if mode == 'Client':
 			self.SignKey_client = signkey
-			if signkey is not None:
-				self.signhandle_client = RC4(self.SealKey_client)
 
 		else:
 			self.SignKey_server = signkey
-			if signkey is not None:
-				self.signhandle_server = RC4(self.SignKey_server)
 		
 		return signkey
 		

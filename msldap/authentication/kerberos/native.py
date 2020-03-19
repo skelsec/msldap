@@ -27,10 +27,13 @@ from minikerberos.aioclient import AIOKerberosClient
 class MSLDAPKerberos:
 	def __init__(self, settings):
 		self.settings = settings
+		self.signing_preferred = None
+		self.encryption_preferred = None
 		self.ccred = None
 		self.target = None
 		self.spn = None
 		self.kc = None
+		self.flags = None
 		
 		self.session_key = None
 		self.gssapi = None
@@ -40,10 +43,10 @@ class MSLDAPKerberos:
 		self.setup()
 	
 	def signing_needed(self):
-		return False
+		return ChecksumFlags.GSS_C_INTEG_FLAG in self.flags
 	
 	def encryption_needed(self):
-		return False #change to true to enable encryption channel binding
+		return ChecksumFlags.GSS_C_CONF_FLAG in self.flags
 				
 	async def sign(self, data, message_no, direction = 'init'):
 		return self.gssapi.GSS_GetMIC(data, message_no, direction = direction)	
@@ -58,62 +61,32 @@ class MSLDAPKerberos:
 		self.ccred = self.settings.ccred
 		self.spn = self.settings.spn
 		self.target = self.settings.target
+		self.channelbind = self.settings.channelbind
 		
+		self.flags = ChecksumFlags.GSS_C_MUTUAL_FLAG
+		if self.channelbind is True:
+			self.flags = \
+				ChecksumFlags.GSS_C_INTEG_FLAG |\
+				ChecksumFlags.GSS_C_CONF_FLAG |\
+				ChecksumFlags.GSS_C_REPLAY_FLAG |\
+				ChecksumFlags.GSS_C_SEQUENCE_FLAG |\
+				ChecksumFlags.GSS_C_MUTUAL_FLAG
+
 		self.kc = AIOKerberosClient(self.ccred, self.target)
-		
 	
 	def get_session_key(self):
 		return self.session_key.contents
 	
 	async def authenticate(self, authData, flags = None, seq_number = 0, is_rpc = False):
-
+		print(flags)
 		if self.iterations == 0:
 			#tgt = await self.kc.get_TGT(override_etype=[18])
 			tgt = await self.kc.get_TGT()
 			tgs, encpart, self.session_key = await self.kc.get_TGS(self.spn)
 			self.gssapi = get_gssapi(self.session_key)
+		
 		ap_opts = []
-		if is_rpc == True:
-			if self.iterations == 0:
-				ap_opts.append('mutual-required')
-				flags = ChecksumFlags.GSS_C_CONF_FLAG | ChecksumFlags.GSS_C_INTEG_FLAG | ChecksumFlags.GSS_C_SEQUENCE_FLAG|\
-						ChecksumFlags.GSS_C_REPLAY_FLAG | ChecksumFlags.GSS_C_MUTUAL_FLAG | ChecksumFlags.GSS_C_DCE_STYLE
-						
-				apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = flags, seq_number = seq_number, ap_opts=ap_opts)					
-				self.iterations += 1
-				return apreq, False
-				
-			else:
-				#mutual authentication part here
-				aprep = AP_REP.load(authData).native
-				cipher = _enctype_table[int(aprep['enc-part']['etype'])]()
-				cipher_text = aprep['enc-part']['cipher']
-				temp = cipher.decrypt(self.session_key, 12, cipher_text)
-				
-				enc_part = EncAPRepPart.load(temp).native
-				cipher = _enctype_table[int(enc_part['subkey']['keytype'])]()
-				
-				now = datetime.datetime.now(datetime.timezone.utc)
-				apreppart_data = {}
-				apreppart_data['cusec'] = now.microsecond
-				apreppart_data['ctime'] = now.replace(microsecond=0)
-				apreppart_data['seq-number'] = enc_part['seq-number']
-				
-				apreppart_data_enc = cipher.encrypt(self.session_key, 12, EncAPRepPart(apreppart_data).dump(), None)
-				
-				#overriding current session key
-				self.session_key = Key(cipher.enctype, enc_part['subkey']['keyvalue'])
-				
-				ap_rep = {}
-				ap_rep['pvno'] = 5 
-				ap_rep['msg-type'] = MESSAGE_TYPE.KRB_AP_REP.value
-				ap_rep['enc-part'] = EncryptedData({'etype': self.session_key.enctype, 'cipher': apreppart_data_enc}) 
-				
-				token = AP_REP(ap_rep).dump()
-				self.gssapi = get_gssapi(self.session_key)
-				self.iterations += 1
-				
-				return token, False
-		else:
-			apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = flags, seq_number = seq_number, ap_opts=ap_opts)
-			return apreq, False
+		if ChecksumFlags.GSS_C_MUTUAL_FLAG in self.flags:
+			ap_opts.append('mutual-required')
+		apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = self.flags, seq_number = seq_number, ap_opts=ap_opts)
+		return apreq, False

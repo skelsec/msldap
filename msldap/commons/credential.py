@@ -69,6 +69,8 @@ class MSLDAPCredential:
 		self.domain   = domain
 		self.username = username
 		self.password = password
+		self.signing_preferred = False
+		self.encryption_preferred = False
 		self.settings = settings
 
 	def get_msuser(self):

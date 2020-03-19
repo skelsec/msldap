@@ -49,8 +49,9 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			
 			
 			self.connection = self.conn_url.get_client()
-			await self.connection.connect()
-						
+			res, err = await self.connection.connect()
+			if err is not None:
+				raise err
 		except:
 			traceback.print_exc()
 

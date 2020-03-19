@@ -47,7 +47,7 @@ setup(
 	),
 	install_requires=[
 		'asn1crypto',
-		'winsspi;platform_system=="Windows"',
+		'winsspi>=0.0.7;platform_system=="Windows"',
 		'aiocmd',
 		'asciitree',
 		#'ldap_filter',

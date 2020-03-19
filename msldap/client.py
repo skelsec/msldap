@@ -27,7 +27,9 @@ class MSLDAPClient:
 	async def connect(self):
 		self._con = MSLDAPClientConnection(self.target, self.creds)
 		await self._con.connect()
-		await self._con.bind()
+		res, err = await self._con.bind()
+		if err is not None:
+			return False, err
 		res, err = await self._con.get_serverinfo()
 		if err is not None:
 			raise err
