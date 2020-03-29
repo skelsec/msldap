@@ -16,7 +16,7 @@ import datetime
 from minikerberos.common import *
 
 from minikerberos.protocol.asn1_structs import AP_REP, EncAPRepPart, EncryptedData
-from minikerberos.gssapi.gssapi import get_gssapi
+from msldap.authentication.kerberos.gssapi import get_gssapi
 from minikerberos.protocol.structures import ChecksumFlags
 from minikerberos.protocol.encryption import Enctype, Key, _enctype_table
 from minikerberos.protocol.constants import MESSAGE_TYPE
@@ -55,7 +55,8 @@ class MSLDAPKerberos:
 		return self.gssapi.GSS_Wrap(data, message_no)
 		
 	async def decrypt(self, data, message_no, direction='init', auth_data=None):
-		return self.gssapi.GSS_Unwrap(data, message_no, direction=direction, auth_data=auth_data)
+		ciphertext, wrap = self.gssapi.GSS_Unwrap(data, message_no, direction=direction, auth_data=auth_data)
+		return ciphertext
 		
 	def setup(self):
 		self.ccred = self.settings.ccred
@@ -69,8 +70,8 @@ class MSLDAPKerberos:
 				ChecksumFlags.GSS_C_INTEG_FLAG |\
 				ChecksumFlags.GSS_C_CONF_FLAG |\
 				ChecksumFlags.GSS_C_REPLAY_FLAG |\
-				ChecksumFlags.GSS_C_SEQUENCE_FLAG |\
-				ChecksumFlags.GSS_C_MUTUAL_FLAG
+				ChecksumFlags.GSS_C_SEQUENCE_FLAG #|\
+				#ChecksumFlags.GSS_C_MUTUAL_FLAG #DONT ENABLE THIS!!!!!!!!
 
 		self.kc = AIOKerberosClient(self.ccred, self.target)
 	
@@ -80,13 +81,14 @@ class MSLDAPKerberos:
 	async def authenticate(self, authData, flags = None, seq_number = 0, is_rpc = False):
 		print(flags)
 		if self.iterations == 0:
-			#tgt = await self.kc.get_TGT(override_etype=[18])
-			tgt = await self.kc.get_TGT()
-			tgs, encpart, self.session_key = await self.kc.get_TGS(self.spn)
+			#tgt = await self.kc.get_TGT()
+			tgt = await self.kc.get_TGT(override_etype = [18])
+			tgs, encpart, self.session_key = await self.kc.get_TGS(self.spn, override_etype = [18])
 			self.gssapi = get_gssapi(self.session_key)
 		
 		ap_opts = []
 		if ChecksumFlags.GSS_C_MUTUAL_FLAG in self.flags:
 			ap_opts.append('mutual-required')
 		apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = self.flags, seq_number = seq_number, ap_opts=ap_opts)
+		self.iterations += 1
 		return apreq, False

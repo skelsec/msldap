@@ -52,8 +52,11 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			res, err = await self.connection.connect()
 			if err is not None:
 				raise err
+			
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_ldapinfo(self, show = True):
 		"""Prints detailed LDAP connection info (DSA)"""
@@ -62,8 +65,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				self.ldapinfo = self.connection.get_server_info()
 			if show is True:
 				print(self.ldapinfo)
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_adinfo(self, show = True):
 		"""Prints detailed Active Driectory info"""
@@ -261,7 +266,9 @@ async def amain(args):
 	else:
 		for command in args.commands:
 			cmd = shlex.split(command)
-			await client._run_single_command(cmd[0], cmd[1:])
+			res = await client._run_single_command(cmd[0], cmd[1:])
+			if res is False:
+				return
 
 def main():
 	import argparse

@@ -5,6 +5,7 @@
 #
 
 from msldap import logger
+from msldap.commons.common import MSLDAPClientStatus
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest, SDFlagsRequestValue
 from msldap.protocol.constants import BASE, ALL_ATTRIBUTES, LEVEL
 
@@ -55,6 +56,16 @@ class MSLDAPClient:
 			generator
 		"""
 		logger.debug('Paged search, filter: %s attributes: %s' % (ldap_filter, ','.join(attributes)))
+		if self._con.status != MSLDAPClientStatus.RUNNING:
+			if self._con.status == MSLDAPClientStatus.ERROR:
+				print('There was an error in the connection!')
+				return
+			elif self._con.status == MSLDAPClientStatus.ERROR:
+				print('Theconnection is in stopped state!')
+				return
+
+		if self._tree is None:
+			raise Exception('BIND first!')
 		t = []
 		for x in attributes:
 			t.append(x.encode())

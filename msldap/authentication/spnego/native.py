@@ -193,6 +193,7 @@ class SPNEGO:
 			if neg_token['responseToken'] is None:
 				# https://tools.ietf.org/html/rfc4178#section-5
 				# mechlistmic exchange happening at the end of the authentication
+				return None, True
 				raise Exception('Should not be here....')
 				print('server mechListMIC: %s' % neg_token['mechListMIC'])
 				res = await self.verify(self.negtypes_store, neg_token['mechListMIC'])

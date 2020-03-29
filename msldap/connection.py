@@ -1,6 +1,8 @@
 import asyncio
 
+
 from msldap import logger
+from msldap.commons.common import MSLDAPClientStatus
 from msldap.protocol.messages import LDAPMessage, BindRequest, \
 	protocolOp, AuthenticationChoice, SaslCredentials, \
 	SearchRequest, AttributeDescription, Filter, Filters, \
@@ -25,11 +27,13 @@ class MSLDAPClientConnection:
 		self.network = None
 
 		self.handle_incoming_task = None
+		self.status = MSLDAPClientStatus.RUNNING
+		self.lasterror = None
 
 		self.message_id = 0
 		self.message_table = {}
 		self.message_table_notify = {}
-		self.encryption_sequence_counter = 0 #for whatever reason it's only used during encryption, but decryption always uses 0
+		self.encryption_sequence_counter = 0x5364820 #0 #for whatever reason it's only used during encryption, but decryption always uses 0
 
 	async def __handle_incoming(self):
 		try:
@@ -39,7 +43,7 @@ class MSLDAPClientConnection:
 					logger.debug('Client terminating bc __handle_incoming got an error!')
 					raise err
 				
-				print('Incoming message data: %s' % message_data)
+				#print('Incoming message data: %s' % message_data)
 				if self.bind_ok is True:
 					if self.__encrypt_messages is True:
 						#removing size
@@ -51,6 +55,7 @@ class MSLDAPClientConnection:
 						except:
 							import traceback
 							traceback.print_exc()
+							raise
 						
 					elif self.__sign_messages is True:
 						#print('Signed %s' % message_data)
@@ -61,6 +66,8 @@ class MSLDAPClientConnection:
 						except:
 							import traceback
 							traceback.print_exc()
+							raise
+				
 				
 				msg_len = calcualte_length(message_data)
 				msg_total_len = len(message_data)
@@ -87,12 +94,17 @@ class MSLDAPClientConnection:
 				self.message_table_notify[message_id].set()
 		
 		except asyncio.CancelledError:
+			self.status = MSLDAPClientStatus.STOPPED
 			return
 
 		except Exception as e:
+			self.status = MSLDAPClientStatus.ERROR
+			self.lasterror = e
 			for msgid in self.message_table_notify:
 				self.message_table[msgid] = [e]
 				self.message_table_notify[msgid].set()
+		
+		self.status = MSLDAPClientStatus.STOPPED
 
 
 	async def send_message(self, message):
@@ -332,6 +344,12 @@ class MSLDAPClientConnection:
 						return False, res
 					res = res.native
 					if res['protocolOp']['resultCode'] == 'success':
+						if 'serverSaslCreds' in res['protocolOp']:
+							try:
+								data, _ = await self.auth.authenticate(res['protocolOp']['serverSaslCreds'])
+							except Exception as e:
+								return False, e
+
 						self.encryption_sequence_counter = self.auth.iteration_ctr
 						self.__bind_success()
 
@@ -357,6 +375,9 @@ class MSLDAPClientConnection:
 		"""
 		This function is a generator!!!!! Dont just call it but use it with "async for"
 		"""
+		if self.status != MSLDAPClientStatus.RUNNING:
+			yield None, Exception('Connection not running! Probably encountered an error')
+			return
 		try:
 			if timeLimit is None:
 				timeLimit = 600 #not sure
@@ -408,6 +429,9 @@ class MSLDAPClientConnection:
 			yield (None, e)
 
 	async def pagedsearch(self, base, filter, attributes, search_scope = 2, paged_size = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None):
+		if self.status != MSLDAPClientStatus.RUNNING:
+			yield None, Exception('Connection not running! Probably encountered an error')
+			return
 		try:
 			cookie = b''
 			while True:
@@ -466,6 +490,9 @@ class MSLDAPClientConnection:
 
 
 	async def get_serverinfo(self):
+		if self.status != MSLDAPClientStatus.RUNNING:
+			return None, Exception('Connection not running! Probably encountered an error')
+
 		attributes = [
 			b'subschemaSubentry',
     		b'dsServiceName',
