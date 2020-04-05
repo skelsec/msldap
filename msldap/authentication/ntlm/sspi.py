@@ -20,12 +20,16 @@ class MSLDAPNTLMSSPI:
 			self.flags =  ISC_REQ.CONNECTION | ISC_REQ.CONFIDENTIALITY
 		self.sspi = NTLMMSLDAPSSPI()
 
+		self.seq_number = 0
 		self.session_key = None
 		self.ntlm_ctx = NTLMAUTHHandler(NTLMHandlerSettings(None, 'MANUAL'))
 		
 	@property
 	def ntlmChallenge(self):
 		return self.ntlm_ctx.ntlmChallenge
+
+	def get_seq_number(self):
+		return self.seq_number
 		
 	def signing_needed(self):
 		return self.ntlm_ctx.signing_needed()

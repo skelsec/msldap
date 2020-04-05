@@ -2,6 +2,8 @@ import enum
 import io
 import os
 
+from asn1crypto.core import ObjectIdentifier
+
 from minikerberos.protocol.constants import EncryptionType
 from minikerberos.protocol import encryption
 from minikerberos.crypto.hashing import md5, hmac_md5
@@ -12,8 +14,66 @@ from minikerberos.crypto.RC4 import RC4
 # https://tools.ietf.org/html/draft-raeburn-krb-rijndael-krb-05
 # https://tools.ietf.org/html/rfc2478
 # https://tools.ietf.org/html/draft-ietf-krb-wg-gssapi-cfx-02
+# https://tools.ietf.org/html/rfc4757
+# https://www.rfc-editor.org/errata/rfc4757
 
-GSS_WRAP_HEADER = b'\x60\x2b\x06\x09\x2a\x86\x48\x86\xf7\x12\x01\x02\x02'
+GSS_WRAP_HEADER     = b'\x60\x2b\x06\x09\x2a\x86\x48\x86\xf7\x12\x01\x02\x02'
+GSS_WRAP_HEADER_OID = b'\x60\x2b\x06\x09\x2a\x86\x48\x86\xf7\x12\x01\x02\x02'
+
+class KRB5_MECH_INDEP_TOKEN:
+	def __init__(self, data, oid):
+		self.oid = oid
+		self.data = data
+	
+	@staticmethod
+	def from_bytes(data):
+		return KRB5_MECH_INDEP_TOKEN.from_buffer(io.BytesIO(data))
+	
+	@staticmethod
+	def from_buffer(buff):
+		
+		start = buff.read(1)
+		if start != b'\x60':
+			raise Exception('Incorrect token data!')
+		remaining_length = KRB5_MECH_INDEP_TOKEN.decode_length_buffer(buff)
+		token_data = buff.read(remaining_length)
+		
+		buff = io.BytesIO(token_data)
+		pos = buff.tell()
+		t = buff.read(1)
+		oid_length = KRB5_MECH_INDEP_TOKEN.decode_length_buffer(buff)
+		buff.seek(pos)
+		token_oid = ObjectIdentifier.load(buff.read(oid_length+2))
+		print(str(token_oid))
+		
+		return KRB5_MECH_INDEP_TOKEN(buff.read(), str(token_oid))
+		
+	@staticmethod
+	def decode_length_buffer(buff):
+		lf = buff.read(1)[0]
+		print(lf)
+		if lf <= 127:
+			length = lf
+		else:
+			bcount = lf - 128
+			print(bcount)
+			length = int.from_bytes(buff.read(bcount), byteorder = 'big', signed = False)
+		return length
+		
+	@staticmethod
+	def encode_length(length):
+		if length <= 127:
+			return length.to_bytes(1, byteorder = 'big', signed = False)
+		else:
+			lb = length.to_bytes((length.bit_length() + 7) // 8, 'big')
+			return (128+len(lb)).to_bytes(1, byteorder = 'big', signed = False) + lb
+		
+		
+	def to_bytes(self):
+		t = ObjectIdentifier(self.oid).dump() + self.data
+		t = b'\x60' + KRB5_MECH_INDEP_TOKEN.encode_length(len(t)) + t
+		return t
+
 
 class GSSAPIFlags(enum.IntFlag):
 	GSS_C_DCE_STYLE     = 0x1000
@@ -34,7 +94,7 @@ class FlagsField(enum.IntFlag):
 	SentByAcceptor = 0
 	Sealed = 2
 	AcceptorSubkey = 4
-	
+
 # https://tools.ietf.org/html/rfc4757 (7.2)
 class GSSMIC_RC4:
 	def __init__(self):
@@ -153,15 +213,23 @@ class GSSAPI_RC4:
 		return GSS_GETMIC_HEADER + mic.to_bytes()
 		
 	
-	def GSS_Wrap(self, data, seq_num, direction = 'init2', encrypt=True, auth_data=None):
-		GSS_WRAP_HEADER = b'\x60\x2b\x06\x09\x2a\x86\x48\x86\xf7\x12\x01\x02\x02'
+	def GSS_Wrap(self, data, seq_num, direction = 'init', encrypt=True):
+		#direction = 'a'
+		seq_num = 0
+		print('[GSS_Wrap] data: %s' % data)
+		print('[GSS_Wrap] seq_num: %s' % seq_num.to_bytes(4, 'big', signed = False).hex())
+		print('[GSS_Wrap] direction: %s' % direction)
+		print('[GSS_Wrap] encrypt: %s' % encrypt)
 		
-		pad = (8 - (len(data) % 8)) & 0x7
-		padStr = bytes([pad]) * pad
-		data += padStr
+		#print('[GSS_Wrap] auth_data: %s' % auth_data)
+		
+		if encrypt is True:
+			pad = (8 - (len(data) % 8)) & 0x7
+			padStr = bytes([pad]) * pad
+			data += padStr
 		
 		token = GSSWRAP_RC4()
-		token.SEAL_ALG = b'\x10\x00'
+		token.SEAL_ALG = b'\x10\x00' # RC4
 		
 		if direction == 'init':
 			token.SND_SEQ = seq_num.to_bytes(4, 'big', signed = False) + b'\x00'*4
@@ -175,25 +243,25 @@ class GSSAPI_RC4:
 		Ksign = temp.digest()
 		
 		id = 13
-		Sgn_Cksum = md5( id.to_bytes(4, 'little', signed = False) +  token.to_bytes()[:8] + token.Confounder + data).digest()
-		temp = hmac_md5(Ksign)
-		temp.update(Sgn_Cksum)
-		token.SGN_CKSUM = temp.digest()[:8]
-		
+		Sgn_Cksum = md5(id.to_bytes(4, 'little', signed = False) +  token.to_bytes()[:8] + token.Confounder + data).digest()
 		
 		klocal = b''
 		for b in self.session_key.contents:
 			klocal += bytes([b ^ 0xf0])
-			
+
 		id = 0
 		temp = hmac_md5(klocal)
 		temp.update(id.to_bytes(4, 'little', signed = False))
 		temp = hmac_md5(temp.digest())
 		temp.update(seq_num.to_bytes(4, 'big', signed = False))
 		Kcrypt = temp.digest()
+
+		temp = hmac_md5(Ksign)
+		temp.update(Sgn_Cksum)
+		token.SGN_CKSUM = temp.digest()[:8]
 		
 		id = 0
-		temp = hmac_md5(self.session_key .contents)
+		temp = hmac_md5(self.session_key.contents)
 		temp.update(id.to_bytes(4, 'little', signed = False))
 		temp = hmac_md5(temp.digest())
 		temp.update(token.SGN_CKSUM)
@@ -202,16 +270,30 @@ class GSSAPI_RC4:
 		token.SND_SEQ = RC4(Kseq).encrypt(token.SND_SEQ)
 		
 		
-		if auth_data is not None:
-			wrap = GSSWRAP_RC4.from_bytes(auth_data)
+		#if auth_data is not None:
+		if encrypt is False:
+			print('Unwrap sessionkey: %s' % self.session_key.contents.hex())
+			print('Unwrap data      : %s' % data.hex())
+
+			sspi_wrap = KRB5_MECH_INDEP_TOKEN.from_bytes(data)
+
+			hdr = sspi_wrap.data[:32]
+			data = sspi_wrap.data[32:]
+			
+			print('hdr %s' % hdr)
+			print('data %s' % data)
+
+			wrap = GSSWRAP_RC4.from_bytes(hdr)
 			
 			id = 0
 			temp = hmac_md5(self.session_key.contents)
 			temp.update(id.to_bytes(4, 'little', signed = False))
 			temp = hmac_md5(temp.digest())
 			temp.update(wrap.SGN_CKSUM)
+			Kseq = temp.digest()
 			
-			snd_seq = RC4(temp.digest()).encrypt(wrap.SND_SEQ)
+			snd_seq = RC4(Kseq).encrypt(wrap.SND_SEQ)
+			print('snd_seq_1 snd_seq_2 %s , %s' % (snd_seq[:4].hex(), snd_seq[4:].hex() ))
 			
 			id = 0
 			temp = hmac_md5(klocal)
@@ -221,56 +303,50 @@ class GSSAPI_RC4:
 			Kcrypt = temp.digest()
 			
 			rc4 = RC4(Kcrypt)
-			cipherText = rc4.decrypt(token.Confounder + data)[8:]
+			dec_cofounder =  rc4.decrypt(wrap.Confounder)
+			dec_data = rc4.decrypt( data)
+
+			print('dec_data : %s' % dec_data)
+
+			id = 13
+			Sgn_Cksum_calc = md5(id.to_bytes(4, 'little', signed = False) +  wrap.to_bytes()[:8] + dec_cofounder + dec_data).digest()
+
+			temp = hmac_md5(Ksign)
+			temp.update(Sgn_Cksum_calc)
+			Sgn_Cksum_calc = temp.digest()[:8]
+
+			
+
+			print('Sgn_Cksum_calc %s' % Sgn_Cksum_calc)
+			print('SGN_CKSUM %s' % wrap.SGN_CKSUM)
+			if wrap.SGN_CKSUM != Sgn_Cksum_calc[:8]:
+				return None, Exception('Integrity verification failed')
+
+			pad = (8 - (len(data) % 8)) & 0x7
+			print(pad)
+			print('cipherText nopad: %s' % dec_data[:-pad])
+
+			return dec_data[:-pad], None
 			
 		elif encrypt is True:
 			rc4 = RC4(Kcrypt)
 			token.Confounder = rc4.encrypt(token.Confounder)
-			cipherText = rc4.encrypt(data)
-		
-		else:
-			cipherText = data
-			
-		finalData = GSS_WRAP_HEADER + token.to_bytes()
-		return cipherText, finalData
+			cipherText = rc4.encrypt(data)			
+			finalData = b'' #GSS_WRAP_HEADER_RC4 + token.to_bytes()
+			cipherText = KRB5_MECH_INDEP_TOKEN( token.to_bytes() + cipherText,  '1.2.840.113554.1.2.2' ).to_bytes()
 
 
-	def test_decrypt(self, data, seq_num, direction = 'init2', encrypt=True, auth_data=None):
-		import struct
-		klocal = b''
-		for b in self.session_key.contents:
-			klocal += bytes([b ^ 0xf0])
-
-		wrap = GSSWRAP_RC4.from_bytes(auth_data)
-		snd_seq = wrap.SND_SEQ
-
-		Kseq = hmac_md5(self.session_key.contents)
-		Kseq.update(struct.pack('<L',0))
-		Kseq = Kseq.digest()
-		Kseq = hmac_md5(Kseq)
-		Kseq.update(wrap.SGN_CKSUM)
-		Kseq = Kseq.digest()
-
-		snd_seq = RC4(Kseq).encrypt(wrap.SND_SEQ)
-		print('snd_seq %s' % snd_seq)
-	
-		Kcrypt = hmac_md5(klocal)
-		Kcrypt.update(struct.pack('<L',0))
-		Kcrypt = Kcrypt.digest()
-		Kcrypt = hmac_md5(Kcrypt)
-		Kcrypt.update(snd_seq[:4])
-		Kcrypt = Kcrypt.digest()
-		cipherText = RC4(Kcrypt).decrypt(wrap.Confounder + data)[8:]
-
-		return cipherText, None
+			print('cipherText  %s' % cipherText.hex())
+			print('finalData   %s' % finalData.hex())
+			print('sessionkey  %s' % self.session_key.contents.hex())
+			return cipherText, finalData
 		
 
-	def GSS_Unwrap(self, data, seq_num, direction='init', auth_data = None):
-		auth_data = data[len(GSS_WRAP_HEADER)+1: len(GSS_WRAP_HEADER)+1 + 32]
-		print('auth_data %s' % auth_data)
-		data = data[len(GSS_WRAP_HEADER) + 33: ]
-		print('data %s' % data)
-		return self.test_decrypt(data, seq_num, direction='init', encrypt=False, auth_data=auth_data)
+	def GSS_Unwrap(self, data, seq_num, direction='init'):
+		print('GSS_Unwrap data : %s' % data)
+		dec_data, err = self.GSS_Wrap(data, seq_num, direction=direction, encrypt = False)
+		print('GSS_Unwrap decrypted data : %s' % dec_data)
+		return dec_data, err
 	
 # 4.2.6.1. MIC Tokens
 class GSSMIC:
@@ -415,7 +491,7 @@ class GSSAPI_AES:
 		#signature checking
 		new_hdr.RRC = 28
 		if data[:16] != new_hdr.to_bytes():
-			raise Exception('GSS_Unwrap signature mismatch!')
+			return None, Exception('GSS_Unwrap signature mismatch!')
 		
 
 		print('Unwrap checksum: %s' % plain_text[-(original_hdr.EC + 16):])

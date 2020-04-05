@@ -39,6 +39,8 @@ class MSLDAPClientConnection:
 		try:
 			while True:
 				message_data, err = await self.network.in_queue.get()
+				print(type(message_data))
+				print(type(err))
 				if err is not None:
 					logger.debug('Client terminating bc __handle_incoming got an error!')
 					raise err
@@ -49,7 +51,9 @@ class MSLDAPClientConnection:
 						#removing size
 						message_data = message_data[4:]
 						try:
-							message_data = await self.auth.decrypt(message_data, 0 )
+							message_data, err = await self.auth.decrypt(message_data, 0 )
+							if err is not None:
+								raise err
 							#print('Decrypted %s' % message_data.hex())
 							#print('Decrypted %s' % message_data)
 						except:
@@ -316,7 +320,9 @@ class MSLDAPClientConnection:
 				challenge = None
 				while True:
 					try:
-						data, _ = await self.auth.authenticate(challenge)
+						data, to_continue, err = await self.auth.authenticate(challenge)
+						if err is not None:
+							raise err
 					except Exception as e:
 						return False, e
 					
@@ -330,7 +336,7 @@ class MSLDAPClientConnection:
 
 					bindreq = {
 						'version' : 3,
-						'name': ''.encode(),
+						'name': b'',
 						'authentication': AuthenticationChoice(auth), 
 					}
 
@@ -345,12 +351,11 @@ class MSLDAPClientConnection:
 					res = res.native
 					if res['protocolOp']['resultCode'] == 'success':
 						if 'serverSaslCreds' in res['protocolOp']:
-							try:
-								data, _ = await self.auth.authenticate(res['protocolOp']['serverSaslCreds'])
-							except Exception as e:
-								return False, e
+							data, _, err = await self.auth.authenticate(res['protocolOp']['serverSaslCreds'])
+							if err is not None:
+								return False, err
 
-						self.encryption_sequence_counter = self.auth.iteration_ctr
+						self.encryption_sequence_counter = self.auth.get_seq_number()
 						self.__bind_success()
 
 						return True, None

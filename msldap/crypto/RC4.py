@@ -5,8 +5,8 @@ This is needed because the pure python implementation for encryption and hashing
 currently it's not the perfect wrapper, needs to be extended
 """
 
-from aiosmb.crypto.BASE import symmetricBASE, cipherMODE
-from aiosmb.crypto.pure.RC4.RC4 import RC4 as _pureRC4
+from msldap.crypto.BASE import symmetricBASE, cipherMODE
+from msldap.crypto.pure.RC4.RC4 import RC4 as _pureRC4
 try:
 	from Crypto.Cipher import ARC4 as _pyCryptoRC4
 except Exception as e:

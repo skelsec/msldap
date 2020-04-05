@@ -48,6 +48,9 @@ class SPNEGO:
 	def encryption_needed(self):
 		return self.selected_authentication_context.encryption_needed()
 
+	def get_seq_number(self):
+		return self.selected_authentication_context.get_seq_number()
+
 	async def unsign(self, data):
 		#TODO: IMPLEMENT THIS
 		return data
@@ -62,7 +65,7 @@ class SPNEGO:
 		return await self.selected_authentication_context.encrypt(data, message_no)
 
 	async def decrypt(self, data, message_no, direction='init', auth_data=None):
-		return await self.selected_authentication_context.decrypt(data, message_no, direction=direction, auth_data=auth_data)
+		return await self.selected_authentication_context.decrypt(data, message_no, direction=direction)
 		
 	def add_auth_context(self, name, ctx):
 		"""
@@ -88,9 +91,11 @@ class SPNEGO:
 		return None, None
 		
 	async def process_ctx_authenticate(self, token_data, include_negstate = False, flags = None, seq_number = 0, is_rpc = False):
-		result, to_continue = await self.selected_authentication_context.authenticate(token_data, flags = flags, seq_number = seq_number, is_rpc = is_rpc)
+		result, to_continue, err = await self.selected_authentication_context.authenticate(token_data, flags = flags, seq_number = seq_number, is_rpc = is_rpc)
+		if err is not None:
+			return None, None, err
 		if not result:
-			return None, False
+			return None, False, None
 		response = {}
 		if include_negstate == True:
 			if to_continue == True:
@@ -99,7 +104,7 @@ class SPNEGO:
 				response['negState'] = NegState('accept-completed')
 		
 		response['responseToken'] = result
-		return response, to_continue
+		return response, to_continue, None
 		
 	def get_extra_info(self):
 		if hasattr(self.selected_authentication_context, 'get_extra_info'):
@@ -145,12 +150,15 @@ class SPNEGO:
 				if len(mechtypes) == 1:
 					self.selected_authentication_context = self.authentication_contexts[selected_name]
 					self.selected_mechtype = selected_name
-					result, to_continue = await self.selected_authentication_context.authenticate(None, is_rpc = is_rpc)
+					result, to_continue, err = await self.selected_authentication_context.authenticate(None, is_rpc = is_rpc)
+					if err is not None:
+						return None, None, err
+
 					if is_rpc == False:
 						response['mechToken'] = result
 					else:
 						if not result:
-							return None, False
+							return None, False, None
 						if str(response['mechTypes'][0]) == '1.2.840.48018.1.2.2':
 							response['mechToken'] = KRB5Token(result).to_bytes()
 								
@@ -164,7 +172,7 @@ class SPNEGO:
 					
 					
 				#spnego = GSS_SPNEGO({'NegotiationToken':negtoken})
-				return GSSAPI({'type': GSSType('1.3.6.1.5.5.2'), 'value':negtoken}).dump(), True
+				return GSSAPI({'type': GSSType('1.3.6.1.5.5.2'), 'value':negtoken}).dump(), True, None
 					
 					
 			else:
@@ -183,8 +191,10 @@ class SPNEGO:
 				self.selected_mechtype = neg_token['supportedMech']
 
 	
-				response, to_continue = await self.process_ctx_authenticate(neg_token['responseToken'], flags = flags, seq_number = seq_number, is_rpc = is_rpc)
-				return NegTokenResp(response).dump(), to_continue
+				response, to_continue, err = await self.process_ctx_authenticate(neg_token['responseToken'], flags = flags, seq_number = seq_number, is_rpc = is_rpc)
+				if err is not None:
+					return None, None, err
+				return NegTokenResp(response).dump(), to_continue, None
 					
 		else:
 			#everything is netotiated, but authentication needs more setps
@@ -193,7 +203,7 @@ class SPNEGO:
 			if neg_token['responseToken'] is None:
 				# https://tools.ietf.org/html/rfc4178#section-5
 				# mechlistmic exchange happening at the end of the authentication
-				return None, True
+				return None, True, None
 				raise Exception('Should not be here....')
 				print('server mechListMIC: %s' % neg_token['mechListMIC'])
 				res = await self.verify(self.negtypes_store, neg_token['mechListMIC'])
@@ -207,19 +217,21 @@ class SPNEGO:
 					'mechListMIC' : ret, 
 					'negState': NegState('accept-completed')
 				}
-				return NegotiationToken({'negTokenResp':NegTokenResp(res)}).dump(), True
+				return NegotiationToken({'negTokenResp':NegTokenResp(res)}).dump(), True, None
 
 			else:
-				response, to_continue = await self.process_ctx_authenticate(neg_token['responseToken'], flags = flags, seq_number = seq_number, is_rpc = is_rpc)
+				response, to_continue, err = await self.process_ctx_authenticate(neg_token['responseToken'], flags = flags, seq_number = seq_number, is_rpc = is_rpc)
+				if err is not None:
+					return None, None, err
 				if not response:
-					return None, False
+					return None, False, None
 
 				response['mechListMIC'] = await self.sign(self.negtypes_store, 0, reset_cipher = True)
 				self.iteration_ctr += 1
 				#print(response)
-				res = NegotiationToken({'negTokenResp':NegTokenResp(response)}).dump(), to_continue
+				res = NegotiationToken({'negTokenResp':NegTokenResp(response)}).dump()
 
-				return res
+				return res, to_continue, None
 	
 def test():
 	test_data = bytes.fromhex('a03e303ca00e300c060a2b06010401823702020aa22a04284e544c4d5353500001000000978208e2000000000000000000000000000000000a00d73a0000000f')
