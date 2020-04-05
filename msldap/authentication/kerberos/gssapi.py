@@ -21,6 +21,9 @@ GSS_WRAP_HEADER     = b'\x60\x2b\x06\x09\x2a\x86\x48\x86\xf7\x12\x01\x02\x02'
 GSS_WRAP_HEADER_OID = b'\x60\x2b\x06\x09\x2a\x86\x48\x86\xf7\x12\x01\x02\x02'
 
 class KRB5_MECH_INDEP_TOKEN:
+	# https://tools.ietf.org/html/rfc2743#page-81
+	# Mechanism-Independent Token Format
+
 	def __init__(self, data, oid):
 		self.oid = oid
 		self.data = data
@@ -40,7 +43,7 @@ class KRB5_MECH_INDEP_TOKEN:
 		
 		buff = io.BytesIO(token_data)
 		pos = buff.tell()
-		t = buff.read(1)
+		buff.read(1)
 		oid_length = KRB5_MECH_INDEP_TOKEN.decode_length_buffer(buff)
 		buff.seek(pos)
 		token_oid = ObjectIdentifier.load(buff.read(oid_length+2))
@@ -51,12 +54,10 @@ class KRB5_MECH_INDEP_TOKEN:
 	@staticmethod
 	def decode_length_buffer(buff):
 		lf = buff.read(1)[0]
-		print(lf)
 		if lf <= 127:
 			length = lf
 		else:
 			bcount = lf - 128
-			print(bcount)
 			length = int.from_bytes(buff.read(bcount), byteorder = 'big', signed = False)
 		return length
 		
@@ -176,6 +177,7 @@ class GSSAPI_RC4:
 		self.session_key = session_key
 	
 	def GSS_GetMIC(self, data, sequenceNumber, direction = 'init'):
+		raise Exception('Not tested! Sure it needs some changes')
 		GSS_GETMIC_HEADER = b'\x60\x23\x06\x09\x2a\x86\x48\x86\xf7\x12\x01\x02\x02'
 		
 		# Let's pad the data
@@ -215,7 +217,7 @@ class GSSAPI_RC4:
 	
 	def GSS_Wrap(self, data, seq_num, direction = 'init', encrypt=True):
 		#direction = 'a'
-		seq_num = 0
+		#seq_num = 0
 		print('[GSS_Wrap] data: %s' % data)
 		print('[GSS_Wrap] seq_num: %s' % seq_num.to_bytes(4, 'big', signed = False).hex())
 		print('[GSS_Wrap] direction: %s' % direction)
@@ -235,7 +237,7 @@ class GSSAPI_RC4:
 			token.SND_SEQ = seq_num.to_bytes(4, 'big', signed = False) + b'\x00'*4
 		else:
 			token.SND_SEQ = seq_num.to_bytes(4, 'big', signed = False) + b'\xff'*4
-			
+		
 		token.Confounder = os.urandom(8)
 		
 		temp = hmac_md5(self.session_key.contents)
@@ -304,9 +306,7 @@ class GSSAPI_RC4:
 			
 			rc4 = RC4(Kcrypt)
 			dec_cofounder =  rc4.decrypt(wrap.Confounder)
-			dec_data = rc4.decrypt( data)
-
-			print('dec_data : %s' % dec_data)
+			dec_data = rc4.decrypt(data)
 
 			id = 13
 			Sgn_Cksum_calc = md5(id.to_bytes(4, 'little', signed = False) +  wrap.to_bytes()[:8] + dec_cofounder + dec_data).digest()
@@ -451,7 +451,7 @@ class GSSAPI_AES:
 		return m.to_bytes()
 		
 	def GSS_Wrap(self, data, seq_num, use_padding = False):
-		#raise Exception('not working :/')
+		print('[GSS_Wrap] seq_num: %s' % seq_num.to_bytes(4, 'big', signed = False).hex())
 		cipher = self.cipher_type()
 		pad = 0
 		if use_padding is True:
@@ -512,30 +512,6 @@ def get_gssapi(session_key):
 		
 		
 def test():
-	#data_padded= bytes.fromhex('810e00001a204de2d64fd111a3da0000f875ae0d1c4500003400000034000000008040050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffff')
-	#token_1= bytes.fromhex('050406ff000c00000000000000000000')
-	#cipherText_1 = bytes.fromhex('0880ed78d6196dde3f3fb23eeea650bc4ae025fa2a9c337c75c024d9d8f0186c75a4a9060e2a40a9ad024317bf5df6a86cb4a764a9ca36843f8fa4f99c03e2bde46f5a29aafc83dacdf9f0a5677446b5d910417142dc7b7ba7ded76cddc4acf9bf7ed44008cb9850e5701f2f9285dad6463ca8d0e365d4f1700f3d054e242ebcde2f3146ddd411a627af7486')
-	#cipherText_2 = bytes.fromhex('08cb9850e5701f2f9285dad6463ca8d0e365d4f1700f3d054e242ebcde2f3146ddd411a627af74860880ed78d6196dde3f3fb23eeea650bc4ae025fa2a9c337c75c024d9d8f0186c75a4a9060e2a40a9ad024317bf5df6a86cb4a764a9ca36843f8fa4f99c03e2bde46f5a29aafc83dacdf9f0a5677446b5d910417142dc7b7ba7ded76cddc4acf9bf7ed440')
-
-
-
-	#session_key = encryption.Key( encryption.Enctype.AES256 , bytes.fromhex('3e242e91996aadd513ecb1bc2369e44183e08e08c51550fa4b681e77f75ed8e1'))
-	#data = bytes.fromhex('810e00001a204de2d64fd111a3da0000f875ae0d1c4500003400000034000000008040050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffffffff')
-	#sequenceNumber = 0
-	#ret1 = bytes.fromhex('4ae025fa2a9c337c75c024d9d8f0186c75a4a9060e2a40a9ad024317bf5df6a86cb4a764a9ca36843f8fa4f99c03e2bde46f5a29aafc83dacdf9f0a5677446b5d910417142dc7b7ba7ded76cddc4acf9bf7ed440')
-	#ret2 = bytes.fromhex('050406ff000c001c000000000000000008cb9850e5701f2f9285dad6463ca8d0e365d4f1700f3d054e242ebcde2f3146ddd411a627af74860880ed78d6196dde3f3fb23eeea650bc')
-	#
-	#gssapi = get_gssapi(session_key)
-	#r1, r2 = gssapi.GSS_Wrap(data, sequenceNumber)
-	#
-	#gssapi.GSS_Unwrap(r1, 0, auth_data = b'\xff'*8 + r2)
-	#
-	#print(r1.hex())
-	#print(ret1.hex())
-	#
-	#assert r1 == ret1
-	#assert r2 == ret2
-
 	data = b'\xAF' * 1024
 	session_key = encryption.Key( encryption.Enctype.AES256 , bytes.fromhex('3e242e91996aadd513ecb1bc2369e44183e08e08c51550fa4b681e77f75ed8e1'))
 	sequenceNumber = 0
@@ -549,9 +525,6 @@ def test():
 
 	print(r1.hex())
 	print(ret1.hex())
-
-
-
 
 
 if __name__ == '__main__':
