@@ -3,17 +3,14 @@
 # This is just a simple interface to the minikerberos library to support SPNEGO
 # 
 #
-# - Hardships - 
-# 1. DCERPC kerberos authentication requires a complete different approach and flags,
-#    also requires mutual authentication
-#
 # - Links - 
-# 1. Most of the idea was taken from impacket
-# 2. See minikerberos library
+# 1. See minikerberos library
 
 import datetime
 
+import os
 from minikerberos.common import *
+
 
 from minikerberos.protocol.asn1_structs import AP_REP, EncAPRepPart, EncryptedData, AP_REQ
 from msldap.authentication.kerberos.gssapi import get_gssapi, KRB5_MECH_INDEP_TOKEN
@@ -34,7 +31,7 @@ class MSLDAPKerberos:
 		self.spn = None
 		self.kc = None
 		self.flags = None
-		self.preferred_etypes = [23]
+		self.preferred_etypes = [23,17,18]
 		
 		self.session_key = None
 		self.gssapi = None
@@ -96,8 +93,8 @@ class MSLDAPKerberos:
 				ChecksumFlags.GSS_C_CONF_FLAG |\
 				ChecksumFlags.GSS_C_INTEG_FLAG |\
 				ChecksumFlags.GSS_C_REPLAY_FLAG |\
-				ChecksumFlags.GSS_C_SEQUENCE_FLAG |\
-				ChecksumFlags.GSS_C_MUTUAL_FLAG
+				ChecksumFlags.GSS_C_SEQUENCE_FLAG #|\
+				#ChecksumFlags.GSS_C_MUTUAL_FLAG
 
 		self.kc = AIOKerberosClient(self.ccred, self.target)
 	
@@ -111,7 +108,7 @@ class MSLDAPKerberos:
 		try:
 			
 			if self.iterations == 0:
-				self.seq_number = seq_number
+				self.seq_number = 0 #int.from_bytes(os.urandom(4), byteorder='big', signed=False)
 				self.iterations += 1
 
 				#tgt = await self.kc.get_TGT()
@@ -163,10 +160,10 @@ class MSLDAPKerberos:
 
 				#updating session key, gssapi
 				self.session_key = Key(int(enc_part['subkey']['keytype']), enc_part['subkey']['keyvalue'])
-				self.expected_server_seq_number = enc_part.get('seq-number', 0)
+				#self.seq_number = enc_part.get('seq-number', 0)
 				self.gssapi = get_gssapi(self.session_key)
 
-				return b'', False, None			
+				return b'', False, None		
 		
 		except Exception as e:
 			return None, None, e
