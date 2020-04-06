@@ -53,7 +53,8 @@ setup(
 		'asciitree',
 		'asysocks',
 		'winacl>=0.0.2',
-		'prompt-toolkit<3.0.0'
+		'prompt-toolkit<3.0.0',
+		'tqdm',
 	],
 	entry_points={
 		'console_scripts': [

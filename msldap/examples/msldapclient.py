@@ -42,12 +42,12 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if url is not None:
 				self.conn_url = MSLDAPURLDecoder(url)
 
-			print(self.conn_url.get_credential())
-			print(self.conn_url.get_target())
+			logger.debug(self.conn_url.get_credential())
+			logger.debug(self.conn_url.get_target())
 			
 			
 			self.connection = self.conn_url.get_client()
-			res, err = await self.connection.connect()
+			_, err = await self.connection.connect()
 			if err is not None:
 				raise err
 			

@@ -27,7 +27,9 @@ class MSLDAPClient:
 
 	async def connect(self):
 		self._con = MSLDAPClientConnection(self.target, self.creds)
-		await self._con.connect()
+		_, err = await self._con.connect()
+		if err is not None:
+			raise err
 		res, err = await self._con.bind()
 		if err is not None:
 			return False, err
@@ -110,7 +112,6 @@ class MSLDAPClient:
 		"""
 		logger.debug('Tree, dn: %s level: %s' % (dn, level))
 		tree = {}
-		#entries = 
 		async for entry, err in self._con.pagedsearch(
 			dn.encode(), 
 			query_syntax_converter('(distinguishedName=*)'), 

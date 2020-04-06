@@ -37,7 +37,7 @@ class MSLDAPClientConnection:
 		self.message_id = 0
 		self.message_table = {}
 		self.message_table_notify = {}
-		self.encryption_sequence_counter = 0x5364820 #0 #for whatever reason it's only used during encryption
+		self.encryption_sequence_counter = 0 # this will be set by the inderlying auth algo
 		self.cb_data = None #for channel binding
 
 	async def __handle_incoming(self):
@@ -156,24 +156,28 @@ class MSLDAPClientConnection:
 		return messages
 
 	async def connect(self):
-		logger.debug('Connecting!')
-		self.network = MSLDAPNetworkSelector.select(self.target)
-		res, err = await self.network.run()
-		if res is False:
-			raise err
-		
-		# now processing channel binding options
-		if self.target.proto == LDAPProtocol.SSL:
-			certdata = self.network.get_peer_certificate()
-			#cert = Certificate.load(certdata).native
-			#print(cert)
-			cb_struct = ChannelBindingsStruct()
-			cb_struct.application_data = b'tls-server-end-point:' + sha256(certdata).digest()
+		try:
+			logger.debug('Connecting!')
+			self.network = MSLDAPNetworkSelector.select(self.target)
+			res, err = await self.network.run()
+			if res is False:
+				return False, err
+			
+			# now processing channel binding options
+			if self.target.proto == LDAPProtocol.SSL:
+				certdata = self.network.get_peer_certificate()
+				#cert = Certificate.load(certdata).native
+				#print(cert)
+				cb_struct = ChannelBindingsStruct()
+				cb_struct.application_data = b'tls-server-end-point:' + sha256(certdata).digest()
 
-			self.cb_data = cb_struct.to_bytes()
+				self.cb_data = cb_struct.to_bytes()
 
-		self.handle_incoming_task = asyncio.create_task(self.__handle_incoming())
-		logger.debug('Connection succsessful!')
+			self.handle_incoming_task = asyncio.create_task(self.__handle_incoming())
+			logger.debug('Connection succsessful!')
+			return True, None
+		except Exception as e:
+			return False, e
 
 	async def disconnect(self):
 		logger.debug('Disconnecting!')
@@ -384,7 +388,8 @@ class MSLDAPClientConnection:
 								res['protocolOp']['diagnosticMessage']
 							))
 					
-					#print(res)
+			else:
+				raise Exception('Not implemented authentication method: %s' % self.creds.auth_method.name)
 		except Exception as e:
 			return False, e
 	
