@@ -51,9 +51,9 @@ setup(
 		'minikerberos==0.2.1',
 		'aiocmd',
 		'asciitree',
-		#'ldap_filter',
 		'asysocks',
-		'winacl>=0.0.2'
+		'winacl>=0.0.2',
+		'prompt-toolkit<3.0.0'
 	],
 	entry_points={
 		'console_scripts': [
