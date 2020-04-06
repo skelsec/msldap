@@ -51,6 +51,8 @@ Detailed explanation with examples:
 		- proxyhost: Ip or hostname of the proxy server
 		- proxyport: port of the proxy server
 		- proxytimeout: timeout ins ecodns for the proxy connection
+		- encrypt: enable encryption (applies to kerberos/ntlm/SSPI)
+		- etype: chhose which encryption type the kerberos should use (kerberos only, not SSPI!)
 
 	Examples:
 	ldap://10.10.10.2
