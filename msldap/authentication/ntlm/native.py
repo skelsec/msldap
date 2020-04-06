@@ -1,8 +1,8 @@
-
 import os
 import struct
 import hmac
 import copy
+import hashlib
 
 #from aiosmb.commons.connection.credential import SMBNTLMCredential
 #from aiosmb.commons.serverinfo import NTLMServerInfo
@@ -25,6 +25,8 @@ class NTLMHandlerSettings:
 		self.mode = mode
 		self.template_name = template_name
 		self.custom_template = custom_template #for custom templates, must be dict
+
+		self.encrypt = False
 		
 		self.template = None
 		self.ntlm_downgrade = False
@@ -41,13 +43,18 @@ class NTLMHandlerSettings:
 			
 			self.template = self.custom_template
 		
+		self.encrypt = self.credential.encrypt
+
+		if self.encrypt is True:
+			self.template_name = 'Windows10_15063_channel'
+		
 		if self.mode.upper() == 'SERVER':
 			if self.template_name in NTLMServerTemplates:
 				self.template = NTLMServerTemplates[self.template_name]
 			else:
 				raise Exception('No NTLM server template found with name %s' % self.template_name)
 	
-		else:
+		else:		
 			if self.template_name in NTLMClientTemplates:
 				self.template = NTLMClientTemplates[self.template_name]
 				if 'ntlm_downgrade' in self.template:
@@ -85,10 +92,10 @@ class NTLMAUTHHandler:
 
 		self.crypthandle_client = None
 		self.crypthandle_server = None
-		self.signhandle_server = None
-		self.signhandle_client = None
+		#self.signhandle_server = None doesnt exists, only crypthandle
+		#self.signhandle_client = None doesnt exists, only crypthandle
 		
-		
+		self.seq_number = 0
 		self.iteration_cnt = 0
 		self.ntlm_credentials = None
 		self.timestamp = None #used in unittest only!
@@ -110,19 +117,6 @@ class NTLMAUTHHandler:
 			self.RandomSessionKey = self.settings.template['session_key']
 		
 		self.timestamp = self.settings.template.get('timestamp') #used in unittest only!
-		
-					
-		if self.mode.upper() == 'SERVER':
-			version    = self.settings.template['version']
-			targetName = self.settings.template['targetname']
-			targetInfo = self.settings.template['targetinfo']
-
-			self.ntlmChallenge = NTLMChallenge.construct(challenge = self.challenge, targetName = targetName, targetInfo = targetInfo, version = version, flags = self.flags)
-		
-		#else:
-		#	domainname = self.settings.template['domain_name']
-		#	workstationname = self.settings.template['workstation_name']
-		#	version = self.settings.template.get('version')
 			
 	def load_negotiate(self, data):
 		self.ntlmNegotiate = NTLMNegotiate.from_bytes(data)
@@ -136,6 +130,9 @@ class NTLMAUTHHandler:
 	def load_sessionkey(self, data):
 		self.RandomSessionKey = data
 		self.setup_crypto()
+
+	def get_seq_number(self):
+		return self.seq_number
 	
 	def set_sign(self, tf = True):
 		if tf == True:
@@ -189,48 +186,71 @@ class NTLMAUTHHandler:
 			#msg.Checksum = struct.unpack('<I',handle(messageSignature['Checksum']))[0]
 			
 		return msg.to_bytes()
-	
-	#async def sign(self, data, message_no, direction=None):
-	#	return self.SIGN(self.SignKey_client, data, message_no, RC4(self.SignKey_client).encrypt )
 
 	async def encrypt(self, data, sequence_no):
+		"""
+		This function is to support SSPI encryption.
+		"""
 		return self.SEAL(
-			self.SignKey_client, 
+			#self.SignKey_client, 
+			self.SignKey_client,
 			self.SealKey_client, 
-			data, 
-			data, 
+			data,
+			data,
 			sequence_no, 
 			self.crypthandle_client.encrypt
 		)
 
-	async def decrypt(self, data, sequence_no, direction='init', auth_data=None):		
-		data = data[16:]
-		msg_struct, signature = self.SEAL(
-			self.SignKey_server, 
-			self.SealKey_server, 
-			data, 
-			data, 
-			sequence_no, 
-			self.crypthandle_server.encrypt
-		)
-		print(data[:16])
-		print(signature)
-		return msg_struct
+	async def decrypt(self, data, sequence_no, direction='init', auth_data=None):
+		"""
+		This function is to support SSPI decryption.
+		"""
+		edata = data[16:]
+		srv_sig = NTLMSSP_MESSAGE_SIGNATURE.from_bytes(data[:16])
+		sealedMessage = self.crypthandle_server.encrypt(edata)
+		signature = self.MAC(self.crypthandle_server.encrypt, self.SignKey_server, srv_sig.SeqNum, sealedMessage)
+		#print('seqno     %s' % sequence_no)
+		#print('Srv  sig: %s' % data[:16])
+		#print('Calc sig: %s' % signature)
 
-	async def sign(self, data, message_no, direction=None):
-		return self.SIGN(
-			self.SealKey_client,
-			data,
-			message_no,
-			self.signhandle_client.encrypt
-		)
+		return sealedMessage, None
+
+	async def sign(self, data, message_no, direction=None, reset_cipher = False):
+		"""
+		Singing outgoing messages. The reset_cipher parameter is needed for calculating mechListMIC. 
+		"""
+		#print('sign data : %s' % data)
+		#print('sign message_no : %s' % message_no)
+		#print('sign direction : %s' % direction)
+		signature = self.MAC(self.crypthandle_client.encrypt, self.SignKey_client, message_no, data)
+		if reset_cipher is True:
+			self.crypthandle_client = RC4(self.SealKey_client)
+			self.crypthandle_server = RC4(self.SealKey_server)
+		self.seq_number += 1
+		return signature
+
+	async def verify(self, data, signature):
+		"""
+		Verifying incoming server message
+		"""
+		signature_struct = NTLMSSP_MESSAGE_SIGNATURE.from_bytes(signature)
+		calc_sig = self.MAC(self.crypthandle_server.encrypt, self.SignKey_server, signature_struct.SeqNum, data)
+		#print('server signature    : %s' % signature)
+		#print('calculates signature: %s' % calc_sig)
+		return signature == calc_sig
 
 	def SEAL(self, signingKey, sealingKey, messageToSign, messageToEncrypt, seqNum, cipher_encrypt):
+		"""
+		This is the official SEAL function.
+		"""
 		sealedMessage = cipher_encrypt(messageToEncrypt)
 		signature = self.MAC(cipher_encrypt, signingKey, seqNum, messageToSign)
 		return sealedMessage, signature
 		
 	def SIGN(self, signingKey, message, seqNum, cipher_encrypt):
+		"""
+		This is the official SIGN function.
+		"""
 		return self.MAC(cipher_encrypt, signingKey, seqNum, message)
 	
 	def signing_needed(self):
@@ -291,13 +311,9 @@ class NTLMAUTHHandler:
 			
 		if mode == 'Client':
 			self.SignKey_client = signkey
-			if signkey is not None:
-				self.signhandle_client = RC4(self.SealKey_client)
 
 		else:
 			self.SignKey_server = signkey
-			if signkey is not None:
-				self.signhandle_server = RC4(self.SignKey_server)
 		
 		return signkey
 		
@@ -333,57 +349,22 @@ class NTLMAUTHHandler:
 		self.calc_signkey('Client')
 		self.calc_signkey('Server')
 
-	async def authenticate(self, authData, flags = None, seq_number = 0, is_rpc = False):
-		if self.mode.upper() == 'SERVER':
-			if self.ntlmNegotiate is None:
-				###parse client NTLMNegotiate message
-				self.ntlmNegotiate = NTLMNegotiate.from_bytes(authData)
-				return self.ntlmChallenge.to_bytes(), True 
-
-			elif self.ntlmAuthenticate is None:
-				self.ntlmAuthenticate = NTLMAuthenticate.from_bytes(authData, self.use_NTLMv2)
-				creds = NTLMcredential.construct(self.ntlmNegotiate, self.ntlmChallenge, self.ntlmAuthenticate)
-				print(creds)
-
-				# TODO: check when is sessionkey needed and check when is singing needed, and calculate the keys!
-				# self.calc_SessionBaseKey()
-				# self.calc_KeyExchangeKey()
-				auth_credential = creds[0]
-				#self.SessionBaseKey = auth_credential.calc_session_base_key()
-				#self.calc_key_exchange_key()
-
-				if auth_credential.verify(self.credential):
-					return False, auth_credential
-				else:
-					return False, auth_credential
-
-			else:
-				raise Exception('Too many calls to do_AUTH function!')
-				
-		elif self.mode.upper() == 'CLIENT':
+	async def authenticate(self, authData, flags = None, seq_number = 0, cb_data = None):				
+		if self.mode.upper() == 'CLIENT':
 			if self.iteration_cnt == 0:
 				if authData is not None:
 					raise Exception('First call as client MUST be with empty data!')
-					
-				if is_rpc == True:
-					#rpc (unknow reason) reqauires seal to be set, otherwise it will fail to authenticate
-					self.set_seal()
 				
 				self.iteration_cnt += 1
 				#negotiate message was already calulcated in setup
 				self.ntlmNegotiate = NTLMNegotiate.construct(self.flags, domainname = self.settings.template['domain_name'], workstationname = self.settings.template['workstation_name'], version = self.settings.template.get('version'))			
 				self.ntlmNegotiate_raw = self.ntlmNegotiate.to_bytes()
-				return self.ntlmNegotiate_raw, True
+				return self.ntlmNegotiate_raw, True, None
 				
 			else:
 				#server challenge incoming
 				self.ntlmChallenge_raw = authData
 				self.ntlmChallenge = NTLMChallenge.from_bytes(authData)
-				
-				
-				if is_rpc == True:
-					#rpc (unknow reason) reqauires seal to be set, otherwise it will fail to authenticate
-					self.set_seal()
 				
 				##################self.flags = self.ntlmChallenge.NegotiateFlags
 				
@@ -397,7 +378,7 @@ class NTLMAUTHHandler:
 						lmresp = LMResponse()
 						lmresp.Response = b'\x00'
 						self.ntlmAuthenticate = NTLMAuthenticate.construct(self.flags, lm_response= lmresp)
-						return self.ntlmAuthenticate.to_bytes(), False
+						return self.ntlmAuthenticate.to_bytes(), False, None
 						
 					if self.flags & NegotiateFlags.NEGOTIATE_EXTENDED_SESSIONSECURITY:
 						#Extended auth!
@@ -423,12 +404,16 @@ class NTLMAUTHHandler:
 						lmresp = LMResponse()
 						lmresp.Response = b'\x00'
 						self.ntlmAuthenticate = NTLMAuthenticate.construct(self.flags, lm_response= lmresp)
-						return self.ntlmAuthenticate.to_bytes(), False
+						return self.ntlmAuthenticate.to_bytes(), False, None
 						
 					else:
 						#comment this out for testing!
 						ti = self.ntlmChallenge.TargetInfo
-						ti[AVPAIRType.MsvAvTargetName] = 'cifs/%s' % ti[AVPAIRType.MsvAvNbComputerName]
+						ti[AVPAIRType.MsvAvTargetName] = 'ldaps/%s' % ti[AVPAIRType.MsvAvDnsComputerName]
+						if cb_data is not None:
+							md5_ctx = hashlib.new('md5')
+							md5_ctx.update(cb_data)
+							ti[AVPAIRType.MsvChannelBindings] = md5_ctx.digest()
 						###
 						
 						self.ntlm_credentials = netntlmv2.construct(self.ntlmChallenge.ServerChallenge, self.challenge, ti, self.settings.credential, timestamp = self.timestamp)
@@ -439,9 +424,10 @@ class NTLMAUTHHandler:
 						mic = None
 						
 						self.ntlmAuthenticate = NTLMAuthenticate.construct(self.flags, domainname= self.settings.credential.domain, workstationname= self.settings.credential.workstation, username= self.settings.credential.username, lm_response= self.ntlm_credentials.LMResponse, nt_response= self.ntlm_credentials.NTResponse, version = self.ntlmNegotiate.Version, encrypted_session = self.EncryptedRandomSessionKey, mic = mic)
-						
+				
+				
 				self.ntlmAuthenticate_raw = self.ntlmAuthenticate.to_bytes()
-				return self.ntlmAuthenticate_raw, False
+				return self.ntlmAuthenticate_raw, False, None
 				
 		elif self.mode.upper() == 'RELAY':
 			if self.iteration_cnt == 0:
@@ -462,63 +448,3 @@ class NTLMAUTHHandler:
 			else:
 				raise Exception('Too many iterations for relay mode!')
 				
-
-
-#def test_msdn():
-#	credential = Credential()
-#	credential.username = 'User'
-#	credential.domain = 'Domain'
-#	credential.password = 'Password'
-#	
-#	template = {
-#			'flags'            :  NegotiateFlags.NEGOTIATE_56|
-#								  NegotiateFlags.REQUEST_NON_NT_SESSION_KEY|
-#								  NegotiateFlags.NEGOTIATE_KEY_EXCH|
-#								  NegotiateFlags.NEGOTIATE_128|
-#								  NegotiateFlags.NEGOTIATE_VERSION|
-#								  NegotiateFlags.TARGET_TYPE_SERVER|
-#								  NegotiateFlags.NEGOTIATE_ALWAYS_SIGN|
-#								  NegotiateFlags.NEGOTIATE_NTLM|
-#								  NegotiateFlags.NEGOTIATE_SIGN|
-#								  NegotiateFlags.NEGOTIATE_SEAL|
-#								  NegotiateFlags.NTLM_NEGOTIATE_OEM|
-#								  NegotiateFlags.NEGOTIATE_UNICODE,
-#			'version'          : Version.construct(WindowsMajorVersion.WINDOWS_MAJOR_VERSION_10, minor = WindowsMinorVersion.WINDOWS_MINOR_VERSION_0, build = 15063 ),
-#			'domain_name'      : 'Domain',
-#			'workstation_name' : 'COMPUTER',
-#			'ntlm_downgrade'   : True,
-#			'extended_security': False
-#	}
-#	settings = NTLMHandlerSettings(credential, mode = 'CLIENT', template_name = None, ntlm_downgrade = True, extended_security = False, custom_template = template)
-#	handler = NTLMAUTHHandler(settings)
-#	#assert handler.flags == int.from_bytes(b'\x33\x82\x02\xe2', "little", signed = False)
-#	data, is_res = handler.authenticate(None)
-#	print(data)
-#	print(is_res)
-#	
-#	details = AVPairs({AVPAIRType.MsvAvNbDomainName: 'TEST', AVPAIRType.MsvAvNbComputerName: 'WIN2019AD', AVPAIRType.MsvAvDnsDomainName: 'test.corp', AVPAIRType.MsvAvDnsComputerName: 'WIN2019AD.test.corp', AVPAIRType.MsvAvTimestamp: b'\xae\xc6\x00\xbf\xc5\xfd\xd4\x01', AVPAIRType.MsvAvFlags: b'\x02\x00\x00\x00', AVPAIRType.MsvAvSingleHost: b"0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00 \x00\x00R}'\xf24\xdet7`\x96c\x84\xd3oa\xae*\xa4\xfc*8\x06\x99\xf8\xca\xa6\x00\x01\x1bHm\x89", AVPAIRType.MsvChannelBindings: b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00', AVPAIRType.MsvAvTargetName: 'cifs/10.10.10.2'})
-#	
-#	challenge = NTLMChallenge.construct(challenge=b'\x01\x23\x45\x67\x89\xab\xcd\xef', targetName = 'Domain', targetInfo = details, version = handler.ntlmNegotiate.Version, flags= handler.flags)
-#	data, is_res = handler.authenticate(challenge.to_bytes())
-#	print(data)
-#	print(is_res)
-#	
-#	print(handler.ntlmAuthenticate.LMChallenge.to_bytes().hex())
-#	print(handler.ntlmAuthenticate.NTChallenge.to_bytes().hex())
-#	
-#
-#def test():
-#	template_name = 'Windows10_15063'
-#	credential = Credential()
-#	credential.username = 'test'
-#	credential.password = 'test'
-#	
-#	settings = NTLMHandlerSettings(credential, mode = 'CLIENT', template_name = template_name, ntlm_downgrade = False, extended_security = True)
-#	handler = NTLMAUTHHandler(settings)
-#	data, is_res = handler.authenticate(None)
-#	print(data)
-#	print(is_res)
-#	
-#if __name__ == '__main__':
-#	from aiosmb.ntlm.structures.version import Version, WindowsMajorVersion, WindowsMinorVersion
-#	test_msdn()

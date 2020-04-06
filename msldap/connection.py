@@ -1,6 +1,8 @@
 import asyncio
 
+
 from msldap import logger
+from msldap.commons.common import MSLDAPClientStatus
 from msldap.protocol.messages import LDAPMessage, BindRequest, \
 	protocolOp, AuthenticationChoice, SaslCredentials, \
 	SearchRequest, AttributeDescription, Filter, Filters, \
@@ -12,6 +14,10 @@ from msldap.commons.authbuilder import AuthenticatorBuilder
 from msldap.commons.credential import MSLDAP_GSS_METHODS
 from msldap.network.selector import MSLDAPNetworkSelector
 from msldap.commons.credential import LDAPAuthProtocol
+from msldap.commons.target import LDAPProtocol
+from asn1crypto.x509 import Certificate
+from hashlib import sha256
+from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
 
 class MSLDAPClientConnection:
 	def __init__(self, target, creds):
@@ -25,36 +31,39 @@ class MSLDAPClientConnection:
 		self.network = None
 
 		self.handle_incoming_task = None
+		self.status = MSLDAPClientStatus.RUNNING
+		self.lasterror = None
 
 		self.message_id = 0
 		self.message_table = {}
 		self.message_table_notify = {}
-		self.encryption_sequence_counter = 0 #for whatever reason it's only used during encryption, but decryption always uses 0
+		self.encryption_sequence_counter = 0x5364820 #0 #for whatever reason it's only used during encryption
+		self.cb_data = None #for channel binding
 
 	async def __handle_incoming(self):
 		try:
 			while True:
 				message_data, err = await self.network.in_queue.get()
 				if err is not None:
-					logger.debug('Client terminating bc __handle_incoming!')
+					logger.debug('Client terminating bc __handle_incoming got an error!')
 					raise err
 				
-				################################
-				#                              #
-				#  ADD CHANNEL BINDING  HERE!  #
-				################################
-
+				#print('Incoming message data: %s' % message_data)
 				if self.bind_ok is True:
 					if self.__encrypt_messages is True:
-						#print('Encrypted %s' % message_data)
 						#removing size
 						message_data = message_data[4:]
 						try:
-							message_data = await self.auth.decrypt(message_data, 0)
+							# seq number doesnt matter here, a it's in the header
+							message_data, err = await self.auth.decrypt(message_data, 0 )
+							if err is not None:
+								raise err
 							#print('Decrypted %s' % message_data.hex())
+							#print('Decrypted %s' % message_data)
 						except:
 							import traceback
 							traceback.print_exc()
+							raise
 						
 					elif self.__sign_messages is True:
 						#print('Signed %s' % message_data)
@@ -65,6 +74,8 @@ class MSLDAPClientConnection:
 						except:
 							import traceback
 							traceback.print_exc()
+							raise
+				
 				
 				msg_len = calcualte_length(message_data)
 				msg_total_len = len(message_data)
@@ -91,15 +102,17 @@ class MSLDAPClientConnection:
 				self.message_table_notify[message_id].set()
 		
 		except asyncio.CancelledError:
-			#not notifying clients, at this point the client is terminating
+			self.status = MSLDAPClientStatus.STOPPED
 			return
 
 		except Exception as e:
-			import traceback
-			traceback.print_exc()
+			self.status = MSLDAPClientStatus.ERROR
+			self.lasterror = e
 			for msgid in self.message_table_notify:
 				self.message_table[msgid] = [e]
 				self.message_table_notify[msgid].set()
+		
+		self.status = MSLDAPClientStatus.STOPPED
 
 
 	async def send_message(self, message):
@@ -148,6 +161,16 @@ class MSLDAPClientConnection:
 		res, err = await self.network.run()
 		if res is False:
 			raise err
+		
+		# now processing channel binding options
+		if self.target.proto == LDAPProtocol.SSL:
+			certdata = self.network.get_peer_certificate()
+			#cert = Certificate.load(certdata).native
+			#print(cert)
+			cb_struct = ChannelBindingsStruct()
+			cb_struct.application_data = b'tls-server-end-point:' + sha256(certdata).digest()
+
+			self.cb_data = cb_struct.to_bytes()
 
 		self.handle_incoming_task = asyncio.create_task(self.__handle_incoming())
 		logger.debug('Connection succsessful!')
@@ -176,8 +199,11 @@ class MSLDAPClientConnection:
 		logger.debug('BIND in progress...')
 		try:
 			if self.creds.auth_method == LDAPAuthProtocol.SICILY:
-				data, _ = await self.auth.authenticate(None)
 				
+				data, to_continue, err = await self.auth.authenticate(None)
+				if err is not None:
+					return None, err
+
 				auth = {
 					'sicily_disco' : b''
 				}
@@ -230,7 +256,9 @@ class MSLDAPClientConnection:
 							res['protocolOp']['diagnosticMessage']
 						))
 
-				data, _ = await self.auth.authenticate(res['protocolOp']['matchedDN'])
+				data, to_continue, err = await self.auth.authenticate(res['protocolOp']['matchedDN'])
+				if err is not None:
+					return None, err
 
 				auth = {
 					'sicily_resp' : data
@@ -304,7 +332,12 @@ class MSLDAPClientConnection:
 			elif self.creds.auth_method in MSLDAP_GSS_METHODS:
 				challenge = None
 				while True:
-					data, _ = await self.auth.authenticate(challenge)
+					try:
+						data, to_continue, err = await self.auth.authenticate(challenge, cb_data = self.cb_data)
+						if err is not None:
+							raise err
+					except Exception as e:
+						return False, e
 					
 					sasl = {
 						'mechanism' : 'GSS-SPNEGO'.encode(),
@@ -316,7 +349,7 @@ class MSLDAPClientConnection:
 
 					bindreq = {
 						'version' : 3,
-						'name': ''.encode(),
+						'name': b'',
 						'authentication': AuthenticationChoice(auth), 
 					}
 
@@ -330,7 +363,14 @@ class MSLDAPClientConnection:
 						return False, res
 					res = res.native
 					if res['protocolOp']['resultCode'] == 'success':
+						if 'serverSaslCreds' in res['protocolOp']:
+							data, _, err = await self.auth.authenticate(res['protocolOp']['serverSaslCreds'], cb_data = self.cb_data)
+							if err is not None:
+								return False, err
+
+						self.encryption_sequence_counter = self.auth.get_seq_number()
 						self.__bind_success()
+
 						return True, None
 
 					elif res['protocolOp']['resultCode'] == 'saslBindInProgress':
@@ -346,13 +386,15 @@ class MSLDAPClientConnection:
 					
 					#print(res)
 		except Exception as e:
-			print(str(e))
 			return False, e
 	
 	async def search(self, base, filter, attributes, search_scope = 2, paged_size = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None, return_done = False):
 		"""
 		This function is a generator!!!!! Dont just call it but use it with "async for"
 		"""
+		if self.status != MSLDAPClientStatus.RUNNING:
+			yield None, Exception('Connection not running! Probably encountered an error')
+			return
 		try:
 			if timeLimit is None:
 				timeLimit = 600 #not sure
@@ -404,6 +446,9 @@ class MSLDAPClientConnection:
 			yield (None, e)
 
 	async def pagedsearch(self, base, filter, attributes, search_scope = 2, paged_size = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None):
+		if self.status != MSLDAPClientStatus.RUNNING:
+			yield None, Exception('Connection not running! Probably encountered an error')
+			return
 		try:
 			cookie = b''
 			while True:
@@ -462,6 +507,9 @@ class MSLDAPClientConnection:
 
 
 	async def get_serverinfo(self):
+		if self.status != MSLDAPClientStatus.RUNNING:
+			return None, Exception('Connection not running! Probably encountered an error')
+
 		attributes = [
 			b'subschemaSubentry',
     		b'dsServiceName',
@@ -497,14 +545,13 @@ class MSLDAPClientConnection:
 
 		msg_id = await self.send_message(msg)
 		res = await self.recv_message(msg_id)
-		res = res[0].native
-
+		res = res[0]
 		if isinstance(res, Exception):
 			return None, res
 		
 		#print('res')
 		#print(res)
-		return convert_attributes(res['protocolOp']['attributes']), None
+		return convert_attributes(res.native['protocolOp']['attributes']), None
 
 
 async def amain():

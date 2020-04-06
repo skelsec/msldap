@@ -21,7 +21,9 @@ class MSLDAPTCPNetwork:
 	async def terminate(self):
 		self.handle_in_task.cancel()
 		self.handle_out_task.cancel()
-
+	
+	def get_peer_certificate(self):
+		return self.writer.get_extra_info('ssl_object').getpeercert(True)
 
 	async def handle_in_q(self):
 		try:
@@ -82,7 +84,11 @@ class MSLDAPTCPNetwork:
 			self.in_queue = asyncio.Queue()
 			self.out_queue = asyncio.Queue()
 			self.reader, self.writer = await asyncio.wait_for(
-				asyncio.open_connection(self.target.host, self.target.port, ssl=self.target.get_ssl_context()),
+				asyncio.open_connection(
+					self.target.serverip if self.target.serverip is not None else self.target.host, 
+					self.target.port, 
+					ssl=self.target.get_ssl_context()
+					),
 				timeout = self.target.timeout
 			)
 

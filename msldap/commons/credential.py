@@ -54,13 +54,25 @@ MSLDAP_GSS_METHODS = [
 	
 ]
 
+MSLDAP_KERBEROS_PROTOCOLS = [
+	LDAPAuthProtocol.KERBEROS_RC4 ,
+	LDAPAuthProtocol.KERBEROS_NT ,
+	LDAPAuthProtocol.KERBEROS_AES ,
+	LDAPAuthProtocol.KERBEROS_PASSWORD ,
+	LDAPAuthProtocol.KERBEROS_CCACHE ,
+	LDAPAuthProtocol.KERBEROS_KEYTAB ,
+]
+
 class MSLDAPCredential:
 	def __init__(self, domain=None, username= None, password = None, auth_method = None, settings = None):
 		self.auth_method = auth_method
 		self.domain   = domain
 		self.username = username
 		self.password = password
+		self.signing_preferred = False
+		self.encryption_preferred = False
 		self.settings = settings
+		self.etypes = None
 
 	def get_msuser(self):
 		if not self.domain:

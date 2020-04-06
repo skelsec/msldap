@@ -9,7 +9,7 @@ import platform
 import hashlib
 from urllib.parse import urlparse, parse_qs
 
-from msldap.commons.credential import MSLDAPCredential, LDAPAuthProtocol
+from msldap.commons.credential import MSLDAPCredential, LDAPAuthProtocol, MSLDAP_KERBEROS_PROTOCOLS
 from msldap.commons.target import MSLDAPTarget, LDAPProtocol
 from msldap.commons.proxy import MSLDAPProxy, MSLDAPProxyType
 from msldap.client import MSLDAPClient
@@ -22,22 +22,35 @@ class MSLDAPURLDecoder:
 	<protocol> sets the ldap protocol following values supported:
 		- ldap
 		- ldaps
-	<auth> can be omitted if plaintext authentication is to be performed, otherwise:
-		- ntlm
-		- sspi (windows only!)
+	<auth> can be omitted if plaintext authentication is to be performed (in that case it default to ntlm-password), otherwise:
+		- ntlm-password
+		- ntlm-nt
+		- kerberos-password (dc option param must be used)
+		- kerberos-rc4 / kerberos-nt (dc option param must be used)
+		- kerberos-aes (dc option param must be used)
+		- kerberos-keytab (dc option param must be used)
+		- kerberos-ccache (dc option param must be used)
+		- sspi-ntlm (windows only!)
+		- sspi-kerberos (windows only!)
 		- anonymous
 		- plain
+		- simple
+		- sicily (same format as ntlm-nt but using the SICILY authentication)
+	<tree>:
+		OPTIONAL. Specifies the root tree of all queries
 	<param> can be:
 		- timeout : connction timeout in seconds
 		- proxytype: currently only socks5 proxy is supported
 		- proxyhost: Ip or hostname of the proxy server
 		- proxyport: port of the proxy server
 		- proxytimeout: timeout ins ecodns for the proxy connection
+		- dc: the IP address of the domain controller, MUST be used for kerberos authentication
 
 	Examples:
 	ldap://10.10.10.2 (anonymous bind)
 	ldaps://test.corp (anonymous bind)
-	ldap+sspi:///test.corp 
+	ldap+sspi-ntlm://test.corp
+	ldap+sspi-kerberos://test.corp
 	ldap://TEST\\victim:<password>@10.10.10.2 (defaults to SASL GSSAPI NTLM)
 	ldap+simple://TEST\\victim:<password>@10.10.10.2 (SASL SIMPLE auth)
 	ldap+plain://TEST\\victim:<password>@10.10.10.2 (SASL SIMPLE auth)
@@ -58,7 +71,9 @@ class MSLDAPURLDecoder:
 		self.domain = None
 		self.username = None
 		self.password = None
+		self.encrypt = False
 		self.auth_settings = {}
+		self.etypes = None
 
 		self.ldap_proto = None
 		self.ldap_host = None
@@ -74,13 +89,17 @@ class MSLDAPURLDecoder:
 
 
 	def get_credential(self):
-		return MSLDAPCredential(
+		t = MSLDAPCredential(
 			domain=self.domain, 
 			username=self.username, 
 			password = self.password, 
 			auth_method=self.auth_scheme, 
 			settings = self.auth_settings
 		)
+		t.encrypt = self.encrypt
+		t.etypes = self.etypes
+		
+		return t
 
 	def get_target(self):
 		target = MSLDAPTarget(
@@ -93,6 +112,7 @@ class MSLDAPURLDecoder:
 		target.domain = self.domain
 		target.dc_ip = self.dc_ip
 		target.proxy = self.proxy
+		target.serverip = self.serverip
 		return target
 
 	def get_client(self):
@@ -173,6 +193,8 @@ class MSLDAPURLDecoder:
 		proxy_present = False
 		if url_e.query is not None:
 			query = parse_qs(url_e.query)
+			if 'etype' in query:
+				self.etypes = []
 			for k in query:
 				if k.startswith('proxy') is True:
 					proxy_present = True
@@ -181,9 +203,14 @@ class MSLDAPURLDecoder:
 				elif k == 'timeout':
 					self.timeout = int(query[k][0])
 				elif k == 'serverip':
-					self.server_ip = query[k][0]
+					self.serverip = query[k][0]
 				elif k == 'dns':
 					self.dns = query[k] #multiple dns can be set, so not trimming here
+				elif k == 'encrypt':
+					self.encrypt = bool(int(query[k][0]))
+				elif k == 'etype':
+					self.etypes = [int(x) for x in query[k]]
+					print(self.etypes)
 				elif k.startswith('auth'):
 					self.auth_settings[k[len('auth'):]] = query[k]
 				#elif k.startswith('same'):
@@ -202,119 +229,19 @@ class MSLDAPURLDecoder:
 			if self.domain is None:
 				self.domain = '<CURRENT>'
 
+		if self.auth_scheme in MSLDAP_KERBEROS_PROTOCOLS and self.dc_ip is None:
+			raise Exception('The "dc" parameter MUST be used for kerberos authentication types!')
 
 
-#
-#		if self.auth_scheme == LDAPAuthProtocol.SSPI:
-#			if self.username is None:
-#				self.username = '<CURRENT>'
-#			if self.password is None:
-#				self.password = '<CURRENT>'
-#			if self.domain is None:
-#				self.domain = '<CURRENT>'
-#
-#		if self.auth_scheme == LDAPAuthProtocol.NTLM:
-#			if len(self.password) == 32:
-#				try:
-#					bytes.fromhex(self.password)
-#				except:
-#					a = hashlib.new('md4')
-#					a.update(self.password.encode('utf-16-le'))
-#					hs = a.hexdigest()
-#					self.password = '%s:%s' % (hs, hs)
-#				else:
-#					self.password = '%s:%s' % (self.password, self.password)
-#			else:
-#				a = hashlib.new('md4')
-#				a.update(self.password.encode('utf-16-le'))
-#				hs = a.hexdigest()
-#				self.password = '%s:%s' % (hs, hs)
-
-#
-#		#now for the url parameters
-#		"""
-#		ldaps://user:pass@10.10.10.2/?proxyhost=127.0.0.1&proxyport=8888&proxyuser=dddd&proxypass=ssss&dns=127.0.0.1
-#		"""
-#		if url_e.query is not None:
-#			query = parse_qs(url_e.query)
-#			for k in query:
-#				if k == 'dns':
-#					self.dns = query[k] #multiple dns can be set, so not trimming here
-#				elif k.startswith('auth'):
-#					self.auth_settings[k[len('auth'):]] = query[k] #the result is a list for each entry because this preprocessor is not aware which elements should be lists!
-#				elif k == 'timeout':
-#					self.target_timeout = int(query[k][0])
-#				elif k == 'pagesize':
-#					self.target_pagesize = int(query[k][0])
-#				elif k.startswith('proxy'):
-#					if k == 'proxytype':
-#						self.proxy_scheme = LDAPProxyType(query[k][0].upper())
-#					elif k == 'proxyhost':
-#						self.proxy_ip = query[k][0]
-#					elif k == 'proxyuser':
-#						if query[k][0].find('\\') != -1:
-#							self.proxy_domain, self.proxy_username = query[k][0].split('\\')
-#						else:
-#							self.proxy_username = query[k][0]
-#					elif k == 'proxypass':
-#						self.proxy_password = query[k][0]
-#					elif k == 'proxytimeout':
-#						self.proxy_timeout = int(query[k][0])
-#					elif k == 'proxyport':
-#						self.proxy_port = int(query[k][0])
-#					else:
-#						self.proxy_settings[k[len('proxy'):]] = query[k] #the result is a list for each entry because this preprocessor is not aware which elements should be lists!
-#
-#				#####TODOOOO FIX THIS!!!!
-#				elif k.startswith('same'):
-#					self.auth_settings[k[len('same'):]] = query[k]
-#					if k == 'sametype':
-#						self.proxy_scheme = LDAPProxyType(query[k][0].upper())
-#					elif k == 'samehost':
-#						self.proxy_ip = query[k][0]
-#					elif k == 'sametimeout':
-#						self.proxy_timeout = int(query[k][0])
-#					elif k == 'sameuser':
-#						if query[k][0].find('\\') != -1:
-#							self.proxy_domain, self.proxy_username = query[k][0].split('\\')
-#						else:
-#							self.proxy_username = query[k][0]
-#					elif k == 'samepass':
-#						self.proxy_password = query[k][0]
-#					elif k == 'sameport':
-#						self.proxy_port = int(query[k][0])
-#					else:
-#						self.proxy_settings[k[len('same'):]] = query[k] #the result is a list for each entry because this preprocessor is not aware which elements should be lists!
-#		
-#		#setting default proxy ports
-#		if self.proxy_scheme in [LDAPProxyType.SOCKS5, LDAPProxyType.SOCKS5_SSL]:
-#			if self.proxy_port is None:
-#				self.proxy_port = 1080
-#		
 #		if self.proxy_scheme in [LDAPProxyType.MULTIPLEXOR, LDAPProxyType.MULTIPLEXOR_SSL]:
 #			if self.proxy_port is None:
 #				self.proxy_port = 9999
-#
-#		#sanity checks...
-#		if self.proxy_scheme is not None:
-#			if self.proxy_ip is None:
-#				raise Exception('proxyserver MUST be provided if using proxy')
 #		
 #		if self.proxy_scheme in [LDAPProxyType.MULTIPLEXOR, LDAPProxyType.MULTIPLEXOR_SSL]:
 #			if 'agentid' not in self.proxy_settings:
 #				raise Exception('multiplexor proxy reuires agentid to be set! Set it via proxyagentid parameter!')
 #
-#		if self.auth_scheme in [LDAPAuthProtocol.PLAIN, LDAPAuthProtocol.NTLM, LDAPAuthProtocol.SSPI]:
-#			if self.username is None:
-#				raise Exception('For authentication protocol %s the username MUST be specified!' % self.auth_scheme.value)
-#			if self.password is None:
-#				raise Exception('For authentication protocol %s the password MUST be specified!' % self.auth_scheme.value)
-#		
-#		if self.auth_scheme is None:
-#			if self.username is None and self.password is None:
-#				self.auth_scheme = LDAPAuthProtocol.ANONYMOUS
-#			else:
-#				raise Exception('Could not parse authentication protocol!')
+
 
 
 		
