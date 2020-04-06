@@ -4,7 +4,10 @@ LDAP library for MS AD
 # Features
  - Comes with a built-in console LDAP client
  - All parameters can be conrolled via a conveinent URL (see below)
- - Supports integrated windows authentication
+ - Supports integrated windows authentication (SSPI) both with NTLM and with KERBEROS
+ - Supports channel binding (for ntlm and kerberos not SSPI)
+ - Supports encryption (for NTLM/KERBEROS/SSPI)
+ - Supports LDAPS (TODO: actually verify certificate)
  - Supports SOCKS5 proxy withot the need of extra proxifyer
  - Minimal footprint
  - A lot of pre-built queries for convenient information polling
