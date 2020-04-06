@@ -50,7 +50,6 @@ class KRB5_MECH_INDEP_TOKEN:
 		oid_length = KRB5_MECH_INDEP_TOKEN.decode_length_buffer(buff)
 		buff.seek(pos)
 		token_oid = ObjectIdentifier.load(buff.read(oid_length+2))
-		print(str(token_oid))
 		
 		return KRB5_MECH_INDEP_TOKEN(buff.read(), str(token_oid), remlen = remaining_length)
 		
@@ -232,11 +231,11 @@ class GSSAPI_RC4:
 	def GSS_Wrap(self, data, seq_num, direction = 'init', encrypt=True, cofounder = None):
 		#direction = 'a'
 		#seq_num = 0
-		print('[GSS_Wrap] data: %s' % data)
-		print('[GSS_Wrap] seq_num: %s' % seq_num.to_bytes(4, 'big', signed = False).hex())
-		print('[GSS_Wrap] direction: %s' % direction)
-		print('[GSS_Wrap] encrypt: %s' % encrypt)
-		
+		#print('[GSS_Wrap] data: %s' % data)
+		#print('[GSS_Wrap] seq_num: %s' % seq_num.to_bytes(4, 'big', signed = False).hex())
+		#print('[GSS_Wrap] direction: %s' % direction)
+		#print('[GSS_Wrap] encrypt: %s' % encrypt)
+		#
 		#print('[GSS_Wrap] auth_data: %s' % auth_data)
 		
 		#pad = 0
@@ -260,9 +259,9 @@ class GSSAPI_RC4:
 			token.SND_SEQ = seq_num.to_bytes(4, 'big', signed = False) + b'\xff'*4
 		
 		token.Confounder = os.urandom(8)
-		if cofounder is not None:
-			token.Confounder = cofounder
-			#testing purposes only, pls remove
+		#if cofounder is not None:
+		#	token.Confounder = cofounder
+		#	#testing purposes only, pls remove
 			
 		
 		temp = hmac_md5(self.session_key.contents)
@@ -299,16 +298,13 @@ class GSSAPI_RC4:
 		
 		#if auth_data is not None:
 		if encrypt is False:
-			print('Unwrap sessionkey: %s' % self.session_key.contents.hex())
-			print('Unwrap data      : %s' % data.hex())
+			#print('Unwrap sessionkey: %s' % self.session_key.contents.hex())
+			#print('Unwrap data      : %s' % data.hex())
 
 			sspi_wrap = KRB5_MECH_INDEP_TOKEN.from_bytes(data)
 
 			hdr = sspi_wrap.data[:32]
 			data = sspi_wrap.data[32:]
-			
-			print('hdr %s' % hdr)
-			print('data %s' % data)
 
 			wrap = GSSWRAP_RC4.from_bytes(hdr)
 			
@@ -320,8 +316,6 @@ class GSSAPI_RC4:
 			Kseq = temp.digest()
 			
 			snd_seq = RC4(Kseq).encrypt(wrap.SND_SEQ)
-			print('snd_seq_1 snd_seq_2 %s , %s' % (snd_seq[:4].hex(), snd_seq[4:].hex() ))
-			print('snd_seq_1 int %s' % int.from_bytes(snd_seq[:4], byteorder= 'big', signed=False))
 			
 			id = 0
 			temp = hmac_md5(klocal)
@@ -333,8 +327,6 @@ class GSSAPI_RC4:
 			rc4 = RC4(Kcrypt)
 			dec_cofounder =  rc4.decrypt(wrap.Confounder)
 			dec_data = rc4.decrypt(data)
-			print('dec_data %s' % dec_data)
-			print('dec_cofounder %s' % dec_cofounder.hex())
 
 			id = 13
 			Sgn_Cksum_calc = md5(id.to_bytes(4, 'little', signed = False) +  wrap.to_bytes()[:8] + dec_cofounder + dec_data).digest()
@@ -343,19 +335,10 @@ class GSSAPI_RC4:
 			temp.update(Sgn_Cksum_calc)
 			Sgn_Cksum_calc = temp.digest()[:8]
 
-			
-
-			print('Sgn_Cksum_calc %s' % Sgn_Cksum_calc)
-			print('SGN_CKSUM %s' % wrap.SGN_CKSUM)
 			if wrap.SGN_CKSUM != Sgn_Cksum_calc[:8]:
 				return None, Exception('Integrity verification failed')
 
 			pad = 1
-			#pad = (8 - (len(data) % 8)) & 0x7
-			#print(pad)
-
-			print('cipherText nopad: %s' % dec_data[:-pad])
-
 			return dec_data[:-pad], None
 			
 		elif encrypt is True:
@@ -365,16 +348,16 @@ class GSSAPI_RC4:
 			finalData, cipherText = KRB5_MECH_INDEP_TOKEN( token.to_bytes() + cipherText,  '1.2.840.113554.1.2.2' ).to_bytes()
 
 
-			print('cipherText  %s' % cipherText.hex())
-			print('finalData   %s' % finalData.hex())
-			print('sessionkey  %s' % self.session_key.contents.hex())
+			#print('cipherText  %s' % cipherText.hex())
+			#print('finalData   %s' % finalData.hex())
+			#print('sessionkey  %s' % self.session_key.contents.hex())
 			return cipherText, finalData
 		
 
 	def GSS_Unwrap(self, data, seq_num, direction='init'):
-		print('GSS_Unwrap data : %s' % data)
+		#print('GSS_Unwrap data : %s' % data)
 		dec_data, err = self.GSS_Wrap(data, seq_num, direction=direction, encrypt = False)
-		print('GSS_Unwrap decrypted data : %s' % dec_data)
+		#print('GSS_Unwrap decrypted data : %s' % dec_data)
 		return dec_data, err
 	
 # 4.2.6.1. MIC Tokens
@@ -480,7 +463,7 @@ class GSSAPI_AES:
 		return m.to_bytes()
 		
 	def GSS_Wrap(self, data, seq_num, use_padding = False):
-		print('[GSS_Wrap] seq_num: %s' % seq_num.to_bytes(4, 'big', signed = False).hex())
+		#print('[GSS_Wrap] seq_num: %s' % seq_num.to_bytes(4, 'big', signed = False).hex())
 		cipher = self.cipher_type()
 		pad = 0
 		if use_padding is True:
@@ -494,7 +477,7 @@ class GSSAPI_AES:
 		t.RRC = 0
 		t.SND_SEQ = seq_num
 		
-		print('Wrap data: %s' % (data + t.to_bytes()))
+		#print('Wrap data: %s' % (data + t.to_bytes()))
 		cipher_text = cipher.encrypt(self.session_key, KG_USAGE.INITIATOR_SEAL.value,  data + t.to_bytes(), None)
 		t.RRC = 28 #[RFC4121] section 4.2.5
 		cipher_text = self.rotate(cipher_text, t.RRC + t.EC)
@@ -505,9 +488,9 @@ class GSSAPI_AES:
 		return ret1, ret2
 		
 	def GSS_Unwrap(self, data, seq_num, direction='init', auth_data = None, use_padding = False):
-		print('')
-		print('Unwrap data %s' % data[16:])
-		print('Unwrap hdr  %s' % data[:16])
+		#print('')
+		#print('Unwrap data %s' % data[16:])
+		#print('Unwrap hdr  %s' % data[:16])
 
 		cipher = self.cipher_type()
 		original_hdr = GSSWrapToken.from_bytes(data[:16])
@@ -523,10 +506,10 @@ class GSSAPI_AES:
 			return None, Exception('GSS_Unwrap signature mismatch!')
 		
 
-		print('Unwrap checksum: %s' % plain_text[-(original_hdr.EC + 16):])
-		print('Unwrap orig chk: %s' % original_hdr.to_bytes())
-		print('Unwrap result 1: %s' % plain_text)
-		print('Unwrap result  : %s' % plain_text[:-(original_hdr.EC + 16)])
+		#print('Unwrap checksum: %s' % plain_text[-(original_hdr.EC + 16):])
+		#print('Unwrap orig chk: %s' % original_hdr.to_bytes())
+		#print('Unwrap result 1: %s' % plain_text)
+		#print('Unwrap result  : %s' % plain_text[:-(original_hdr.EC + 16)])
 		return plain_text[:-(original_hdr.EC + 16)], None
 		
 def get_gssapi(session_key):

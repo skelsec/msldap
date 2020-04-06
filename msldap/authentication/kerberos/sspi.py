@@ -21,7 +21,7 @@ class MSLDAPKerberosSSPI:
 		self.domain = settings.domain
 		self.actual_ctx_flags = None #this will be popilated by the output of get_ticket_for_spn
 		self.flags = ISC_REQ.CONNECTION
-		if settings.channelbind is True:
+		if settings.encrypt is True:
 			self.flags =  ISC_REQ.CONFIDENTIALITY| ISC_REQ.INTEGRITY | ISC_REQ.CONNECTION #| ISC_REQ.MUTUAL_AUTH #| ISC_REQ.USE_DCE_STYLE
 		self.ksspi = None
 		self.spn = settings.spn
@@ -86,7 +86,7 @@ class MSLDAPKerberosSSPI:
 			self.session_key, err = self.ksspi.get_session_key()
 		return self.session_key, err
 	
-	async def authenticate(self, authData = None, flags = None, seq_number = 0, is_rpc = False):
+	async def authenticate(self, authData = None, flags = None, seq_number = 0, cb_data = None):
 		"""
 		This function is called (multiple times depending on the flags) to perform authentication. 
 		"""

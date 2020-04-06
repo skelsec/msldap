@@ -21,7 +21,9 @@ class MSLDAPTCPNetwork:
 	async def terminate(self):
 		self.handle_in_task.cancel()
 		self.handle_out_task.cancel()
-
+	
+	def get_peer_certificate(self):
+		return self.writer.get_extra_info('ssl_object').getpeercert(True)
 
 	async def handle_in_q(self):
 		try:

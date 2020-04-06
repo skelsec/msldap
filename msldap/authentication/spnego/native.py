@@ -85,13 +85,12 @@ class SPNEGO:
 	def select_common_athentication_type(self, mech_types):
 		for auth_type_name in self.authentication_contexts:
 			if auth_type_name in mech_types:
-				print(auth_type_name)
 				return auth_type_name, self.authentication_contexts[auth_type_name]
 				
 		return None, None
 		
-	async def process_ctx_authenticate(self, token_data, include_negstate = False, flags = None, seq_number = 0, is_rpc = False):
-		result, to_continue, err = await self.selected_authentication_context.authenticate(token_data, flags = flags, seq_number = seq_number, is_rpc = is_rpc)
+	async def process_ctx_authenticate(self, token_data, include_negstate = False, flags = None, seq_number = 0, cb_data = None):
+		result, to_continue, err = await self.selected_authentication_context.authenticate(token_data, flags = flags, seq_number = seq_number, cb_data = cb_data)
 		if err is not None:
 			return None, None, err
 		if not result:
@@ -125,7 +124,7 @@ class SPNEGO:
 		#spnego = GSS_SPNEGO({'NegotiationToken':negtoken})
 		return GSSAPI({'type': GSSType('1.3.6.1.5.5.2'), 'value':negtoken}).dump()
 	
-	async def authenticate(self, token, flags = None, seq_number = 0, is_rpc = False):
+	async def authenticate(self, token, flags = None, seq_number = 0, cb_data = None):
 		"""
 		This function is called (multiple times) during negotiation phase of a protocol to determine hich auth mechanism to be used
 		Token is a byte array that is an ASN1 NegotiationToken structure.
@@ -150,21 +149,19 @@ class SPNEGO:
 				if len(mechtypes) == 1:
 					self.selected_authentication_context = self.authentication_contexts[selected_name]
 					self.selected_mechtype = selected_name
-					result, to_continue, err = await self.selected_authentication_context.authenticate(None, is_rpc = is_rpc)
+					result, to_continue, err = await self.selected_authentication_context.authenticate(None, cb_data=cb_data)
 					if err is not None:
 						return None, None, err
 
-					if is_rpc == False:
-						response['mechToken'] = result
-					else:
-						if not result:
-							return None, False, None
-						if str(response['mechTypes'][0]) == '1.2.840.48018.1.2.2':
-							response['mechToken'] = KRB5Token(result).to_bytes()
+					if not result:
+						return None, False, None
+					if str(response['mechTypes'][0]) == '1.2.840.48018.1.2.2':
+						response['mechToken'] = KRB5Token(result).to_bytes()
 								
-							#response['mechToken'] = bytes.fromhex('2a864886f712010202') +  #???????
-						else:
-							raise Exception('NTLM as RPC GSSAPI not implemented!')
+						#response['mechToken'] = bytes.fromhex('2a864886f712010202') +  #???????
+					else:
+						response['mechToken'] = result
+						#raise Exception('NTLM as RPC GSSAPI not implemented!')
 					
 				### First message and ONLY the first message goes out with additional wrapping
 				
@@ -179,7 +176,6 @@ class SPNEGO:
 				#we have already send the NegTokenInit2, but it contained multiple auth types,
 				#at this point server is replying which auth type to use
 				neg_token_raw = NegotiationToken.load(token)
-				print(neg_token_raw)
 				
 				neg_token = neg_token_raw.native
 				
@@ -191,7 +187,7 @@ class SPNEGO:
 				self.selected_mechtype = neg_token['supportedMech']
 
 	
-				response, to_continue, err = await self.process_ctx_authenticate(neg_token['responseToken'], flags = flags, seq_number = seq_number, is_rpc = is_rpc)
+				response, to_continue, err = await self.process_ctx_authenticate(neg_token['responseToken'], flags = flags, seq_number = seq_number, cb_data = cb_data)
 				if err is not None:
 					return None, None, err
 				return NegTokenResp(response).dump(), to_continue, None
@@ -204,31 +200,32 @@ class SPNEGO:
 				# https://tools.ietf.org/html/rfc4178#section-5
 				# mechlistmic exchange happening at the end of the authentication
 				return None, True, None
-				raise Exception('Should not be here....')
-				print('server mechListMIC: %s' % neg_token['mechListMIC'])
-				res = await self.verify(self.negtypes_store, neg_token['mechListMIC'])
-				print('res %s' % res)
-				print(self.negtypes_store)
-				print(self.negtypes_store.hex())
-				ret = await self.sign(self.negtypes_store, 0)
-				print(ret)
-				print(ret.hex())
-				res = {
-					'mechListMIC' : ret, 
-					'negState': NegState('accept-completed')
-				}
-				return NegotiationToken({'negTokenResp':NegTokenResp(res)}).dump(), True, None
+				#raise Exception('Should not be here....')
+				#print('server mechListMIC: %s' % neg_token['mechListMIC'])
+				#res = await self.verify(self.negtypes_store, neg_token['mechListMIC'])
+				#print('res %s' % res)
+				#print(self.negtypes_store)
+				#print(self.negtypes_store.hex())
+				#ret = await self.sign(self.negtypes_store, 0)
+				#print(ret)
+				#print(ret.hex())
+				#res = {
+				#	'mechListMIC' : ret, 
+				#	'negState': NegState('accept-completed')
+				#}
+				#return NegotiationToken({'negTokenResp':NegTokenResp(res)}).dump(), True, None
 
 			else:
-				response, to_continue, err = await self.process_ctx_authenticate(neg_token['responseToken'], flags = flags, seq_number = seq_number, is_rpc = is_rpc)
+				response, to_continue, err = await self.process_ctx_authenticate(neg_token['responseToken'], flags = flags, seq_number = seq_number, cb_data = cb_data)
 				if err is not None:
 					return None, None, err
 				if not response:
 					return None, False, None
 
-				response['mechListMIC'] = await self.sign(self.negtypes_store, 0, reset_cipher = True)
-				self.iteration_ctr += 1
-				#print(response)
+				if self.selected_mechtype.startswith('NTLM'):
+					response['mechListMIC'] = await self.sign(self.negtypes_store, 0, reset_cipher = True)
+					#self.selected_authentication_context.
+					#print(response)
 				res = NegotiationToken({'negTokenResp':NegTokenResp(response)}).dump()
 
 				return res, to_continue, None

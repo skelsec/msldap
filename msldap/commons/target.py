@@ -30,7 +30,9 @@ class MSLDAPTarget:
 	def get_ssl_context(self):
 		if self.proto == LDAPProtocol.SSL:
 			if self.sslctx is None:
-				self.sslctx = ssl.create_default_context()
+				# TODO ssl verification :)
+				self.sslctx = ssl._create_unverified_context()
+				#self.sslctx.verify = False
 			return self.sslctx
 		return None
 

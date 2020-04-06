@@ -15,7 +15,7 @@ class MSLDAPNTLMSSPI:
 		self.domain = settings.domain
 		self.actual_ctx_flags = None
 		self.flags = ISC_REQ.CONNECTION
-		if settings.channelbind is True:
+		if settings.encrypt is True:
 			#self.flags =  ISC_REQ.REPLAY_DETECT | ISC_REQ.CONFIDENTIALITY| ISC_REQ.USE_SESSION_KEY| ISC_REQ.INTEGRITY| ISC_REQ.SEQUENCE_DETECT| ISC_REQ.CONNECTION
 			self.flags =  ISC_REQ.CONNECTION | ISC_REQ.CONFIDENTIALITY
 		self.sspi = NTLMMSLDAPSSPI()
@@ -29,7 +29,7 @@ class MSLDAPNTLMSSPI:
 		return self.ntlm_ctx.ntlmChallenge
 
 	def get_seq_number(self):
-		return self.seq_number
+		return self.ntlm_ctx.get_seq_number()
 		
 	def signing_needed(self):
 		return self.ntlm_ctx.signing_needed()
@@ -79,22 +79,21 @@ class MSLDAPNTLMSSPI:
 	def decrypt(self, data, message_no, direction='init', auth_data=None):
 		return self.ntlm_ctx.decrypt(data, message_no, direction=direction, auth_data=auth_data)
 	
-	async def authenticate(self, authData = None, flags = None, seq_number = 0, is_rpc = False):
+	async def authenticate(self, authData = None, flags = None, seq_number = 0, cb_data = None):
 		if authData is None:
 			try:
-				data, res = self.sspi.negotiate(is_rpc = is_rpc, ctx_flags = self.flags)
+				data, res = self.sspi.negotiate(ctx_flags = self.flags)
 				self.actual_ctx_flags = self.sspi.ctx_outflags
 				self.ntlm_ctx.load_negotiate(data)
-				return data, res
-			except:
-				import traceback
-				traceback.print_exc()
+				return data, res, None
+			except Exception as e:
+				return None, None, e
 		else:
 			self.ntlm_ctx.load_challenge(authData)
-			data, res = self.sspi.authenticate(authData, is_rpc = is_rpc, ctx_flags = self.flags)
+			data, res = self.sspi.authenticate(authData, ctx_flags = self.flags)
 			self.ntlm_ctx.load_authenticate( data)
 			self.ntlm_ctx.load_sessionkey(self.get_session_key())
 				
-			return data, res
+			return data, res, None
 			
 	

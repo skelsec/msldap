@@ -27,8 +27,7 @@ class MSLDAPNTLMCredential:
 		self.is_guest = False
 		self.nt_hash = None
 		self.lm_hash = None 
-		self.signing_preferred = False
-		self.encryption_preferred = False
+		self.encrypt = False
 
 class MSLDAPSIMPLECredential:
 	def __init__(self):
@@ -48,24 +47,22 @@ class MSLDAPKerberosCredential:
 		self.target = None #KerberosTarget
 		self.ksoc = None #KerberosSocketAIO
 		self.ccred = None
-		self.signing_preferred = False
-		self.encryption_preferred = False
+		self.encrypt = False
+		self.enctypes = None #[23,17,18]
 
 class MSLDAPKerberosSSPICredential:
 	def __init__(self):
 		self.domain = None
 		self.password = None
 		self.username  = None
-		self.signing_preferred = False
-		self.encryption_preferred = False
+		self.encrypt = False
 		
 class MSLDAPNTLMSSPICredential:
 	def __init__(self):
 		self.username = None
 		self.password = None
 		self.domain = None
-		self.signing_preferred = False
-		self.encryption_preferred = False
+		self.encrypt = False
 
 
 
@@ -91,12 +88,23 @@ class AuthenticatorBuilder:
 			ntlmcred.domain = self.creds.domain if self.creds.domain is not None else ''
 			ntlmcred.workstation = None
 			ntlmcred.is_guest = False
-			ntlmcred.channelbind = self.creds.channelbind
+			ntlmcred.encrypt = self.creds.encrypt
 
 			
 			if self.creds.password is None:
-				raise Exception('NTLM authentication requres password!')
-			ntlmcred.password = self.creds.password
+				raise Exception('NTLM authentication requres password/NT hash!')
+			
+			
+			if len(self.creds.password) == 32:
+				try:
+					bytes.fromhex(self.creds.password)
+				except:
+					ntlmcred.password = self.creds.password
+				else:
+					ntlmcred.nt_hash = self.creds.password
+			
+			else:
+				ntlmcred.password = self.creds.password
 			
 			settings = NTLMHandlerSettings(ntlmcred)
 			return NTLMAUTHHandler(settings)
@@ -121,7 +129,7 @@ class AuthenticatorBuilder:
 			ntlmcred.domain = self.creds.domain if self.creds.domain is not None else ''
 			ntlmcred.workstation = None
 			ntlmcred.is_guest = False
-			ntlmcred.channelbind = self.creds.channelbind
+			ntlmcred.encrypt = self.creds.encrypt
 			
 			if self.creds.password is None:
 				raise Exception('NTLM authentication requres password!')
@@ -159,39 +167,46 @@ class AuthenticatorBuilder:
 			if self.target.dc_ip is None:
 				raise Exception('target must have a dc_ip for kerberos!')
 			
-			
+			kcred = MSLDAPKerberosCredential()
 			kc = KerberosCredential()
 			kc.username = self.creds.username
 			kc.domain = self.creds.domain
+			kcred.enctypes = []
 			if self.creds.auth_method == LDAPAuthProtocol.KERBEROS_PASSWORD:
 				kc.password = self.creds.password
+				kcred.enctypes = [23,17,18]
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_NT:
 				kc.nt_hash = self.creds.password
+				kcred.enctypes = [23]
 				
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_AES:
 				if len(self.creds.password) == 32:
 					kc.kerberos_key_aes_128 = self.creds.password
+					kcred.enctypes = [17]
 				elif len(self.creds.password) == 64:
 					kc.kerberos_key_aes_256 = self.creds.password
+					kcred.enctypes = [18]
 					
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_RC4:
 				kc.kerberos_key_rc4 = self.creds.password
+				kcred.enctypes = [23]
 			
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_CCACHE:
 				kc.ccache = self.creds.password
+				kcred.enctypes = [23,17,18]
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_KEYTAB:
 				kc.keytab = self.creds.password
+				kcred.enctypes = [23,17,18]
 			else:
 				raise Exception('No suitable secret type found to set up kerberos!')
 
+			if self.creds.etypes is not None:
+				kcred.enctypes = list(set(self.creds.etypes).intersection(set(kcred.enctypes)))				
 			
-			
-				
-			kcred = MSLDAPKerberosCredential()
 			kcred.ccred = kc
 			kcred.spn = KerberosSPN.from_target_string(self.target.to_target_string())
 			kcred.target = KerberosTarget(self.target.dc_ip)
-			kcred.channelbind = self.creds.channelbind
+			kcred.encrypt = self.creds.encrypt
 			
 			if self.target.proxy is not None:
 				kcred.target.proxy = KerberosProxy()
@@ -216,7 +231,7 @@ class AuthenticatorBuilder:
 			kerbcred.username = self.creds.username if self.creds.username is not None else '<CURRENT>'
 			kerbcred.password = self.creds.password if self.creds.password is not None else '<CURRENT>'
 			kerbcred.spn = self.target.to_target_string()
-			kerbcred.channelbind = self.creds.channelbind
+			kerbcred.encrypt = self.creds.encrypt
 			
 			handler = MSLDAPKerberosSSPI(kerbcred)
 			#setting up SPNEGO
@@ -229,7 +244,7 @@ class AuthenticatorBuilder:
 			ntlmcred.username = self.creds.domain if self.creds.domain is not None else '<CURRENT>'
 			ntlmcred.username = self.creds.username if self.creds.username is not None else '<CURRENT>'
 			ntlmcred.password = self.creds.password if self.creds.password is not None else '<CURRENT>'
-			ntlmcred.channelbind = self.creds.channelbind
+			ntlmcred.encrypt = self.creds.encrypt
 
 			handler = MSLDAPNTLMSSPI(ntlmcred)
 			#setting up SPNEGO

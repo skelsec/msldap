@@ -36,9 +36,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 
 	async def do_login(self, url = None):
 		"""Performs connection and login"""
-		try:
-			print('url %s' % repr(url))
-			
+		try:			
 			if self.conn_url is None and url is None:
 				print('Not url was set, cant do logon')
 			if url is not None:

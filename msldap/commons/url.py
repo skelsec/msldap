@@ -71,8 +71,9 @@ class MSLDAPURLDecoder:
 		self.domain = None
 		self.username = None
 		self.password = None
-		self.channelbind = False
+		self.encrypt = False
 		self.auth_settings = {}
+		self.etypes = None
 
 		self.ldap_proto = None
 		self.ldap_host = None
@@ -95,7 +96,8 @@ class MSLDAPURLDecoder:
 			auth_method=self.auth_scheme, 
 			settings = self.auth_settings
 		)
-		t.channelbind = self.channelbind
+		t.encrypt = self.encrypt
+		t.etypes = self.etypes
 		
 		return t
 
@@ -191,6 +193,8 @@ class MSLDAPURLDecoder:
 		proxy_present = False
 		if url_e.query is not None:
 			query = parse_qs(url_e.query)
+			if 'etype' in query:
+				self.etypes = []
 			for k in query:
 				if k.startswith('proxy') is True:
 					proxy_present = True
@@ -202,8 +206,11 @@ class MSLDAPURLDecoder:
 					self.serverip = query[k][0]
 				elif k == 'dns':
 					self.dns = query[k] #multiple dns can be set, so not trimming here
-				elif k == 'channelbind':
-					self.channelbind = bool(int(query[k][0]))
+				elif k == 'encrypt':
+					self.encrypt = bool(int(query[k][0]))
+				elif k == 'etype':
+					self.etypes = [int(x) for x in query[k]]
+					print(self.etypes)
 				elif k.startswith('auth'):
 					self.auth_settings[k[len('auth'):]] = query[k]
 				#elif k.startswith('same'):

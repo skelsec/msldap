@@ -14,6 +14,10 @@ from msldap.commons.authbuilder import AuthenticatorBuilder
 from msldap.commons.credential import MSLDAP_GSS_METHODS
 from msldap.network.selector import MSLDAPNetworkSelector
 from msldap.commons.credential import LDAPAuthProtocol
+from msldap.commons.target import LDAPProtocol
+from asn1crypto.x509 import Certificate
+from hashlib import sha256
+from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
 
 class MSLDAPClientConnection:
 	def __init__(self, target, creds):
@@ -33,14 +37,13 @@ class MSLDAPClientConnection:
 		self.message_id = 0
 		self.message_table = {}
 		self.message_table_notify = {}
-		self.encryption_sequence_counter = 0x5364820 #0 #for whatever reason it's only used during encryption, but decryption always uses 0
+		self.encryption_sequence_counter = 0x5364820 #0 #for whatever reason it's only used during encryption
+		self.cb_data = None #for channel binding
 
 	async def __handle_incoming(self):
 		try:
 			while True:
 				message_data, err = await self.network.in_queue.get()
-				print(type(message_data))
-				print(type(err))
 				if err is not None:
 					logger.debug('Client terminating bc __handle_incoming got an error!')
 					raise err
@@ -51,6 +54,7 @@ class MSLDAPClientConnection:
 						#removing size
 						message_data = message_data[4:]
 						try:
+							# seq number doesnt matter here, a it's in the header
 							message_data, err = await self.auth.decrypt(message_data, 0 )
 							if err is not None:
 								raise err
@@ -157,6 +161,16 @@ class MSLDAPClientConnection:
 		res, err = await self.network.run()
 		if res is False:
 			raise err
+		
+		# now processing channel binding options
+		if self.target.proto == LDAPProtocol.SSL:
+			certdata = self.network.get_peer_certificate()
+			#cert = Certificate.load(certdata).native
+			#print(cert)
+			cb_struct = ChannelBindingsStruct()
+			cb_struct.application_data = b'tls-server-end-point:' + sha256(certdata).digest()
+
+			self.cb_data = cb_struct.to_bytes()
 
 		self.handle_incoming_task = asyncio.create_task(self.__handle_incoming())
 		logger.debug('Connection succsessful!')
@@ -185,10 +199,10 @@ class MSLDAPClientConnection:
 		logger.debug('BIND in progress...')
 		try:
 			if self.creds.auth_method == LDAPAuthProtocol.SICILY:
-				try:
-					data, _ = await self.auth.authenticate(None)
-				except Exception as e:
-					return False, e
+				
+				data, to_continue, err = await self.auth.authenticate(None)
+				if err is not None:
+					return None, err
 
 				auth = {
 					'sicily_disco' : b''
@@ -242,10 +256,9 @@ class MSLDAPClientConnection:
 							res['protocolOp']['diagnosticMessage']
 						))
 
-				try:
-					data, _ = await self.auth.authenticate(res['protocolOp']['matchedDN'])
-				except Exception as e:
-					return False, e
+				data, to_continue, err = await self.auth.authenticate(res['protocolOp']['matchedDN'])
+				if err is not None:
+					return None, err
 
 				auth = {
 					'sicily_resp' : data
@@ -320,7 +333,7 @@ class MSLDAPClientConnection:
 				challenge = None
 				while True:
 					try:
-						data, to_continue, err = await self.auth.authenticate(challenge)
+						data, to_continue, err = await self.auth.authenticate(challenge, cb_data = self.cb_data)
 						if err is not None:
 							raise err
 					except Exception as e:
@@ -351,7 +364,7 @@ class MSLDAPClientConnection:
 					res = res.native
 					if res['protocolOp']['resultCode'] == 'success':
 						if 'serverSaslCreds' in res['protocolOp']:
-							data, _, err = await self.auth.authenticate(res['protocolOp']['serverSaslCreds'])
+							data, _, err = await self.auth.authenticate(res['protocolOp']['serverSaslCreds'], cb_data = self.cb_data)
 							if err is not None:
 								return False, err
 
@@ -373,7 +386,6 @@ class MSLDAPClientConnection:
 					
 					#print(res)
 		except Exception as e:
-			print(str(e))
 			return False, e
 	
 	async def search(self, base, filter, attributes, search_scope = 2, paged_size = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None, return_done = False):

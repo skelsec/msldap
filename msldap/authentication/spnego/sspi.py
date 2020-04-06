@@ -44,7 +44,7 @@ class SPNEGO_SSPI:
 	async def decrypt(self, data, message_no):
 		return await self.sspi.decrypt(data, message_no)
 		
-	async def authenticate(self, token, flags = None, seq_number = 0, is_rpc = False):
+	async def authenticate(self, token, flags = None, seq_number = 0):
 		try:
 			if self.mode.upper() == 'CLIENT':
 				res, data = self.sspi.authGSSClientStep(token)

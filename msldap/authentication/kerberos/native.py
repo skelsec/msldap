@@ -85,10 +85,11 @@ class MSLDAPKerberos:
 		self.ccred = self.settings.ccred
 		self.spn = self.settings.spn
 		self.target = self.settings.target
-		self.channelbind = self.settings.channelbind
+		if self.settings.enctypes is not None:
+			self.preferred_etypes = self.settings.enctypes
 		
 		self.flags = ChecksumFlags.GSS_C_MUTUAL_FLAG
-		if self.channelbind is True:
+		if self.settings.encrypt is True:
 			self.flags = \
 				ChecksumFlags.GSS_C_CONF_FLAG |\
 				ChecksumFlags.GSS_C_INTEG_FLAG |\
@@ -101,19 +102,18 @@ class MSLDAPKerberos:
 	def get_session_key(self):
 		return self.session_key.contents, None
 	
-	async def authenticate(self, authData, flags = None, seq_number = 0, is_rpc = False):
+	async def authenticate(self, authData, flags = None, seq_number = 0, cb_data = None):
 		"""
 		This function is called (multiple times depending on the flags) to perform authentication. 
 		"""
 		try:
-			
 			if self.iterations == 0:
 				self.seq_number = 0 #int.from_bytes(os.urandom(4), byteorder='big', signed=False)
 				self.iterations += 1
 
 				#tgt = await self.kc.get_TGT()
 				tgt = await self.kc.get_TGT(override_etype = self.preferred_etypes)
-				tgs, encpart, self.session_key = await self.kc.get_TGS(self.spn, override_etype = self.preferred_etypes)
+				tgs, encpart, self.session_key = await self.kc.get_TGS(self.spn)#, override_etype = self.preferred_etypes)
 
 				#self.expected_server_seq_number = encpart.get('nonce', seq_number)
 				
@@ -121,12 +121,12 @@ class MSLDAPKerberos:
 				if ChecksumFlags.GSS_C_MUTUAL_FLAG in self.flags or ChecksumFlags.GSS_C_DCE_STYLE in self.flags:
 					if ChecksumFlags.GSS_C_MUTUAL_FLAG in self.flags:
 						ap_opts.append('mutual-required')
-					apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = self.flags, seq_number = self.seq_number, ap_opts=ap_opts)
+					apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = self.flags, seq_number = self.seq_number, ap_opts=ap_opts, cb_data = cb_data)
 					return apreq, True, None
 				
 				else:
 					#no mutual or dce auth will take one step only
-					apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = self.flags, seq_number = self.seq_number, ap_opts=[])
+					apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = self.flags, seq_number = self.seq_number, ap_opts=[], cb_data = cb_data)
 					self.gssapi = get_gssapi(self.session_key)
 					return apreq, False, None
 

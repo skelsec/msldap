@@ -72,6 +72,7 @@ class MSLDAPCredential:
 		self.signing_preferred = False
 		self.encryption_preferred = False
 		self.settings = settings
+		self.etypes = None
 
 	def get_msuser(self):
 		if not self.domain:

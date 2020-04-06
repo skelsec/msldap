@@ -48,6 +48,7 @@ setup(
 	install_requires=[
 		'asn1crypto',
 		'winsspi>=0.0.8;platform_system=="Windows"',
+		'minikerberos==0.2.1',
 		'aiocmd',
 		'asciitree',
 		#'ldap_filter',
