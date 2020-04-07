@@ -4,7 +4,10 @@ LDAP library for MS AD
 # Features
  - Comes with a built-in console LDAP client
  - All parameters can be conrolled via a conveinent URL (see below)
- - Supports integrated windows authentication
+ - Supports integrated windows authentication (SSPI) both with NTLM and with KERBEROS
+ - Supports channel binding (for ntlm and kerberos not SSPI)
+ - Supports encryption (for NTLM/KERBEROS/SSPI)
+ - Supports LDAPS (TODO: actually verify certificate)
  - Supports SOCKS5 proxy withot the need of extra proxifyer
  - Minimal footprint
  - A lot of pre-built queries for convenient information polling
@@ -39,7 +42,7 @@ Detailed explanation with examples:
 	MSLDAP URL Format: <protocol>+<auth>://<username>:<password>@<ip_or_host>:<port>/<tree>/?<param>=<value>
 	<protocol> sets the ldap protocol following values supported:
 		- ldap
-		- ldaps (ldap over SSL) << known to be problematic because of the underlying library (ldap3)
+		- ldaps (ldap over SSL)
 	<auth> can be omitted if plaintext authentication is to be performed, otherwise:
 		- ntlm
 		- sspi (windows only!)
@@ -51,6 +54,8 @@ Detailed explanation with examples:
 		- proxyhost: Ip or hostname of the proxy server
 		- proxyport: port of the proxy server
 		- proxytimeout: timeout ins ecodns for the proxy connection
+		- encrypt: enable encryption (applies to kerberos/ntlm/SSPI)
+		- etype: chhose which encryption type the kerberos should use (kerberos only, not SSPI!)
 
 	Examples:
 	ldap://10.10.10.2
