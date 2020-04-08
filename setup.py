@@ -47,7 +47,7 @@ setup(
 	),
 	install_requires=[
 		'asn1crypto',
-		'winsspi>=0.0.8;platform_system=="Windows"',
+		'winsspi>=0.0.9;platform_system=="Windows"',
 		'minikerberos==0.2.1',
 		'aiocmd',
 		'asciitree',
