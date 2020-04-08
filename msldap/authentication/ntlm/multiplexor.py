@@ -41,7 +41,19 @@ class ISC_REQ(enum.IntFlag):
 	FRAGMENT_TO_FIT = 2097152
 	HTTP = 0x10000000
 
-class SMBNTLMMultiplexor:
+#
+#
+# Interface to support remote authentication via multiplexor
+# 
+# Connects to the multiplexor server, and starts an SSPI server locally for the specific agentid
+# SSPI server will be used to perform NTLM authentication remotely,
+# while constructing a local NTLM authentication object
+# After the auth finishes, it also grabs the sessionkey.
+# The NTLM object can be used in future operations (encrypt/decrypt/sign) locally 
+# without the need of future remote calls 
+#
+
+class MSLDAPNTLMMultiplexor:
 	def __init__(self, settings):
 		self.settings = settings
 		self.mode = None #'CLIENT'
@@ -49,7 +61,7 @@ class SMBNTLMMultiplexor:
 		self.operator = None
 		self.client = None
 		self.target = None
-		#self.ntlmChallenge = None
+		self.seq_number = 0
 		
 		self.session_key = None
 		self.ntlm_ctx = NTLMAUTHHandler(NTLMHandlerSettings(None, 'MANUAL'))
@@ -66,58 +78,57 @@ class SMBNTLMMultiplexor:
 			
 	def get_signkey(self, mode = 'Client'):
 		return self.ntlm_ctx.get_signkey(mode = mode)
-		
-		
-	def SEAL(self, signingKey, sealingKey, messageToSign, messageToEncrypt, seqNum, cipher_encrypt):
-		return self.ntlm_ctx.SEAL(signingKey, sealingKey, messageToSign, messageToEncrypt, seqNum, cipher_encrypt)
-		
-	def SIGN(self, signingKey, message, seqNum, cipher_encrypt):
-		return self.ntlm_ctx.SIGN(signingKey, message, seqNum, cipher_encrypt)
 	
 	def get_session_key(self):
 		return self.session_key
 		
-	def get_extra_info(self):
-		return self.ntlm_ctx.get_extra_info()
-		
 	def is_extended_security(self):
 		return self.ntlm_ctx.is_extended_security()
-		
-	#async def encrypt(self, data, message_no):
-	#	return self.sspi.encrypt(data, message_no)
-	#	
-	#async def decrypt(self, data, message_no):
-	#	return self.sspi.decrypt(data, message_no)
+
+	def get_seq_number(self):
+		return self.seq_number
+
+	def signing_needed(self):
+		return self.ntlm_ctx.signing_needed()
 	
-	async def authenticate(self, authData = None, flags = None, seq_number = 0, is_rpc = False):
+	def encryption_needed(self):
+		return self.ntlm_ctx.encryption_needed()
+		
+	async def encrypt(self, data, message_no):
+		return await self.ntlm_ctx.encrypt(data, message_no)
+		
+	async def decrypt(self, data, sequence_no, direction='init', auth_data=None):
+		return await self.ntlm_ctx.decrypt(data, sequence_no, direction=direction, auth_data=auth_data)
+
+	async def sign(self, data, message_no, direction=None, reset_cipher = False):
+		return await self.ntlm_ctx.sign(data, message_no, direction=None, reset_cipher = reset_cipher)
+	
+	async def authenticate(self, authData = None, flags = None, seq_number = 0, cb_data=None):
+		is_rpc = False
 		if self.sspi is None:
-			res = await self.start_remote_sspi()
-			if res is None:
-				raise Exception('Failed to start remote SSPI')
+			res, err = await self.start_remote_sspi()
+			if err is not None:
+				return None, None, err
 
 		if is_rpc is True and flags is None:
 			flags = ISC_REQ.REPLAY_DETECT | ISC_REQ.CONFIDENTIALITY| ISC_REQ.USE_SESSION_KEY| ISC_REQ.INTEGRITY| ISC_REQ.SEQUENCE_DETECT| ISC_REQ.CONNECTION
 			flags = int(flags)
 		
-		if self.settings.mode == 'CLIENT':
-			if authData is None:
-				data, res = await self.sspi.authenticate(flags = flags)
-				if res is None:
-					self.ntlm_ctx.load_negotiate(data)
-				return data, res
-			else:
-				self.ntlm_ctx.load_challenge( authData)
-				data, res = await self.sspi.challenge(authData, flags = flags)
-				if res is None:
-					self.ntlm_ctx.load_authenticate( data)
-					self.session_key, res = await self.sspi.get_session_key()
-					if res is None:
-						self.ntlm_ctx.load_sessionkey(self.get_session_key())
-				
-				return data, res
-				
+		if authData is None:
+			data, res = await self.sspi.authenticate(flags = flags)
+			if res is None:
+				self.ntlm_ctx.load_negotiate(data)
+			return data, res, None
 		else:
-			raise Exception('Server mode not implemented!')
+			self.ntlm_ctx.load_challenge( authData)
+			data, res = await self.sspi.challenge(authData, flags = flags)
+			if res is None:
+				self.ntlm_ctx.load_authenticate( data)
+				self.session_key, res = await self.sspi.get_session_key()
+				if res is None:
+					self.ntlm_ctx.load_sessionkey(self.get_session_key())
+				
+			return data, res, None
 
 
 	async def start_remote_sspi(self):
@@ -134,10 +145,10 @@ class SMBNTLMMultiplexor:
 			#print(sspi_url)
 			self.sspi = SSPINTLMClient(sspi_url)
 			await self.sspi.connect()
-			return True
+			return True, None
 		except Exception as e:
 			import traceback
 			traceback.print_exc()
-			return None
+			return None, e
 			
 	

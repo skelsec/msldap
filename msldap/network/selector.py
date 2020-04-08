@@ -1,6 +1,8 @@
 
+from msldap import logger
 from msldap.network.tcp import MSLDAPTCPNetwork
 from msldap.network.socks import SocksProxyConnection
+from msldap.network.multiplexor import MultiplexorProxyConnection
 from msldap.commons.proxy import MSLDAPProxyType
 
 MSLDAP_SOCKS_PROXY_TYPES = [
@@ -14,11 +16,13 @@ class MSLDAPNetworkSelector:
 		pass
 	
 	@staticmethod
-	def select(target):
+	async def select(target):
 		if target.proxy is not None:
 			if target.proxy.type in MSLDAP_SOCKS_PROXY_TYPES:
 				return SocksProxyConnection(target)
 			else:
-				raise Exception('Multiplexor coming soon!')
+				mpc = MultiplexorProxyConnection(target)
+				socks_proxy = await mpc.connect()
+				return socks_proxy
 
 		return MSLDAPTCPNetwork(target)

@@ -14,12 +14,21 @@ from minikerberos.common import *
 
 from minikerberos.protocol.asn1_structs import AP_REP, EncAPRepPart, EncryptedData, AP_REQ
 from msldap.authentication.kerberos.gssapi import get_gssapi, KRB5_MECH_INDEP_TOKEN
+from msldap.commons.proxy import MSLDAPProxyType
 from minikerberos.protocol.structures import ChecksumFlags
 from minikerberos.protocol.encryption import Enctype, Key, _enctype_table
 from minikerberos.protocol.constants import MESSAGE_TYPE
 from minikerberos.aioclient import AIOKerberosClient
+from minikerberos.network.aioclientsockssocket import AIOKerberosClientSocksSocket
+
 
 # SMBKerberosCredential
+
+MSLDAP_SOCKS_PROXY_TYPES = [
+				MSLDAPProxyType.SOCKS4 , 
+				MSLDAPProxyType.SOCKS4_SSL , 
+				MSLDAPProxyType.SOCKS5 , 
+				MSLDAPProxyType.SOCKS5_SSL]
 
 class MSLDAPKerberos:
 	def __init__(self, settings):
@@ -97,16 +106,44 @@ class MSLDAPKerberos:
 				ChecksumFlags.GSS_C_SEQUENCE_FLAG #|\
 				#ChecksumFlags.GSS_C_MUTUAL_FLAG
 
-		self.kc = AIOKerberosClient(self.ccred, self.target)
+		#self.kc = AIOKerberosClient(self.ccred, self.target)
 	
 	def get_session_key(self):
 		return self.session_key.contents, None
+
+
+	async def setup_kc(self):
+		try:
+			if self.target.proxy is None:
+				self.kc = AIOKerberosClient(self.ccred, self.target)
+			elif  self.target.proxy.type in MSLDAP_SOCKS_PROXY_TYPES:
+				target = AIOKerberosClientSocksSocket(self.target)
+				self.kc = AIOKerberosClient(self.ccred, target)
+
+			elif self.target.proxy.type in [MSLDAPProxyType.MULTIPLEXOR, MSLDAPProxyType.MULTIPLEXOR_SSL]:
+				from msldap.network.multiplexor import MultiplexorProxyConnection
+				mpc = MultiplexorProxyConnection(self.target)
+				socks_proxy = await mpc.connect(is_kerberos = True)
+
+				self.kc = AIOKerberosClient(self.ccred, socks_proxy)
+
+			else:
+				raise Exception('Unknown proxy type %s' % self.target.proxy.type)
+
+			return None, None
+		except Exception as e:
+			return None, e
 	
 	async def authenticate(self, authData, flags = None, seq_number = 0, cb_data = None):
 		"""
 		This function is called (multiple times depending on the flags) to perform authentication. 
 		"""
 		try:
+			if self.kc is None:
+				_, err = await self.setup_kc()
+				if err is not None:
+					return None, None, err
+
 			if self.iterations == 0:
 				self.seq_number = 0 #int.from_bytes(os.urandom(4), byteorder='big', signed=False)
 				self.iterations += 1

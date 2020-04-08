@@ -87,8 +87,8 @@ class SocksProxyConnection:
 				data += temp
 				continue
 		
-		#except asyncio.CancelledError:
-		#	return
+		except asyncio.CancelledError:
+			return
 		except Exception as e:
 			logger.exception('handle_in_q')
 			await self.in_queue.put((None, e))

@@ -158,7 +158,7 @@ class MSLDAPClientConnection:
 	async def connect(self):
 		try:
 			logger.debug('Connecting!')
-			self.network = MSLDAPNetworkSelector.select(self.target)
+			self.network = await MSLDAPNetworkSelector.select(self.target)
 			res, err = await self.network.run()
 			if res is False:
 				return False, err

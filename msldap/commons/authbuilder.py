@@ -64,6 +64,47 @@ class MSLDAPNTLMSSPICredential:
 		self.domain = None
 		self.encrypt = False
 
+class MSLDAPMultiplexorCredential:
+	def __init__(self):
+		self.type = 'NTLM'
+		self.username = '<CURRENT>'
+		self.domain = '<CURRENT>'
+		self.password = '<CURRENT>'
+		self.target = None
+		self.is_guest = False
+		self.is_ssl = False
+		self.mp_host = '127.0.0.1'
+		self.mp_port = 9999
+		self.mp_username = None
+		self.mp_domain = None
+		self.mp_password = None
+		self.agent_id = None
+		self.encrypt = False
+
+	def get_url(self):
+		url_temp = 'ws://%s:%s'
+		if self.is_ssl is True:
+			url_temp = 'wss://%s:%s'
+		url = url_temp % (self.mp_host, self.mp_port)
+		return url
+
+	def parse_settings(self, settings):
+		req = ['agentid']
+		for r in req:
+			if r not in settings:
+				raise Exception('%s parameter missing' % r)
+		self.mp_host = settings.get('host', ['127.0.0.1'])[0]
+		self.mp_port = settings.get('port', ['9999'])[0]
+		if self.mp_port is None:
+			self.mp_port = '9999'
+		if 'user' in settings:
+			self.mp_username = settings.get('user')[0]
+		if 'domain' in settings:
+			self.mp_domain = settings.get('domain')[0]
+		if 'password' in settings:
+			self.mp_password = settings.get('password')[0]
+		self.agent_id = settings['agentid'][0]
+
 
 
 """
@@ -210,6 +251,7 @@ class AuthenticatorBuilder:
 			
 			if self.target.proxy is not None:
 				kcred.target.proxy = KerberosProxy()
+				kcred.target.proxy.type = self.target.proxy.type
 				kcred.target.proxy.target = copy.deepcopy(self.target.proxy.target)
 				kcred.target.proxy.target.endpoint_ip = self.target.dc_ip
 				kcred.target.proxy.target.endpoint_port = 88
@@ -252,49 +294,48 @@ class AuthenticatorBuilder:
 			spneg.add_auth_context('NTLMSSP - Microsoft NTLM Security Support Provider', handler)
 			return spneg
 
-
-"""
-elif creds.authentication_type.value.startswith('MULTIPLEXOR'):
-			if creds.authentication_type in [SMBAuthProtocol.MULTIPLEXOR_SSL_NTLM, SMBAuthProtocol.MULTIPLEXOR_NTLM]:
-				from aiosmb.authentication.ntlm.multiplexor import SMBNTLMMultiplexor
-
-				ntlmcred = SMBMultiplexorCredential()
+		elif self.creds.auth_method.value.startswith('MULTIPLEXOR'):
+			if self.creds.auth_method in [LDAPAuthProtocol.MULTIPLEXOR_SSL_NTLM, LDAPAuthProtocol.MULTIPLEXOR_NTLM]:
+				from msldap.authentication.ntlm.multiplexor import MSLDAPNTLMMultiplexor
+				ntlmcred = MSLDAPMultiplexorCredential()
 				ntlmcred.type = 'NTLM'
-				if creds.username is not None:
+				if self.creds.username is not None:
 					ntlmcred.username = '<CURRENT>'
-				if creds.domain is not None:
+				if self.creds.domain is not None:
 					ntlmcred.domain = '<CURRENT>'
-				if creds.secret is not None:
+				if self.creds.password is not None:
 					ntlmcred.password = '<CURRENT>'
 				ntlmcred.is_guest = False
-				ntlmcred.is_ssl = True if creds.authentication_type == SMBAuthProtocol.MULTIPLEXOR_SSL_NTLM else False
-				ntlmcred.parse_settings(creds.settings)
+				ntlmcred.is_ssl = True if self.creds.auth_method == LDAPAuthProtocol.MULTIPLEXOR_SSL_NTLM else False
+				ntlmcred.parse_settings(self.creds.settings)
+				ntlmcred.encrypt = self.creds.encrypt
 				
-				handler = SMBNTLMMultiplexor(ntlmcred)
+				handler = MSLDAPNTLMMultiplexor(ntlmcred)
 				#setting up SPNEGO
 				spneg = SPNEGO()
 				spneg.add_auth_context('NTLMSSP - Microsoft NTLM Security Support Provider', handler)
 				return spneg
 
-			elif creds.authentication_type in [SMBAuthProtocol.MULTIPLEXOR_SSL_KERBEROS, SMBAuthProtocol.MULTIPLEXOR_KERBEROS]:
-				from aiosmb.authentication.kerberos.multiplexor import SMBKerberosMultiplexor
+			elif self.creds.auth_method in [LDAPAuthProtocol.MULTIPLEXOR_SSL_KERBEROS, LDAPAuthProtocol.MULTIPLEXOR_KERBEROS]:
+				from msldap.authentication.kerberos.multiplexor import MSLDAPKerberosMultiplexor
 
-				ntlmcred = SMBMultiplexorCredential()
+				ntlmcred = MSLDAPMultiplexorCredential()
 				ntlmcred.type = 'KERBEROS'
-				ntlmcred.target = creds.target
-				if creds.username is not None:
+				ntlmcred.target = self.target
+				if self.creds.username is not None:
 					ntlmcred.username = '<CURRENT>'
-				if creds.domain is not None:
+				if self.creds.domain is not None:
 					ntlmcred.domain = '<CURRENT>'
-				if creds.secret is not None:
+				if self.creds.password is not None:
 					ntlmcred.password = '<CURRENT>'
 				ntlmcred.is_guest = False
-				ntlmcred.is_ssl = True if creds.authentication_type == SMBAuthProtocol.MULTIPLEXOR_SSL_NTLM else False
-				ntlmcred.parse_settings(creds.settings)
+				ntlmcred.is_ssl = True if self.creds.auth_method == LDAPAuthProtocol.MULTIPLEXOR_SSL_NTLM else False
+				ntlmcred.parse_settings(self.creds.settings)
+				ntlmcred.encrypt = self.creds.encrypt
 
-				handler = SMBKerberosMultiplexor(ntlmcred)
+				handler = MSLDAPKerberosMultiplexor(ntlmcred)
 				#setting up SPNEGO
 				spneg = SPNEGO()
 				spneg.add_auth_context('MS KRB5 - Microsoft Kerberos 5', handler)
 				return spneg
-"""
+
