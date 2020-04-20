@@ -5,6 +5,7 @@ from winacl.dtyp.sid import SID
 from winacl.dtyp.guid import GUID
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
 from msldap import logger
+from msldap.protocol.messages import Attribute, Change, PartialAttribute
 
 MSLDAP_DT_WIN_EPOCH = datetime.datetime(1601, 1, 1)
 
@@ -62,17 +63,35 @@ def x2guid(x):
 def list_str(x):
 	return [e.decode() for e in x ]
 
+def list_str_enc(x):
+	return [e.encode() for e in x ]
+
 def list_int(x):
 	return [int(e) for e in x ]
+
+def list_int_enc(x):
+	return [str(e).encode() for e in x ]
 
 def list_int_one(x):
 	return int(x[0])
 
+def list_int_one_enc(x):
+	return [str(x[0]).encode()]
+
 def list_str_one(x):
 	return x[0].decode()
 
+def list_str_one_enc(x):
+	return [x.encode()]
+
+def list_str_one_utf16le_enc(x):
+	return [x[0].encode('utf-16-le')]
+
 def list_bytes_one(x):
 	return x[0]
+
+def list_bytes_one_enc(x):
+	return [x]
 
 def int2timedelta(x):
 	x = int(x[0])
@@ -146,6 +165,7 @@ def list_ts2dt(x):
 	for a in x:
 		t.append(ts2dt((a, None)))
 	return t
+
 
 LDAP_ATTRIBUTE_TYPES = {
 	'supportedCapabilities' : list_str,
@@ -247,8 +267,36 @@ LDAP_ATTRIBUTE_TYPES = {
 	'trustPartner' : list_str_one,
 	'securityIdentifier' : list_bytes_one,
 	'versionNumber' : list_int_one,
-	
+	'unicodePwd' : list_str_one
 }
+
+LDAP_ATTRIBUTE_TYPES_ENC = {
+	'objectClass' : list_str_enc,
+	'sn' : list_str_one_enc,
+	'gidNumber' : list_int_one_enc,
+	'unicodePwd' : list_str_one_utf16le_enc,
+	'lockoutTime' : list_int_one_enc,
+	'sAMAccountName' : list_str_one_enc,
+	'userAccountControl' : list_int_one_enc,
+	'displayName' : list_str_one_enc,
+	'userPrincipalName' : list_str_one_enc,
+	'servicePrincipalName' : list_str_enc,
+	'msds-additionaldnshostname' : list_str_enc,
+}
+
+def encode_attributes(x):
+	"""converts a dict to attributelist"""
+	res = []
+	for k in x:
+		if k not in LDAP_ATTRIBUTE_TYPES_ENC:
+			raise Exception('Unknown conversion type for key "%s"' % k)
+		
+		res.append(Attribute({
+			'type' : k.encode(),
+			'attributes' : LDAP_ATTRIBUTE_TYPES_ENC[k](x[k])
+		}))
+
+	return res
 
 def convert_attributes(x):
 	t = {}
@@ -271,3 +319,20 @@ def convert_result(x):
 		'objectName' : x['objectName'].decode(),
 		'attributes' : convert_attributes(x['attributes'])
 	}
+
+
+def encode_changes(x):
+	res = []
+	for k in x:
+		if k not in LDAP_ATTRIBUTE_TYPES_ENC:
+			raise Exception('Unknown conversion type for key "%s"' % k)
+		
+		for mod, value in x[k]:
+			res.append(Change({
+				'operation' : mod,
+				'modification' : PartialAttribute({
+					'type' : k.encode(),
+					'attributes' : LDAP_ATTRIBUTE_TYPES_ENC[k](value)
+				})
+			}))
+	return res

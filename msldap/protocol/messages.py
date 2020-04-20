@@ -91,7 +91,7 @@ class resultCode(core.Enumerated):
 		80 : 'other',
 	}
 
-class changeoperation(core.Enumerated):
+class ChangeOperation(core.Enumerated):
 	_map = {
 		0 : 'add',
 		1 : 'delete',
@@ -288,7 +288,7 @@ class SearchResultDone(LDAPResult):
 
 class Change(core.Sequence):
 	_fields = [
-		('operation', changeoperation),
+		('operation', ChangeOperation),
 		('modification', PartialAttribute),
 	]
 

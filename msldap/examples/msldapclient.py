@@ -235,6 +235,87 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 
+	async def do_adduser(self, username, password):
+		"""Creates a new domain user with password"""
+		try:
+			_, err = await self.connection.create_user(username, password)
+			if err is not None:
+				raise err
+			print('User added')
+		except:
+			traceback.print_exc()
+
+	
+	async def do_deluser(self, user_dn):
+		"""Deletes the user! This action is irrecoverable (actually domain admins can do that but probably will shout with you)"""
+		try:
+			_, err = await self.connection.delete_user(user_dn)
+			if err is not None:
+				raise err
+			print('Goodbye, Caroline.')
+		except:
+			traceback.print_exc()
+
+	async def do_changeuserpw(self, user_dn, newpass, oldpass = None):
+		"""Changes user password, if you are admin then old pw doesnt need to be supplied"""
+		try:
+			_, err = await self.connection.change_password(user_dn, newpass, oldpass)
+			if err is not None:
+				raise err
+			print('User password changed')
+		except:
+			traceback.print_exc()
+
+	async def do_unlockuser(self, user_dn):
+		"""Unlock user by setting lockoutTime to 0"""
+		try:
+			_, err = await self.connection.unlock_user(user_dn)
+			if err is not None:
+				raise err
+			print('User unlocked')
+		except:
+			traceback.print_exc()
+
+	async def do_enableuser(self, user_dn):
+		"""Unlock user by flipping useraccountcontrol bits"""
+		try:
+			_, err = await self.connection.enable_user(user_dn)
+			if err is not None:
+				raise err
+			print('User enabled')
+		except:
+			traceback.print_exc()
+
+	async def do_disableuser(self, user_dn):
+		"""Unlock user by flipping useraccountcontrol bits"""
+		try:
+			_, err = await self.connection.disable_user(user_dn)
+			if err is not None:
+				raise err
+			print('User disabled')
+		except:
+			traceback.print_exc()
+
+	async def do_addspn(self, user_dn, spn):
+		"""Adds an SPN entry to the users account"""
+		try:
+			_, err = await self.connection.add_user_spn(user_dn, spn)
+			if err is not None:
+				raise err
+			print('SPN added!')
+		except:
+			traceback.print_exc()
+
+	async def do_addhostname(self, user_dn, hostname):
+		"""Adds additional hostname to computer account"""
+		try:
+			_, err = await self.connection.add_additional_hostname(user_dn, hostname)
+			if err is not None:
+				raise err
+			print('Hostname added!')
+		except:
+			traceback.print_exc()
+			
 	async def do_test(self):
 		"""testing, dontuse"""
 		try:

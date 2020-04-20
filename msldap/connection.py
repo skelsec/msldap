@@ -6,10 +6,11 @@ from msldap.commons.common import MSLDAPClientStatus
 from msldap.protocol.messages import LDAPMessage, BindRequest, \
 	protocolOp, AuthenticationChoice, SaslCredentials, \
 	SearchRequest, AttributeDescription, Filter, Filters, \
-	Controls, Control, SearchControlValue
+	Controls, Control, SearchControlValue, AddRequest, \
+	ModifyRequest, DelRequest
 
 from msldap.protocol.utils import calcualte_length
-from msldap.protocol.typeconversion import convert_result, convert_attributes
+from msldap.protocol.typeconversion import convert_result, convert_attributes, encode_attributes, encode_changes
 from msldap.commons.authbuilder import AuthenticatorBuilder
 from msldap.commons.credential import MSLDAP_GSS_METHODS
 from msldap.network.selector import MSLDAPNetworkSelector
@@ -392,6 +393,88 @@ class MSLDAPClientConnection:
 				raise Exception('Not implemented authentication method: %s' % self.creds.auth_method.name)
 		except Exception as e:
 			return False, e
+
+	async def add(self, entry, attributes):
+		try:
+			req = {
+				'entry' : entry.encode(),
+				'attributes' : encode_attributes(attributes)
+			}
+			br = { 'addRequest' : AddRequest(req)}
+			msg = { 'protocolOp' : protocolOp(br)}
+			
+			msg_id = await self.send_message(msg)
+			results = await self.recv_message(msg_id)
+			if isinstance(results[0], Exception):
+				return False, results[0]
+			
+			for message in results:
+				msg_type = message['protocolOp'].name
+				message = message.native
+				if msg_type == 'addResponse':
+					if message['protocolOp']['resultCode'] != 'success':
+						return False, Exception('Failed to add DN! LDAP error! Reason: %s Diag: %s' % (
+							message['protocolOp']['resultCode'],
+							message['protocolOp']['diagnosticMessage'])
+						)
+
+			return True, None
+		except Exception as e:
+			return False, e
+
+	async def modify(self, entry, changes, controls = None):
+		try:
+			req = {
+				'object' : entry.encode(),
+				'changes' : encode_changes(changes)
+			}
+			br = { 'modifyRequest' : ModifyRequest(req)}
+			msg = { 'protocolOp' : protocolOp(br)}
+			if controls is not None:
+				msg['controls'] = controls
+			
+			msg_id = await self.send_message(msg)
+			results = await self.recv_message(msg_id)
+			if isinstance(results[0], Exception):
+				return False, results[0]
+			
+			for message in results:
+				msg_type = message['protocolOp'].name
+				message = message.native
+				if msg_type == 'modifyResponse':
+					if message['protocolOp']['resultCode'] != 'success':
+						return False, Exception('Failed to add DN! LDAP error! Reason: %s Diag: %s' % (
+							message['protocolOp']['resultCode'],
+							message['protocolOp']['diagnosticMessage'])
+						)
+
+			return True, None
+		except Exception as e:
+			return False, e
+
+	async def delete(self, entry):
+		try:
+			br = { 'delRequest' : DelRequest(entry.encode())}
+			msg = { 'protocolOp' : protocolOp(br)}
+			
+			msg_id = await self.send_message(msg)
+			results = await self.recv_message(msg_id)
+			if isinstance(results[0], Exception):
+				return False, results[0]
+			
+			for message in results:
+				msg_type = message['protocolOp'].name
+				message = message.native
+				if msg_type == 'delResponse':
+					if message['protocolOp']['resultCode'] != 'success':
+						return False, Exception('Failed to add DN! LDAP error! Reason: %s Diag: %s' % (
+							message['protocolOp']['resultCode'],
+							message['protocolOp']['diagnosticMessage'])
+						)
+
+			return True, None
+		except Exception as e:
+			return False, e
 	
 	async def search(self, base, filter, attributes, search_scope = 2, paged_size = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None, return_done = False):
 		"""
@@ -577,7 +660,7 @@ async def amain():
 	#target.dc_ip = '10.10.10.2'
 	#target.domain = 'TEST'
 
-	url = 'ldap+kerberos-password://test\\victim:Passw0rd!1@WIN2019AD/?dc=10.10.10.2'
+	url = 'ldaps+ntlm-password://test\\Administrator:QLFbT8zkiFGlJuf0B3Qq@WIN2019AD/?dc=10.10.10.2'
 
 	dec = MSLDAPURLDecoder(url)
 	cred = dec.get_credential()
@@ -593,31 +676,28 @@ async def amain():
 	res, err = await client.bind()
 	if err is not None:
 		raise err
-
-	#res = await client.search_test_2()
-	#pprint.pprint(res)
-	#search = bytes.fromhex('30840000007702012663840000006e043c434e3d3430392c434e3d446973706c6179537065636966696572732c434e3d436f6e66696775726174696f6e2c44433d746573742c44433d636f72700a01000a010002010002020258010100870b6f626a656374436c61737330840000000d040b6f626a656374436c617373')
-	#msg = LDAPMessage.load(search)
-
 	
-	
-	qry = r'(sAMAccountName=*)' #'(userAccountControl:1.2.840.113556.1.4.803:=4194304)' #'(sAMAccountName=*)'
-	#qry = r'(sAMAccountType=805306368)'
-	#a = query_syntax_converter(qry)
-	#print(a.native)
-	#input('press bacon!')
-	
-	flt = query_syntax_converter(qry)
-	i = 0
-	async for res, err in client.pagedsearch(base.encode(), flt, ['*'.encode()], derefAliases=3, typesOnly=False):
-		if err is not None:
-			print('Error!')
-			raise err
-		i += 1
-		if i % 1000 == 0:
-			print(i)
-		#pprint.pprint(res)
+	user = "CN=ldaptest_2,CN=Users,DC=test,DC=corp"
+	#attributes = {'objectClass':  ['inetOrgPerson', 'posixGroup', 'top'], 'sn': 'user_sn', 'gidNumber': 0}
+	#res, err = await client.add(user, attributes)
+	#if err is not None:
+	#	print(err)
 
+	#changes = {
+	#	'unicodePwd': [('replace', ['"TESTPassw0rd!1"'])],
+	#	#'lockoutTime': [('replace', [0])]
+	#}
+
+	#res, err = await client.modify(user, changes)
+	#if err is not None:
+	#	print('ERR! %s' % err)
+	#else:
+	#	print('OK!')
+	
+	res, err = await client.delete(user)
+	if err is not None:
+		print('ERR! %s' % err)
+	
 	await client.disconnect()
 
 
@@ -630,38 +710,10 @@ if __name__ == '__main__':
 
 	logger.setLevel(2)
 
-	#from asn1crypto.core import ObjectIdentifier
-
-	#o = ObjectIdentifier('1.2.840.113556.1.4.803')
-	#print(o.dump())
-
-	#from pprint import pprint
-	#a = bytes.fromhex('3082026202010b63820235040f44433d746573742c44433d636f72700a01020a0103020100020100010100a050a9358116312e322e3834302e3131333535362e312e342e3830338212757365724163636f756e74436f6e74726f6c830734313934333034a217a415040e73414d4163636f756e744e616d653003820124308201bf040e6163636f756e7445787069726573040f62616450617373776f726454696d65040b626164507764436f756e740402636e0408636f646550616765040b636f756e747279436f6465040b646973706c61794e616d65041164697374696e677569736865644e616d650409676976656e4e616d650408696e697469616c73040a6c6173744c6f676f666604096c6173744c6f676f6e04126c6173744c6f676f6e54696d657374616d70040a6c6f676f6e436f756e7404046e616d65040b6465736372697074696f6e040e6f626a65637443617465676f7279040b6f626a656374436c617373040a6f626a6563744755494404096f626a656374536964040e7072696d61727947726f75704944040a7077644c617374536574040e73414d4163636f756e744e616d65040e73414d4163636f756e74547970650402736e0412757365724163636f756e74436f6e74726f6c0411757365725072696e636970616c4e616d65040b7768656e4368616e676564040b7768656e4372656174656404086d656d6265724f6604066d656d6265720414736572766963655072696e636970616c4e616d6504186d7344532d416c6c6f776564546f44656c6567617465546fa02430220416312e322e3834302e3131333535362e312e342e33313904083006020203e80400')
-	#msg = LDAPMessage.load(a)
-	#pprint.pprint(msg.native)
-	
-	#input()
 
 	asyncio.run(amain())
 
 	
-	#qry = '(&(sAMAccountType=805306369)(sAMAccountName=test))'
-	#qry = '(sAMAccountName=*)'
-	#flt = LF.parse(qry)
-	#print(flt)
-	#print(flt.__dict__)
-	#for f in flt.filters:
-	#	print(f.__dict__)
-
-	#x = convert(flt)
-	#print(x)
-	#print(x.native)
-
-	#qry = '(sAMAccountType=0x100)'
-	#flt = Filter.parse(qry)
-	#print(flt)
-	#print(flt.__dict__)
-	#print(flt.filters)
 
 			
 			

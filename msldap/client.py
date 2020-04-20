@@ -516,3 +516,92 @@ class MSLDAPClient:
 		ldap_filter = r'(objectClass=trustedDomain)'
 		async for entry in self.pagedsearch(ldap_filter, attributes = MSADDomainTrust_ATTRS):
 			yield MSADDomainTrust.from_ldap(entry)
+
+
+	async def create_user(self, username, password):
+		user_dn = 'CN=%s,CN=Users,%s' % (username, self._tree)
+		return await self.create_user_dn(user_dn, password)
+		
+	async def create_user_dn(self, user_dn, password):
+		try:
+			sn = user_dn.split(',')[0][3:]
+			domain = self._tree[3:].replace(',DC=','.')
+			attributes = {
+				'objectClass':  ['organizationalPerson', 'person', 'top', 'user'], 
+				'sn': sn, 
+				'sAMAccountName': sn,
+				'displayName': sn,
+				'userPrincipalName' : "{}@{}".format(sn, domain),
+			}
+			
+			_, err = await self._con.add(user_dn, attributes)
+			if err is not None:
+				return False, err
+
+			_, err = await self.change_password(user_dn, password)
+			if err is not None:
+				return False, err
+
+			_, err = await self.enable_user(user_dn)
+			if err is not None:
+				return False, err
+
+			return True, None
+		except Exception as e:
+			return False, None
+
+
+	async def unlock_user(self, user_dn):
+		changes = {
+			'lockoutTime': [('replace', [0])]
+		}
+		return await self._con.modify(user_dn, changes)
+
+	async def enable_user(self, user_dn):
+		changes = {
+			'userAccountControl': [('replace', [512])]
+		}
+		return await self._con.modify(user_dn, changes)
+	
+	async def disable_user(self, user_dn):
+		changes = {
+			'userAccountControl': [('replace', [2])]
+		}
+		return await self._con.modify(user_dn, changes)
+
+	async def add_user_spn(self, user_dn, spn_str):
+		changes = {
+			'servicePrincipalName': [('add', [spn_str])]
+		}
+		return await self._con.modify(user_dn, changes)
+
+	async def add_additional_hostname(self, user_dn, hostname):
+		changes = {
+			'msds-additionaldnshostname': [('add', [hostname])]
+		}
+		return await self._con.modify(user_dn, changes)
+		
+	
+	async def delete_user(self, user_dn):
+		return await self._con.delete(user_dn)
+
+	async def change_password(self, user_dn, newpass, oldpass = None):
+		
+		# let's stop for a second and wonder why the passwords need to be wrapped in double quotes
+		# smh
+		changes = {
+			'unicodePwd': []
+		}
+		if oldpass is not None:
+			changes['unicodePwd'].append(('delete', ['"%s"' % oldpass]))
+			changes['unicodePwd'].append(('add', ['"%s"' % newpass]))
+		else:
+			#if you are admin...
+			changes['unicodePwd'].append(('replace', ['"%s"' % newpass]))
+
+		return await self._con.modify(user_dn, changes)
+
+	
+		
+
+	
