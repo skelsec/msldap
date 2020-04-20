@@ -67,4 +67,4 @@ Detailed explanation with examples:
 ```
 
 # Kudos
-This project is built on top of the [ldap3](https://github.com/cannatag/ldap3) project.
+
