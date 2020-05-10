@@ -26,6 +26,7 @@ class MSADGPO:
 		self.systemFlags = None #str
 		self.whenChanged = None #uid
 		self.whenCreated = None #str
+		self.versionNumber = None
 		
 
 	@staticmethod
@@ -43,6 +44,7 @@ class MSADGPO:
 		adi.systemFlags = entry['attributes'].get('systemFlags')
 		adi.whenChanged = entry['attributes'].get('whenChanged')
 		adi.whenCreated = entry['attributes'].get('whenCreated')
+		adi.versionNumber = entry['attributes'].get('versionNumber')
 
 		return adi
 
@@ -60,6 +62,7 @@ class MSADGPO:
 		t['objectGUID'] = vn(self.objectGUID)
 		t['whenChanged'] = vn(self.whenChanged)
 		t['whenCreated'] = vn(self.whenCreated)
+		t['versionNumber'] = vn(self.versionNumber)
 		return t
 
 	def __str__(self):

@@ -5,5 +5,5 @@ MSLDAPClientConnection -- low level LDAP connection
 | Using this class is not recommended for normal operation.
 
 .. autoclass:: msldap.connection.MSLDAPClientConnection
-	:members: connect, disconnect, add, modify, delete, 
+	:members: connect, disconnect, add, modify, delete, search, pagedsearch
 

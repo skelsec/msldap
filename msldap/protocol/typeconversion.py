@@ -82,7 +82,7 @@ def list_str_one(x):
 	return x[0].decode()
 
 def list_str_one_enc(x):
-	return [x.encode()]
+	return [x[0].encode()]
 
 def list_str_one_utf16le_enc(x):
 	return [x[0].encode('utf-16-le')]

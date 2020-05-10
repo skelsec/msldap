@@ -11,6 +11,7 @@ from msldap.protocol.messages import LDAPMessage, BindRequest, \
 
 from msldap.protocol.utils import calcualte_length
 from msldap.protocol.typeconversion import convert_result, convert_attributes, encode_attributes, encode_changes
+from msldap.protocol.query import escape_filter_chars, query_syntax_converter
 from msldap.commons.authbuilder import AuthenticatorBuilder
 from msldap.commons.credential import MSLDAP_GSS_METHODS
 from msldap.network.selector import MSLDAPNetworkSelector
@@ -455,12 +456,14 @@ class MSLDAPClientConnection:
 
 	async def modify(self, entry, changes, controls = None):
 		"""
-		Performs the add operation.
+		Performs the modify operation.
 		
 		:param entry: The DN of the object whose attributes are to be modified
 		:type entry: str
 		:param changes: Describes the changes to be made on the object. Must be a dictionary of the following format: {'attribute': [('change_type', [value])]}
 		:type changes: dict
+		:param controls: additional controls to be passed in the query
+		:type controls: dict
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
 		:rtype: tuple
 		"""
@@ -525,31 +528,33 @@ class MSLDAPClientConnection:
 		except Exception as e:
 			return False, e
 	
-	async def search(self, base, filter, attributes, search_scope = 2, paged_size = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None, return_done = False):
+	async def search(self, base, query, attributes, search_scope = 2, size_limit = 1000, types_only = False, derefAliases = 0, timeLimit = None, controls = None, return_done = False):
 		"""
 		Performs the search operation.
 		
-		:param base: the base tree on which the search should be performed
-		:type base: 
-		:param filter: 
-		:type filter:
-		:param attributes: 
-		:type attributes:
-		:param search_scope: 
-		:type search_scope:
-		:param typesOnly: 
-		:type typesOnly: bool
-		:param derefAliases: 
+		:param base: base tree on which the search should be performed
+		:type base: str
+		:param query: filter query that defines what should be searched for
+		:type query: str
+		:param attributes: a list of attributes to be included in the response
+		:type attributes: List[str]
+		:param search_scope: Specifies the search operation's scope. Default: 2 (Subtree)
+		:type search_scope: int
+		:param types_only: indicates whether the entries returned should include attribute types only or both types and values. Default: False (both)
+		:type types_only: bool
+		:param size_limit: Size limit of result elements per query. Default: 1000
+		:type size_limit: int
+		:param derefAliases: Specifies the behavior on how aliases are dereferenced. Default: 0 (never)
 		:type derefAliases: int
-		:param timeLimit: 
+		:param timeLimit: Maximum time the search should take. If time limit reached the server SHOULD return an error
 		:type timeLimit: int
-		:param controls: 
-		:type controls:
-		:param return_done: 
+		:param controls: additional controls to be passed in the query
+		:type controls: dict
+		:param return_done: Controls wether the final 'done' LDAP message should be returned, or just the actual results
 		:type return_done: bool
 
-		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:return: Async generator which yields (`LDAPMessage`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`LDAPMessage`, :class:`Exception`)]
 		"""
 		if self.status != MSLDAPClientStatus.RUNNING:
 			yield None, Exception('Connection not running! Probably encountered an error')
@@ -557,15 +562,17 @@ class MSLDAPClientConnection:
 		try:
 			if timeLimit is None:
 				timeLimit = 600 #not sure
+
+			flt = query_syntax_converter(query)
 			
 			searchreq = {
-				'baseObject' : base,
+				'baseObject' : base.encode(),
 				'scope': search_scope,
 				'derefAliases': derefAliases, 
-				'sizeLimit': paged_size,
+				'sizeLimit': size_limit,
 				'timeLimit': timeLimit,
-				'typesOnly': typesOnly,
-				'filter': filter,
+				'typesOnly': types_only,
+				'filter': flt,
 				'attributes': attributes,
 			}
 
@@ -604,7 +611,32 @@ class MSLDAPClientConnection:
 		except Exception as e:
 			yield (None, e)
 
-	async def pagedsearch(self, base, filter, attributes, search_scope = 2, paged_size = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None):
+	async def pagedsearch(self, base, query, attributes, search_scope = 2, size_limit = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None):
+		"""
+		Paged search is the same as the search operation and uses it under the hood. Adds automatic control to read all results in a paged manner.
+		
+		:param base: base tree on which the search should be performed
+		:type base: str
+		:param query: filter query that defines what should be searched for
+		:type query: str
+		:param attributes: a list of attributes to be included in the response
+		:type attributes: List[str]
+		:param search_scope: Specifies the search operation's scope. Default: 2 (Subtree)
+		:type search_scope: int
+		:param types_only: indicates whether the entries returned should include attribute types only or both types and values. Default: False (both)
+		:type types_only: bool
+		:param size_limit: Size limit of result elements per query. Default: 1000
+		:type size_limit: int
+		:param derefAliases: Specifies the behavior on how aliases are dereferenced. Default: 0 (never)
+		:type derefAliases: int
+		:param timeLimit: Maximum time the search should take. If time limit reached the server SHOULD return an error
+		:type timeLimit: int
+		:param controls: additional controls to be passed in the query
+		:type controls: dict
+		:return: Async generator which yields (`dict`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
+		"""
+		
 		if self.status != MSLDAPClientStatus.RUNNING:
 			yield None, Exception('Connection not running! Probably encountered an error')
 			return
@@ -616,7 +648,7 @@ class MSLDAPClientConnection:
 					Control({
 						'controlType' : b'1.2.840.113556.1.4.319',
 						'controlValue': SearchControlValue({
-							'size' : paged_size,
+							'size' : size_limit,
 							'cookie': cookie
 						}).dump()
 					})
@@ -631,11 +663,11 @@ class MSLDAPClientConnection:
 
 				async for res, err in self.search(
 					base, 
-					filter, 
+					query, 
 					attributes, 
 					search_scope = search_scope, 
-					paged_size=paged_size, 
-					typesOnly=typesOnly, 
+					size_limit=size_limit, 
+					types_only=typesOnly, 
 					derefAliases=derefAliases, 
 					timeLimit=timeLimit, 
 					controls = ctrs,

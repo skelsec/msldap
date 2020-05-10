@@ -9,7 +9,7 @@ from msldap.commons.common import MSLDAPClientStatus
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest, SDFlagsRequestValue
 from msldap.protocol.constants import BASE, ALL_ATTRIBUTES, LEVEL
 
-from msldap.protocol.query import escape_filter_chars, query_syntax_converter
+from msldap.protocol.query import escape_filter_chars
 from msldap.connection import MSLDAPClientConnection
 from msldap.protocol.messages import Control
 from msldap.ldap_objects import *
@@ -41,31 +41,36 @@ class MSLDAPClient:
 		
 
 	async def connect(self):
-		self._con = MSLDAPClientConnection(self.target, self.creds)
-		_, err = await self._con.connect()
-		if err is not None:
-			raise err
-		res, err = await self._con.bind()
-		if err is not None:
-			return False, err
-		res, err = await self._con.get_serverinfo()
-		if err is not None:
-			raise err
-		self._serverinfo = res
-		self._tree = res['defaultNamingContext']
-		self._ldapinfo = await self.get_ad_info()
-		return True, None
+		try:
+			self._con = MSLDAPClientConnection(self.target, self.creds)
+			_, err = await self._con.connect()
+			if err is not None:
+				raise err
+			res, err = await self._con.bind()
+			if err is not None:
+				return False, err
+			res, err = await self._con.get_serverinfo()
+			if err is not None:
+				raise err
+			self._serverinfo = res
+			self._tree = res['defaultNamingContext']
+			self._ldapinfo, err = await self.get_ad_info()
+			if err is not None:
+				raise err
+			return True, None
+		except Exception as e:
+			return False, e
 
 	def get_server_info(self):
 		return self._serverinfo
 
-	async def pagedsearch(self, ldap_filter, attributes, controls = None):
+	async def pagedsearch(self, query, attributes, controls = None):
 		"""
 		Performs a paged search on the AD, using the filter and attributes as a normal query does.
 			!The LDAP connection MUST be active before invoking this function!
 
-		:param ldap_filter: LDAP query filter
-		:type ldap_filter: str
+		:param query: LDAP query filter
+		:type query: str
 		:param attributes: List of requested attributes
 		:type attributes: List[str]
 		:param controls: additional controls to be passed in the query
@@ -73,11 +78,11 @@ class MSLDAPClient:
 		:param level: Recursion level
 		:type level: int
 
-		:return: A dictionary representing the LDAP tree
-		:rtype: dict
+		:return: Async generator which yields (`dict`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
 
 		"""
-		logger.debug('Paged search, filter: %s attributes: %s' % (ldap_filter, ','.join(attributes)))
+		logger.debug('Paged search, filter: %s attributes: %s' % (query, ','.join(attributes)))
 		if self._con.status != MSLDAPClientStatus.RUNNING:
 			if self._con.status == MSLDAPClientStatus.ERROR:
 				print('There was an error in the connection!')
@@ -92,7 +97,6 @@ class MSLDAPClient:
 		for x in attributes:
 			t.append(x.encode())
 		attributes = t
-		ldap_filter = query_syntax_converter(ldap_filter)
 
 		t = []
 		if controls is not None:
@@ -106,20 +110,21 @@ class MSLDAPClient:
 		controls = t
 
 		async for entry, err in self._con.pagedsearch(
-			self._tree.encode(), 
-			ldap_filter, 
+			self._tree, 
+			query, 
 			attributes = attributes, 
-			paged_size = self.ldap_query_page_size, 
+			size_limit = self.ldap_query_page_size, 
 			controls = controls
 			):
 				
 				if err is not None:
-					raise err
+					yield None, err
+					return
 				if entry['objectName'] == '' and entry['attributes'] == '':
 					#searchresref...
 					continue
 				#print('et %s ' % entry)
-				yield entry
+				yield entry, None
 
 	async def get_tree_plot(self, root_dn, level = 2):
 		"""
@@ -137,10 +142,10 @@ class MSLDAPClient:
 		logger.debug('Tree, dn: %s level: %s' % (root_dn, level))
 		tree = {}
 		async for entry, err in self._con.pagedsearch(
-			root_dn.encode(), 
-			query_syntax_converter('(distinguishedName=*)'), 
+			root_dn, 
+			'(distinguishedName=*)', 
 			attributes = [b'distinguishedName'], 
-			paged_size = self.ldap_query_page_size, 
+			size_limit = self.ldap_query_page_size, 
 			search_scope=LEVEL, 
 			controls = None, 
 			):
@@ -161,56 +166,65 @@ class MSLDAPClient:
 		"""
 		Fetches all user objects available in the LDAP tree and yields them as MSADUser object.
 		
-		:return: Async generator which yields `MSADUser` objects
-		:rtype: Iterator[:class:`MSADUser`]
+		:return: Async generator which yields (`MSADUser`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`MSADUser`, :class:`Exception`)]
 		
 		"""
 		logger.debug('Polling AD for all user objects')
 		ldap_filter = r'(sAMAccountType=805306368)'
-		async for entry in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
-			yield MSADUser.from_ldap(entry, self._ldapinfo)
+		async for entry, err in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
+			if err is not None:
+				yield None, err
+				return
+			yield MSADUser.from_ldap(entry, self._ldapinfo), None
 		logger.debug('Finished polling for entries!')
 
 	async def get_all_machines(self):
 		"""
 		Fetches all machine objects available in the LDAP tree and yields them as MSADMachine object.
-		
-		:return: Async generator which yields `MSADMachine` objects
-		:rtype: Iterator[:class:`MSADMachine`]
+
+		:return: Async generator which yields (`MSADMachine`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`MSADMachine`, :class:`Exception`)]
 		
 		"""
 		logger.debug('Polling AD for all user objects')
 		ldap_filter = r'(sAMAccountType=805306369)'
 
-		async for entry in self.pagedsearch(ldap_filter, MSADMachine_ATTRS):
-			yield MSADMachine.from_ldap(entry, self._ldapinfo)
+		async for entry, err in self.pagedsearch(ldap_filter, MSADMachine_ATTRS):
+			if err is not None:
+				yield None, err
+				return
+			yield MSADMachine.from_ldap(entry, self._ldapinfo), None
 		logger.debug('Finished polling for entries!')
 	
 	async def get_all_gpos(self):
 		"""
 		Fetches all GPOs available in the LDAP tree and yields them as MSADGPO object.
 		
-		:return: Async generator which yields `MSADGPO` objects
-		:rtype: Iterator[:class:`MSADGPO`]
+		:return: Async generator which yields (`MSADGPO`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`MSADGPO`, :class:`Exception`)]
 		
 		"""
 
 		ldap_filter = r'(objectCategory=groupPolicyContainer)'
-		async for entry in self.pagedsearch(ldap_filter, MSADGPO_ATTRS):
-			yield MSADGPO.from_ldap(entry)
+		async for entry, err in self.pagedsearch(ldap_filter, MSADGPO_ATTRS):
+			if err is not None:
+				yield None, err
+				return
+			yield MSADGPO.from_ldap(entry), None
 
 	async def get_all_laps(self):
 		"""
 		Fetches all LAPS passwords for all machines. This functionality is only available to specific high-privileged users.
-		
-		:return: The user as `MSADUser`
-		:rtype: :class:`MSADUser`
+
+		:return: Async generator which yields (`dict`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
 		"""
 
 		ldap_filter = r'(sAMAccountType=805306369)'
 		attributes = ['cn','ms-mcs-AdmPwd']
-		async for entry in self.pagedsearch(ldap_filter, attributes):
-			yield entry
+		async for entry, err in self.pagedsearch(ldap_filter, attributes):
+			yield entry, err
 
 	async def get_laps(self, sAMAccountName):
 		"""
@@ -218,14 +232,14 @@ class MSLDAPClient:
 		
 		:param sAMAccountName: The username of the machine (eg. `COMP123$`).
 		:type sAMAccountName: str
-		:return: The user as `MSADUser`
-		:rtype: Iterator[:class:`str`]
+		:return: Laps attributes as a `dict`
+		:rtype: (:class:`dict`, :class:`Exception`)
 		"""
 
 		ldap_filter = r'(&(sAMAccountType=805306369)(sAMAccountName=%s))' % sAMAccountName
 		attributes = ['cn','ms-mcs-AdmPwd']
-		async for entry in self.pagedsearch(ldap_filter, attributes):
-			yield entry
+		async for entry, err in self.pagedsearch(ldap_filter, attributes):
+			return entry, err
 
 	async def get_user(self, sAMAccountName):
 		"""
@@ -233,27 +247,33 @@ class MSLDAPClient:
 		
 		:param sAMAccountName: The username of the user.
 		:type sAMAccountName: str
-		:return: The user as `MSADUser`
-		:rtype: :class:`MSADUser`
+		:return: A tuple with the user as `MSADUser` and an `Exception` is there was any
+		:rtype: (:class:`MSADUser`, :class:`Exception`)
 		"""
 		logger.debug('Polling AD for user %s'% sAMAccountName)
 		ldap_filter = r'(&(objectClass=user)(sAMAccountName=%s))' % sAMAccountName
-		async for entry in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
-			return MSADUser.from_ldap(entry, self._ldapinfo)
+		async for entry, err in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
+			if err is not None:
+				return None, err
+			return MSADUser.from_ldap(entry, self._ldapinfo), None
+		else:
+			return None, None
 		logger.debug('Finished polling for entries!')
 
 	async def get_ad_info(self):
 		"""
 		Polls for basic AD information (needed for determine password usage characteristics!)
 		
-		:return: The domain information as `MSADInfo`
-		:rtype: :class:`MSADInfo`
+		:return: A tuple with the domain information as `MSADInfo` and an `Exception` is there was any
+		:rtype: (:class:`MSADInfo`, :class:`Exception`)
 		"""
 		logger.debug('Polling AD for basic info')
 		ldap_filter = r'(distinguishedName=%s)' % self._tree
-		async for entry in self.pagedsearch(ldap_filter, MSADInfo_ATTRS):
+		async for entry, err in self.pagedsearch(ldap_filter, MSADInfo_ATTRS):
+			if err is not None:
+				return None, err
 			self._ldapinfo = MSADInfo.from_ldap(entry)
-			return self._ldapinfo
+			return self._ldapinfo, None
 
 		logger.debug('Poll finished!')
 
@@ -264,8 +284,8 @@ class MSLDAPClient:
 
 		:param include_machine: Specifies wether machine accounts should be included in the query
 		:type include_machine: bool
-		:return: Async generator which yields string in SPN format
-		:rtype: Iterator[:class:`str`]
+		:return: Async generator which yields tuples with a string in SPN format and an Exception if there was any
+		:rtype: Iterator[(:class:`str`, :class:`Exception`)]
 		
 		"""
 
@@ -273,8 +293,8 @@ class MSLDAPClient:
 		ldap_filter = r'(&(sAMAccountType=805306369))'
 		attributes = ['objectSid','sAMAccountName', 'servicePrincipalName']
 
-		async for entry in self.pagedsearch(ldap_filter, attributes):
-			yield entry
+		async for entry, err in self.pagedsearch(ldap_filter, attributes):
+			yield entry, err
 
 	async def get_all_service_user_objects(self, include_machine = False):
 		"""
@@ -283,8 +303,9 @@ class MSLDAPClient:
 
 		:param include_machine: Specifies wether machine accounts should be included in the query
 		:type include_machine: bool
-		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: Iterator[:class:`MSADUser`]
+		
+		:return: Async generator which yields (`MSADUser`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`MSADUser`, :class:`Exception`)]
 
 		"""
 		logger.debug('Polling AD for all user objects, machine accounts included: %s'% include_machine)
@@ -293,8 +314,11 @@ class MSLDAPClient:
 		else:
 			ldap_filter = r'(&(servicePrincipalName=*)(!(sAMAccountName=*$)))'
 
-		async for entry in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
-			yield MSADUser.from_ldap(entry, self._ldapinfo)
+		async for entry, err in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
+			if err is not None:
+				yield None, err
+				return
+			yield MSADUser.from_ldap(entry, self._ldapinfo), None
 		logger.debug('Finished polling for entries!')
 
 	async def get_all_knoreq_user_objects(self, include_machine = False):
@@ -303,8 +327,8 @@ class MSLDAPClient:
 		
 		:param include_machine: Specifies wether machine accounts should be included in the query
 		:type include_machine: bool
-		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: Iterator[:class:`MSADUser`]
+		:return: Async generator which yields (`MSADUser`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`MSADUser`, :class:`Exception`)]
 
 		"""
 		logger.debug('Polling AD for all user objects, machine accounts included: %s'% include_machine)
@@ -313,8 +337,11 @@ class MSLDAPClient:
 		else:
 			ldap_filter = r'(&(userAccountControl:1.2.840.113556.1.4.803:=4194304)(!(sAMAccountName=*$)))'
 
-		async for entry in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
-			yield MSADUser.from_ldap(entry, self._ldapinfo)
+		async for entry, err in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
+			if err is not None:
+				yield None, err
+				return
+			yield MSADUser.from_ldap(entry, self._ldapinfo), None
 		logger.debug('Finished polling for entries!')
 			
 	async def get_objectacl_by_dn_p(self, dn, flags = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION):
@@ -338,8 +365,11 @@ class MSLDAPClient:
 		attributes = MSADSecurityInfo.ATTRS
 		controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
 		
-		async for entry in self.pagedsearch(ldap_filter, attributes, controls = controls):
-			yield MSADSecurityInfo.from_ldap(entry)
+		async for entry, err in self.pagedsearch(ldap_filter, attributes, controls = controls):
+			if err is not None:
+				yield None, err
+				return
+			yield MSADSecurityInfo.from_ldap(entry), None
 
 	async def get_objectacl_by_dn(self, dn, flags = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION):
 		"""
@@ -351,8 +381,8 @@ class MSLDAPClient:
 		:type object_dn: str
 		:param flags: Flags indicate the data type to be returned.
 		:type flags: :class:`SDFlagsRequest`
-		:return: nTSecurityDescriptor attribute of the object
-		:rtype: bytes
+		:return: nTSecurityDescriptor attribute of the object as `bytes` and an `Exception` is there was any
+		:rtype: (:class:`bytes`, :class:`Exception`)
 
 		"""
 		
@@ -362,8 +392,10 @@ class MSLDAPClient:
 		attributes = ['nTSecurityDescriptor']
 		controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
 		
-		async for entry in self.pagedsearch(ldap_filter, attributes, controls = controls):
-			return entry['attributes'].get('nTSecurityDescriptor')
+		async for entry, err in self.pagedsearch(ldap_filter, attributes, controls = controls):
+			if err is not None:
+				return None, err
+			return entry['attributes'].get('nTSecurityDescriptor'), None
 
 	async def set_objectacl_by_dn(self, object_dn, data, flags = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION):
 		"""
@@ -392,23 +424,29 @@ class MSLDAPClient:
 		"""
 		Yields all Groups present in the LDAP tree.  
 		
-		:return: Async generator yielding the available groups with full information
-		:rtype: Iterator[:class:`MSADGroup`]
+		:return: Async generator which yields (`MSADGroup`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`MSADGroup`, :class:`Exception`)]
 		"""
 		ldap_filter = r'(objectClass=group)'
-		async for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
-			yield MSADGroup.from_ldap(entry)
+		async for entry, err in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+			if err is not None:
+				yield None, err
+				return
+			yield MSADGroup.from_ldap(entry), None
 			
 	async def get_all_ous(self):
 		"""
 		Yields all OUs present in the LDAP tree.  
 
-		:return: Async generator yielding the available OUs with full information
-		:rtype: Iterator[:class:`MSADOU`]
+		:return: Async generator which yields (`MSADOU`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`MSADOU`, :class:`Exception`)]
 		"""
 		ldap_filter = r'(objectClass=organizationalUnit)'
-		async for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
-			yield MSADOU.from_ldap(entry)
+		async for entry, err in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+			if err is not None:
+				yield None, err
+				return
+			yield MSADOU.from_ldap(entry), None
 			
 	async def get_group_by_dn(self, group_dn):
 		"""
@@ -416,13 +454,15 @@ class MSLDAPClient:
 
 		:param group_dn: The user's DN
 		:type group_dn: str
-		:return: The distinguishedName
-		:rtype: :class:`MSADDomainTrust`
+		:return: tuple of `MSADGroup` and an `Exception` is there was any
+		:rtype: (:class:`MSADGroup`, :class:`Exception`)
 		"""
 
 		ldap_filter = r'(&(objectClass=group)(distinguishedName=%s))' % escape_filter_chars(group_dn)
-		async for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
-			return MSADGroup.from_ldap(entry)
+		async for entry, err in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+			if err is not None:
+				return None, err
+			return MSADGroup.from_ldap(entry), None
 			
 	async def get_user_by_dn(self, user_dn):
 		"""
@@ -430,32 +470,39 @@ class MSLDAPClient:
 
 		:param user_dn: The user's DN
 		:type user_dn: str
-		:return: The distinguishedName
-		:rtype: str
+		:return: The user object
+		:rtype: (:class:`MSADUser`, :class:`Exception`)
 		"""
 
 		ldap_filter = r'(&(objectClass=user)(distinguishedName=%s))' % user_dn
-		async for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
-			yield MSADUser.from_ldap(entry)
+		async for entry, err in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+			if err is not None:
+				return None, err
+			return MSADUser.from_ldap(entry), None
 			
 	async def get_group_members(self, dn, recursive = False):
 		"""
 		Fetches the DN for an object specified by `objectsid`
 
-		:param objectsid: The object's SID
-		:type objectsid: str
-		:return: The distinguishedName
-		:rtype: str
+		:param dn: The object's DN
+		:type dn: str
+		:param recursive: Indicates wether the lookup should recursively affect all groups
+		:type recursive: bool
+		:return: Async generator which yields (`MSADUser`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`MSADUser`, :class:`Exception`)]
 		"""
 
-		group = self.get_group_by_dn(dn)
+		group, err = self.get_group_by_dn(dn)
+		if err is not None:
+			yield None, err
+			return
 		for member in group.member:
 			async for result in self.get_object_by_dn(member):
 				if isinstance(result, MSADGroup) and recursive:
-					async for user in self.get_group_members(result.distinguishedName, recursive = True):
-						yield(user)
+					async for user, err in self.get_group_members(result.distinguishedName, recursive = True):
+						yield user, err
 				else:
-					yield(result)
+					yield result, err
 						
 	async def get_dn_for_objectsid(self, objectsid):
 		"""
@@ -464,64 +511,69 @@ class MSLDAPClient:
 		:param objectsid: The object's SID
 		:type objectsid: str
 		:return: The distinguishedName
-		:rtype: str
+		:rtype: (:class:`str`, :class:`Exception`)
 
 		"""
 
 		ldap_filter = r'(objectSid=%s)' % str(objectsid)
-		async for entry in self.pagedsearch(ldap_filter, ['distinguishedName']):
-			return entry['attributes']['distinguishedName']
+		async for entry, err in self.pagedsearch(ldap_filter, ['distinguishedName']):
+			if err is not None:
+				return None, err
+			
+			return entry['attributes']['distinguishedName'], None
 				
 	async def get_tokengroups(self, dn):
 		"""
 		Yields SIDs of groups that the given DN is a member of.
 
-		:return: Async generator that yields strings of SIDs
-		:rtype: Iterator[:class:`str`]
+		:return: Async generator which yields (`str`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`str`, :class:`Exception`)]
 
 		"""
-		ldap_filter = query_syntax_converter( r'(distinguishedName=%s)' % escape_filter_chars(dn) )
+		ldap_filter = r'(distinguishedName=%s)' % escape_filter_chars(dn)
 		attributes=[b'tokenGroups']
 
 		async for entry, err in self._con.pagedsearch(
-			dn.encode(), 
+			dn, 
 			ldap_filter, 
 			attributes = attributes, 
-			paged_size = self.ldap_query_page_size, 
+			size_limit = self.ldap_query_page_size, 
 			search_scope=BASE, 
 			):
 				if err is not None:
 					yield None, err
-					break
+					return
 				
 				#print(entry['attributes'])
-				if 'tokenGroups' in entry:
-					for sid_data in entry['tokenGroups']:
-						yield sid_data
+				if 'tokenGroups' in entry['attributes']:
+					for sid_data in entry['attributes']['tokenGroups']:
+						yield sid_data, None
 			
 	async def get_all_tokengroups(self):
 		"""
 		Yields all effective group membership information for all objects of the following type:
 		Users, Groups, Computers
 
-		:return: Async generator that yields dictionaries
-		:rtype: Iterator[:class:`Dict`]
+		:return: Async generator which yields (`dict`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
 
 		"""
 
 		ldap_filter = r'(|(sAMAccountType=805306369)(objectClass=group)(sAMAccountType=805306368))'
-		async for entry in self.pagedsearch(
+		async for entry, err in self.pagedsearch(
 			ldap_filter, 
 			attributes = ['dn', 'cn', 'objectSid','objectClass', 'objectGUID']
 			):				
-
+				if err is not None:
+					yield None, err
+					return
 				if 'objectName' in entry:
 					#print(entry['objectName'])
 					async for entry2, err in self._con.pagedsearch(
-						entry['objectName'].encode(), 
-						query_syntax_converter( r'(distinguishedName=%s)' % escape_filter_chars(entry['objectName']) ), 
+						entry['objectName'], 
+						r'(distinguishedName=%s)' % escape_filter_chars(entry['objectName']), 
 						attributes = [b'tokenGroups'], 
-						paged_size = self.ldap_query_page_size, 
+						size_limit = self.ldap_query_page_size, 
 						search_scope=BASE, 
 						):
 							
@@ -539,15 +591,15 @@ class MSLDAPClient:
 										'type' : entry['attributes']['objectClass'][-1],
 										'token' : token
 
-									}
+									}, None
 
 	async def get_all_objectacl(self):
 		"""
 		Yields the security descriptor of all objects in the LDAP tree of the following types:  
 		Users, Computers, GPOs, OUs, Groups
 
-		:return: Async generator that yields MSADSecurityInfo
-		:rtype: Iterator[:class:`MSADSecurityInfo`]
+		:return: Async generator which yields (`MSADSecurityInfo`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`MSADSecurityInfo`, :class:`Exception`)]
 
 		"""
 		
@@ -555,27 +607,36 @@ class MSLDAPClient:
 		req_flags = SDFlagsRequestValue({'Flags' : flags_value})
 		
 		ldap_filter = r'(|(objectClass=organizationalUnit)(objectCategory=groupPolicyContainer)(sAMAccountType=805306369)(objectClass=group)(sAMAccountType=805306368))'
-		async for entry in self.pagedsearch(ldap_filter, attributes = ['dn']):
+		async for entry, err in self.pagedsearch(ldap_filter, attributes = ['dn']):
+			if err is not None:
+				yield None, err
+				return
 			ldap_filter = r'(distinguishedName=%s)' % escape_filter_chars(entry['objectName'])
 			attributes = MSADSecurityInfo.ATTRS
 			controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
 			
-			async for entry2 in self.pagedsearch(ldap_filter, attributes, controls = controls):
-				yield MSADSecurityInfo.from_ldap(entry2)
+			async for entry2, err in self.pagedsearch(ldap_filter, attributes, controls = controls):
+				if err is not None:
+					yield None, err
+					return
+				yield MSADSecurityInfo.from_ldap(entry2), None
 
 
 	async def get_all_trusts(self):
 		"""
 		Yields all trusted domains.
 
-		:return: Async generator that yields MSADDomainTrust
-		:rtype: Iterator[:class:`MSADDomainTrust`]
+		:return: Async generator which yields (`MSADDomainTrust`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`MSADDomainTrust`, :class:`Exception`)]
 
 		"""
 
 		ldap_filter = r'(objectClass=trustedDomain)'
-		async for entry in self.pagedsearch(ldap_filter, attributes = MSADDomainTrust_ATTRS):
-			yield MSADDomainTrust.from_ldap(entry)
+		async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADDomainTrust_ATTRS):
+			if err is not None:
+				yield None, err
+				return
+			yield MSADDomainTrust.from_ldap(entry), None
 
 
 	async def create_user(self, username, password):
@@ -588,7 +649,7 @@ class MSLDAPClient:
 		:param password: The password of the user
 		:type password: str
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 
 		"""
 		user_dn = 'CN=%s,CN=Users,%s' % (username, self._tree)
@@ -603,7 +664,7 @@ class MSLDAPClient:
 		:param password: The password of the user
 		:type password: str
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 
 		"""
 		try:
@@ -641,7 +702,7 @@ class MSLDAPClient:
 		:param user_dn: The user's DN
 		:type user_dn: str
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 
 		"""
 		changes = {
@@ -656,7 +717,7 @@ class MSLDAPClient:
 		:param user_dn: The user's DN
 		:type user_dn: str
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 
 		"""
 		changes = {
@@ -671,7 +732,7 @@ class MSLDAPClient:
 		:param user_dn: The user's DN
 		:type user_dn: str
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 
 		"""
 		changes = {
@@ -688,7 +749,7 @@ class MSLDAPClient:
 		:param spn: The SPN to be added. It must follow the SPN string format specifications.
 		:type spn: str
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 
 		"""
 		changes = {
@@ -703,7 +764,7 @@ class MSLDAPClient:
 		:param user_dn: The user's DN
 		:type user_dn: str
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 
 		"""
 		changes = {
@@ -720,7 +781,7 @@ class MSLDAPClient:
 		:param user_dn: The user's DN
 		:type user_dn: str
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 
 		"""
 		return await self._con.delete(user_dn)
@@ -737,7 +798,7 @@ class MSLDAPClient:
 		:param oldpass: The current password
 		:type oldpass: str
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 
 		"""
 		changes = {
@@ -762,7 +823,7 @@ class MSLDAPClient:
 		:param group_dn: The groups's DN
 		:type group_dn: str
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 
 
 		"""
@@ -773,19 +834,62 @@ class MSLDAPClient:
 
 	async def get_object_by_dn(self, dn, expected_class = None):
 		ldap_filter = r'(distinguishedName=%s)' % dn
-		async for entry in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+		async for entry, err in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+			if err is not None:
+				yield None, err
+				return
 			temp = entry['attributes'].get('objectClass')
 			if expected_class:
-				yield expected_class.from_ldap(entry)
+				yield expected_class.from_ldap(entry), None
 			
 			if not temp:
-				yield entry
+				yield entry, None
 			elif 'user' in temp:
-				yield MSADUser.from_ldap(entry)
+				yield MSADUser.from_ldap(entry), None
 			elif 'group' in temp:
-				yield MSADGroup.from_ldap(entry)
+				yield MSADGroup.from_ldap(entry), None
+
+	async def modify(self, dn, changes, controls = None):
+		"""
+		Performs the modify operation.
+		
+		:param dn: The DN of the object whose attributes are to be modified
+		:type dn: str
+		:param changes: Describes the changes to be made on the object. Must be a dictionary of the following format: {'attribute': [('change_type', [value])]}
+		:type changes: dict
+		:param controls: additional controls to be passed in the query
+		:type controls: dict
+		:return: A tuple of (True, None) on success or (False, Exception) on error. 
+		:rtype: (:class:`bool`, :class:`Exception`)
+		"""
+		return await self._con.modify(dn, changes, controls=controls)
 
 
+	async def add(self, dn, attributes):
+		"""
+		Performs the add operation.
+		
+		:param dn: The DN of the object to be added
+		:type dn: str
+		:param attributes: Attributes to be used in the operation
+		:type attributes: dict
+		:return: A tuple of (True, None) on success or (False, Exception) on error. 
+		:rtype: (:class:`bool`, :class:`Exception`)
+		"""
+		
+		return await self._con.add(dn, attributes)
+
+	async def delete(self, dn):
+		"""
+		Performs the delete operation.
+		
+		:param dn: The DN of the object to be deleted
+		:type dn: str
+		:return: A tuple of (True, None) on success or (False, Exception) on error. 
+		:rtype: (:class:`bool`, :class:`Exception`)
+		"""
+
+		return await self._con.delete(dn)
 
 	#async def get_permissions_for_dn(self, dn):
 	#	"""

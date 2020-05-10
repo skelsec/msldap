@@ -123,3 +123,16 @@ Encryption
 .. code:: python
 
 	'ldap+ntlm-password://TEST\\victim:Passw0rd!1@10.10.10.2/?encrypt=1'
+
+Proxy
+--------------------
+| Socks4 and Socks5 proxying is fully supported. 
+| Proxy settings are controlled via additional url parameters
+| The following attributes must be set:
+| proxyhost - IP address or hostname of the proxy server
+| proxyport - port of the proxy service
+| proxytype - type os the proxy. Can be `socks5` or `socks4`
+
+.. code:: python
+
+	'ldap+ntlm-password://TEST\\victim:Passw0rd!1@10.10.10.2/?proxyhost=127.0.0.1&proxyport=1080&proxytype=socks5'

@@ -82,7 +82,9 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		"""Fetches kerberoastable user accounts"""
 		try:
 			await self.do_ldapinfo(False)
-			async for user in self.connection.get_all_service_user_objects():
+			async for user, err in self.connection.get_all_service_user_objects():
+				if err is not None:
+					raise err
 				print(user.sAMAccountName)
 		except:
 			traceback.print_exc()
@@ -91,7 +93,9 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		"""Fetches ASREP-roastable user accounts"""
 		try:
 			await self.do_ldapinfo(False)
-			async for user in self.connection.get_all_knoreq_user_objects():
+			async for user, err in self.connection.get_all_knoreq_user_objects():
+				if err is not None:
+					raise err
 				print(user.sAMAccountName)
 		except:
 			traceback.print_exc()
@@ -106,7 +110,9 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			users_filename = 'users_%s.tsv' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 			pbar = tqdm(desc = 'Writing users to file %s' % users_filename)
 			with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
-				async for user in self.connection.get_all_user_objects():
+				async for user, err in self.connection.get_all_users():
+					if err is not None:
+						raise err
 					pbar.update()
 					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS)))
 			print('Users dump was written to %s' % users_filename)
@@ -114,7 +120,9 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			users_filename = 'computers_%s.tsv' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 			pbar = tqdm(desc = 'Writing computers to file %s' % users_filename)
 			with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
-				async for user in self.connection.get_all_machine_objects():
+				async for user, err in self.connection.get_all_machines():
+					if err is not None:
+						raise err
 					pbar.update()
 					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS)))
 			print('Computer dump was written to %s' % users_filename)
@@ -131,7 +139,9 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				attributes = attributes.split(',')
 			logging.debug('Query: %s' % (query))
 			logging.debug('Attributes: %s' % (attributes))
-			async for entry in self.connection.pagedsearch(query, attributes):
+			async for entry, err in self.connection.pagedsearch(query, attributes):
+				if err is not None:
+					raise err
 				print(entry)
 		except:
 			traceback.print_exc()
@@ -169,7 +179,12 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		try:
 			await self.do_ldapinfo(False)
 			await self.do_adinfo(False)
-			async for user in self.connection.get_user(samaccountname):
+			user, err = await self.connection.get_user(samaccountname)
+			if err is not None:
+				raise err
+			if user is None:
+				print('User not found!')
+			else:
 				print(user)
 		except:
 			traceback.print_exc()
@@ -179,8 +194,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		try:
 			await self.do_ldapinfo(False)
 			await self.do_adinfo(False)
-			async for sec_info in self.connection.get_objectacl_by_dn(dn):
-				print(str(SECURITY_DESCRIPTOR.from_bytes(sec_info.nTSecurityDescriptor)))
+			sec_info, err = await self.connection.get_objectacl_by_dn(dn)
+			if err is not None:
+				raise err
+			print(str(SECURITY_DESCRIPTOR.from_bytes(sec_info)))
 		except:
 			traceback.print_exc()
 
@@ -189,7 +206,9 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		try:
 			await self.do_ldapinfo(False)
 			await self.do_adinfo(False)
-			async for gpo in self.connection.get_all_gpos():
+			async for gpo, err in self.connection.get_all_gpos():
+				if err is not None:
+					raise err
 				print(gpo)
 		except:
 			traceback.print_exc()
@@ -197,7 +216,9 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 	async def do_laps(self):
 		"""Feteches all laps passwords"""
 		try:
-			async for entry in self.connection.get_all_laps():
+			async for entry, err in self.connection.get_all_laps():
+				if err is not None:
+					raise err
 				pwd = '<MISSING>'
 				if 'ms-mcs-AdmPwd' in entry['attributes']:
 					pwd = entry['attributes']['ms-mcs-AdmPwd']
@@ -211,14 +232,19 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			await self.do_ldapinfo(False)
 			await self.do_adinfo(False)
 			group_sids = []
-			async for group_sid in self.connection.get_tokengroups(dn):
+			async for group_sid, err in self.connection.get_tokengroups(dn):
+				if err is not None:
+					raise err
 				group_sids.append(group_sids)
-				group_dn = await self.connection.get_dn_for_objectsid(group_sid)
+				group_dn, err = await self.connection.get_dn_for_objectsid(group_sid)
+				if err is not None:
+					raise err
 				print('%s - %s' % (group_dn, group_sid))
 				
 			if len(group_sids) == 0:
 				print('No memberships found')
-		except:
+		except Exception as e:
+			print(e)
 			traceback.print_exc()
 
 	async def do_bindtree(self, newtree):
@@ -230,7 +256,9 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 	async def do_trusts(self):
 		"""Feteches gives back domain trusts"""
 		try:
-			async for entry in self.connection.get_all_trusts():
+			async for entry, err in self.connection.get_all_trusts():
+				if err is not None:
+					raise err
 				print(entry.get_line())
 		except:
 			traceback.print_exc()
@@ -319,7 +347,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 	async def do_test(self):
 		"""testing, dontuse"""
 		try:
-			async for entry in self.connection.get_all_objectacl():
+			async for entry, err in self.connection.get_all_objectacl():
+				if err is not None:
+					raise err
+
 				if entry.objectClass[-1] != 'user':
 					print(entry.objectClass)
 		except:

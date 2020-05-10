@@ -7,13 +7,33 @@
 
 import platform
 import hashlib
+import getpass
+import base64
+import enum
 from urllib.parse import urlparse, parse_qs
 
 from msldap.commons.credential import MSLDAPCredential, LDAPAuthProtocol, MSLDAP_KERBEROS_PROTOCOLS
 from msldap.commons.target import MSLDAPTarget, LDAPProtocol
 from msldap.commons.proxy import MSLDAPProxy, MSLDAPProxyType
 from msldap.client import MSLDAPClient
+from msldap.connection import MSLDAPClientConnection
 
+class PLAINTEXTSCHEME(enum.Enum):
+	"""
+	Additional conveinence functions.
+	"""
+	SIMPLE_PROMPT = 'SIMPLE_PROMPT'
+	SIMPLE_HEX = 'SIMPLE_HEX'
+	SIMPLE_B64 = 'SIMPLE_B64'
+	PLAIN_PROMPT = 'PLAIN_PROMPT'
+	PLAIN_HEX = 'PLAIN_HEX'
+	PLAIN_B64 = 'PLAIN_B64'
+	SICILY_PROMPT = 'SICILY_PROMPT'
+	SICILY_HEX = 'SICILY_HEX'
+	SICILY_B64 = 'SICILY_B64'
+	NTLM_PROMPT = 'NTLM_PROMPT'
+	NTLM_HEX = 'NTLM_HEX'
+	NTLM_B64 = 'NTLM_B64'
 
 class MSLDAPURLDecoder:
 
@@ -85,6 +105,8 @@ class MSLDAPURLDecoder:
 		self.serverip = None
 		self.proxy = None
 
+		self.__pwpreprocess = None
+
 		self.parse()
 
 
@@ -119,6 +141,11 @@ class MSLDAPURLDecoder:
 		cred = self.get_credential()
 		target = self.get_target()
 		return MSLDAPClient(target, cred, ldap_query_page_size = self.target_pagesize)
+	
+	def get_connection(self):
+		cred = self.get_credential()
+		target = self.get_target()
+		return MSLDAPClientConnection(target, cred)
 
 	def scheme_decoder(self, scheme):
 		schemes = []
@@ -147,9 +174,59 @@ class MSLDAPURLDecoder:
 			return
 		
 		try:
-			self.auth_scheme = LDAPAuthProtocol(schemes[1])
+			x = PLAINTEXTSCHEME(schemes[1])
+			if x == PLAINTEXTSCHEME.SIMPLE_PROMPT:
+				self.auth_scheme = LDAPAuthProtocol.SIMPLE
+				self.__pwpreprocess = 'PROMPT'
+
+			if x == PLAINTEXTSCHEME.SIMPLE_HEX:
+				self.auth_scheme = LDAPAuthProtocol.SIMPLE
+				self.__pwpreprocess = 'HEX'
+
+			if x == PLAINTEXTSCHEME.SIMPLE_B64:
+				self.auth_scheme = LDAPAuthProtocol.SIMPLE
+				self.__pwpreprocess = 'B64'
+
+			if x == PLAINTEXTSCHEME.PLAIN_PROMPT:
+				self.auth_scheme = LDAPAuthProtocol.PLAIN
+				self.__pwpreprocess = 'PROMPT'
+
+			if x == PLAINTEXTSCHEME.PLAIN_HEX:
+				self.auth_scheme = LDAPAuthProtocol.PLAIN
+				self.__pwpreprocess = 'HEX'
+
+			if x == PLAINTEXTSCHEME.PLAIN_B64:
+				self.auth_scheme = LDAPAuthProtocol.PLAIN
+				self.__pwpreprocess = 'B64'
+
+			if x == PLAINTEXTSCHEME.SICILY_PROMPT:
+				self.auth_scheme = LDAPAuthProtocol.SICILY
+				self.__pwpreprocess = 'PROMPT'
+
+			if x == PLAINTEXTSCHEME.SICILY_HEX:
+				self.auth_scheme = LDAPAuthProtocol.SICILY
+				self.__pwpreprocess = 'HEX'
+
+			if x == PLAINTEXTSCHEME.SICILY_B64:
+				self.auth_scheme = LDAPAuthProtocol.SICILY
+				self.__pwpreprocess = 'B64'
+
+			if x == PLAINTEXTSCHEME.NTLM_PROMPT:
+				self.auth_scheme = LDAPAuthProtocol.NTLM_PASSWORD
+				self.__pwpreprocess = 'PROMPT'
+
+			if x == PLAINTEXTSCHEME.NTLM_HEX:
+				self.auth_scheme = LDAPAuthProtocol.NTLM_PASSWORD
+				self.__pwpreprocess = 'HEX'
+
+			if x == PLAINTEXTSCHEME.NTLM_B64:
+				self.auth_scheme = LDAPAuthProtocol.NTLM_PASSWORD
+				self.__pwpreprocess = 'B64'			
 		except:
-			raise Exception('Uknown scheme!')
+			try:
+				self.auth_scheme = LDAPAuthProtocol(schemes[1])
+			except:
+				raise Exception('Uknown scheme!')
 		
 		return
 
@@ -158,6 +235,19 @@ class MSLDAPURLDecoder:
 		self.scheme_decoder(url_e.scheme)
 
 		self.password = url_e.password
+		if self.__pwpreprocess is not None:
+			if self.__pwpreprocess == 'PROMPT':
+				self.password = getpass.getpass()
+
+			elif self.__pwpreprocess == 'HEX':
+				self.password = bytes.fromhex(self.password).decode()
+
+			elif self.__pwpreprocess == 'B64':
+				self.password = base64.b64decode(self.password).decode()
+
+			else:
+				raise Exception('Unknown password preprocess directive %s' % self.__pwpreprocess)
+
 
 		if url_e.username is not None:
 			if url_e.username.find('\\') != -1:
