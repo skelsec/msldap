@@ -157,6 +157,13 @@ class MSLDAPClientConnection:
 		return messages
 
 	async def connect(self):
+		"""
+		Connects to the remote server. Establishes the session, but doesn't perform binding.
+		This function MUST be called first before the `bind` operation.
+
+		:return: A tuple of (True, None) on success or (False, Exception) on error. 
+		:rtype: tuple
+		"""
 		try:
 			logger.debug('Connecting!')
 			self.network = await MSLDAPNetworkSelector.select(self.target)
@@ -181,6 +188,13 @@ class MSLDAPClientConnection:
 			return False, e
 
 	async def disconnect(self):
+		"""
+		Tears down the connection.
+
+		:return: Nothing
+		:rtype: None
+		"""
+
 		logger.debug('Disconnecting!')
 		self.bind_ok = False
 		self.handle_incoming_task.cancel()
@@ -201,6 +215,13 @@ class MSLDAPClientConnection:
 				self.network.is_plain_msg = False
 
 	async def bind(self):
+		"""
+		Performs the bind operation.
+		This is where the authentication happens. Remember to call `connect` before this function!
+
+		:return: A tuple of (True, None) on success or (False, Exception) on error. 
+		:rtype: tuple
+		"""
 		logger.debug('BIND in progress...')
 		try:
 			if self.creds.auth_method == LDAPAuthProtocol.SICILY:
@@ -395,6 +416,16 @@ class MSLDAPClientConnection:
 			return False, e
 
 	async def add(self, entry, attributes):
+		"""
+		Performs the add operation.
+		
+		:param entry: The DN of the object to be added
+		:type entry: str
+		:param attributes: Attributes to be used in the operation
+		:type attributes: dict
+		:return: A tuple of (True, None) on success or (False, Exception) on error. 
+		:rtype: tuple
+		"""
 		try:
 			req = {
 				'entry' : entry.encode(),
@@ -423,6 +454,16 @@ class MSLDAPClientConnection:
 			return False, e
 
 	async def modify(self, entry, changes, controls = None):
+		"""
+		Performs the add operation.
+		
+		:param entry: The DN of the object whose attributes are to be modified
+		:type entry: str
+		:param changes: Describes the changes to be made on the object. Must be a dictionary of the following format: {'attribute': [('change_type', [value])]}
+		:type changes: dict
+		:return: A tuple of (True, None) on success or (False, Exception) on error. 
+		:rtype: tuple
+		"""
 		try:
 			req = {
 				'object' : entry.encode(),
@@ -453,6 +494,14 @@ class MSLDAPClientConnection:
 			return False, e
 
 	async def delete(self, entry):
+		"""
+		Performs the delete operation.
+		
+		:param entry: The DN of the object to be deleted
+		:type entry: str
+		:return: A tuple of (True, None) on success or (False, Exception) on error. 
+		:rtype: tuple
+		"""
 		try:
 			br = { 'delRequest' : DelRequest(entry.encode())}
 			msg = { 'protocolOp' : protocolOp(br)}
@@ -478,7 +527,29 @@ class MSLDAPClientConnection:
 	
 	async def search(self, base, filter, attributes, search_scope = 2, paged_size = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None, return_done = False):
 		"""
-		This function is a generator!!!!! Dont just call it but use it with "async for"
+		Performs the search operation.
+		
+		:param base: the base tree on which the search should be performed
+		:type base: 
+		:param filter: 
+		:type filter:
+		:param attributes: 
+		:type attributes:
+		:param search_scope: 
+		:type search_scope:
+		:param typesOnly: 
+		:type typesOnly: bool
+		:param derefAliases: 
+		:type derefAliases: int
+		:param timeLimit: 
+		:type timeLimit: int
+		:param controls: 
+		:type controls:
+		:param return_done: 
+		:type return_done: bool
+
+		:return: A tuple of (True, None) on success or (False, Exception) on error. 
+		:rtype: tuple
 		"""
 		if self.status != MSLDAPClientStatus.RUNNING:
 			yield None, Exception('Connection not running! Probably encountered an error')

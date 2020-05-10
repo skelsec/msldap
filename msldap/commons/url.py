@@ -210,7 +210,6 @@ class MSLDAPURLDecoder:
 					self.encrypt = bool(int(query[k][0]))
 				elif k == 'etype':
 					self.etypes = [int(x) for x in query[k]]
-					print(self.etypes)
 				elif k.startswith('auth'):
 					self.auth_settings[k[len('auth'):]] = query[k]
 				#elif k.startswith('same'):
