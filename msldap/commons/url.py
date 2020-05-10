@@ -36,6 +36,12 @@ class PLAINTEXTSCHEME(enum.Enum):
 	NTLM_B64 = 'NTLM_B64'
 
 class MSLDAPURLDecoder:
+	"""
+	The URL describes both the connection target and the credentials. This class creates all necessary objects to set up the client.
+	
+	:param url: 
+	:type url: str
+	"""
 
 	help_epilog = """
 	MSLDAP URL Format: <protocol>+<auth>://<username>:<password>@<ip_or_host>:<port>/<tree>/?<param>=<value>
@@ -111,6 +117,12 @@ class MSLDAPURLDecoder:
 
 
 	def get_credential(self):
+		"""
+		Creates a credential object
+		
+		:return: Credential object
+		:rtype: :class:`MSLDAPCredential`
+		"""
 		t = MSLDAPCredential(
 			domain=self.domain, 
 			username=self.username, 
@@ -124,6 +136,12 @@ class MSLDAPURLDecoder:
 		return t
 
 	def get_target(self):
+		"""
+		Creates a target object
+		
+		:return: Target object
+		:rtype: :class:`MSLDAPTarget`
+		"""
 		target = MSLDAPTarget(
 			self.ldap_host, 
 			port = self.ldap_port, 
@@ -138,11 +156,23 @@ class MSLDAPURLDecoder:
 		return target
 
 	def get_client(self):
+		"""
+		Creates a client that can be used to interface with the server
+		
+		:return: LDAP client
+		:rtype: :class:`MSLDAPClient`
+		"""
 		cred = self.get_credential()
 		target = self.get_target()
 		return MSLDAPClient(target, cred, ldap_query_page_size = self.target_pagesize)
 	
 	def get_connection(self):
+		"""
+		Creates a connection that can be used to interface with the server
+		
+		:return: LDAP connection
+		:rtype: :class:`MSLDAPClientConnection`
+		"""
 		cred = self.get_credential()
 		target = self.get_target()
 		return MSLDAPClientConnection(target, cred)

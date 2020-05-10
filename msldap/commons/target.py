@@ -15,6 +15,22 @@ class LDAPProtocol(enum.Enum):
 
 
 class MSLDAPTarget:
+	"""
+	Describes the connection to the server.
+	
+	:param host: IP address or hostname of the server
+	:type host: str
+	:param port: port of the LDAP service running on the server
+	:type port: int
+	:param proto: Connection protocol to be used
+	:type proto: :class:`LDAPProtocol`
+	:param tree: The tree to connect to
+	:type tree: str
+	:param proxy: specifies what kind of proxy to be used
+	:type proxy: :class:`MSLDAPProxy`
+	:param timeout: connection timeout in seconds
+	:type timeout: int
+	"""
 	def __init__(self, host, port = 389, proto = LDAPProtocol.TCP, tree = None, proxy = None, timeout = 10):
 		self.proto = proto
 		self.host = host

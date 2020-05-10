@@ -6,3 +6,7 @@ API
 
    client
    connection
+   credential
+   target
+   proxy
+   url

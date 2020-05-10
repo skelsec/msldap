@@ -163,7 +163,7 @@ class MSLDAPClientConnection:
 		This function MUST be called first before the `bind` operation.
 
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 		"""
 		try:
 			logger.debug('Connecting!')
@@ -221,7 +221,7 @@ class MSLDAPClientConnection:
 		This is where the authentication happens. Remember to call `connect` before this function!
 
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 		"""
 		logger.debug('BIND in progress...')
 		try:
@@ -425,7 +425,7 @@ class MSLDAPClientConnection:
 		:param attributes: Attributes to be used in the operation
 		:type attributes: dict
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 		"""
 		try:
 			req = {
@@ -465,7 +465,7 @@ class MSLDAPClientConnection:
 		:param controls: additional controls to be passed in the query
 		:type controls: dict
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 		"""
 		try:
 			req = {
@@ -503,7 +503,7 @@ class MSLDAPClientConnection:
 		:param entry: The DN of the object to be deleted
 		:type entry: str
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: tuple
+		:rtype: (:class:`bool`, :class:`Exception`)
 		"""
 		try:
 			br = { 'delRequest' : DelRequest(entry.encode())}

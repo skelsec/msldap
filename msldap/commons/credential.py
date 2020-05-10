@@ -69,7 +69,23 @@ MSLDAP_KERBEROS_PROTOCOLS = [
 ]
 
 class MSLDAPCredential:
-	def __init__(self, domain=None, username= None, password = None, auth_method = None, settings = None):
+	"""
+	Describes the user's credentials to be used for authentication during the bind operation.
+	
+	:param domain: Domain of the user
+	:type domain: str
+	:param username: Username of the user
+	:type username: str
+	:param password: The authentication secret. The actual contents depend on the `auth_method`
+	:type password: str
+	:param auth_method: The ahtentication method to be performed during bind operation
+	:type auth_method: :class:`LDAPAuthProtocol`
+	:param settings: Additional settings
+	:type settings: dict
+	:param etypes: Supported encryption types for Kerberos authentication.
+	:type etypes: List[:class:`int`]
+	"""
+	def __init__(self, domain=None, username= None, password = None, auth_method = None, settings = None, etypes = None):
 		self.auth_method = auth_method
 		self.domain   = domain
 		self.username = username
@@ -77,7 +93,7 @@ class MSLDAPCredential:
 		self.signing_preferred = False
 		self.encryption_preferred = False
 		self.settings = settings
-		self.etypes = None
+		self.etypes = etypes
 
 	def get_msuser(self):
 		if not self.domain:

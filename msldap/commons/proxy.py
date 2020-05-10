@@ -19,14 +19,32 @@ class MSLDAPProxyType(enum.Enum):
 	MULTIPLEXOR_SSL = 'MULTIPLEXOR_SSL'
 
 class MSLDAPProxy:
-	def __init__(self):
-		self.type = None
-		self.target = None
-		self.auth   = None
+	"""
+	Describes the proxy to be used when connecting to the server. Used as a parameter to the `MSLDAPTarget` object
+	
+	:param type: Specifies the proxy type
+	:type type: :class:`MSLDAPProxyType`
+	:param target: 
+	:type target: 
+	:param auth: Specifies the proxy authentication if any
+	:type auth: 
+	"""
+	def __init__(self, type = None, target = None, auth = None):
+		self.type = type
+		self.target = target
+		self.auth = auth
 
 
 	@staticmethod
 	def from_params(url_str):
+		"""
+		Creates a proxy object from the parameters found in an LDAP URL string
+
+		:param type: url_str
+		:type type: str
+		:return: The proxy object 
+		:rtype: :class:`MSLDAPProxy`
+		"""
 		proxy = MSLDAPProxy()
 		url = urlparse(url_str)
 		if url.query is None:
