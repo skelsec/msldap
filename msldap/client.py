@@ -296,7 +296,7 @@ class MSLDAPClient:
 		async for entry, err in self.pagedsearch(ldap_filter, attributes):
 			yield entry, err
 
-	async def get_all_service_user_objects(self, include_machine = False):
+	async def get_all_service_users(self, include_machine = False):
 		"""
 		Fetches all service user objects from the AD, and returns MSADUser object.
 		Service user refers to an user with SPN (servicePrincipalName) attribute set
@@ -321,7 +321,7 @@ class MSLDAPClient:
 			yield MSADUser.from_ldap(entry, self._ldapinfo), None
 		logger.debug('Finished polling for entries!')
 
-	async def get_all_knoreq_user_objects(self, include_machine = False):
+	async def get_all_knoreq_users(self, include_machine = False):
 		"""
 		Fetches all user objects with useraccountcontrol DONT_REQ_PREAUTH flag set from the AD, and returns MSADUser object.
 		
