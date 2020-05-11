@@ -66,7 +66,7 @@ def run():
 
 	elif args.command == 'spn':
 		connection.connect()
-		adinfo = connection.get_ad_info()
+		adinfo, err = connection.get_ad_info()
 		with open(args.outfile, 'w', newline='', encoding = 'utf8') as f:
 			for user in connection.get_all_service_user_objects():
 				f.write(user.sAMAccountName + '\r\n')
