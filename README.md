@@ -1,3 +1,5 @@
+[![Documentation Status](https://readthedocs.org/projects/msldap/badge/?version=latest)](https://msldap.readthedocs.io/en/latest/?badge=latest)
+
 # msldap
 LDAP library for MS AD
 
