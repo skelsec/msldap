@@ -3,6 +3,9 @@
 # msldap
 LDAP library for MS AD
 
+# Documentation
+[Awesome documentation here!](https://msldap.readthedocs.io/en/latest/)
+
 # Features
  - Comes with a built-in console LDAP client
  - All parameters can be conrolled via a conveinent URL (see below)
@@ -14,7 +17,6 @@ LDAP library for MS AD
  - Minimal footprint
  - A lot of pre-built queries for convenient information polling
  - Easy to integrate to your project
- - Completely missing documentation
  - No testing suite
 
 # Installation
