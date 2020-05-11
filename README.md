@@ -1,5 +1,8 @@
 [![Documentation Status](https://readthedocs.org/projects/msldap/badge/?version=latest)](https://msldap.readthedocs.io/en/latest/?badge=latest)
 
+# msldap client
+![Documentation Status](https://user-images.githubusercontent.com/19204702/81515211-3761e880-9333-11ea-837f-bcbe2a67ee48.gif )
+
 # msldap
 LDAP library for MS AD
 
@@ -41,30 +44,53 @@ The major change was needed in version 0.2.0 to unify different connection optio
 The new connection string is composed in the following manner:  
 `<protocol>+<auth_method>://<domain>\<username>:<password>@<ip>:<port>/?<param>=<value>&<param>=<value>&...`  
 Detailed explanation with examples:  
-```
-	MSLDAP URL Format: <protocol>+<auth>://<username>:<password>@<ip_or_host>:<port>/<tree>/?<param>=<value>
+```	
+<protocol>+<auth>://<username>:<password>@<ip_or_host>:<port>/<tree>/?<param>=<value>
+
+
 	<protocol> sets the ldap protocol following values supported:
 		- ldap
-		- ldaps (ldap over SSL)
-	<auth> can be omitted if plaintext authentication is to be performed, otherwise:
-		- ntlm
-		- sspi (windows only!)
+		- ldaps
+		
+	<auth> can be omitted if plaintext authentication is to be performed (in that case it default to ntlm-password), otherwise:
+		- ntlm-password
+		- ntlm-nt
+		- kerberos-password (dc option param must be used)
+		- kerberos-rc4 / kerberos-nt (dc option param must be used)
+		- kerberos-aes (dc option param must be used)
+		- kerberos-keytab (dc option param must be used)
+		- kerberos-ccache (dc option param must be used)
+		- sspi-ntlm (windows only!)
+		- sspi-kerberos (windows only!)
 		- anonymous
 		- plain
+		- simple
+		- sicily (same format as ntlm-nt but using the SICILY authentication)
+		
+	<tree>:
+		OPTIONAL. Specifies the root tree of all queries
+		
 	<param> can be:
 		- timeout : connction timeout in seconds
 		- proxytype: currently only socks5 proxy is supported
 		- proxyhost: Ip or hostname of the proxy server
 		- proxyport: port of the proxy server
 		- proxytimeout: timeout ins ecodns for the proxy connection
-		- encrypt: enable encryption (applies to kerberos/ntlm/SSPI)
-		- etype: chhose which encryption type the kerberos should use (kerberos only, not SSPI!)
+		- dc: the IP address of the domain controller, MUST be used for kerberos authentication
 
 	Examples:
-	ldap://10.10.10.2
-	ldaps://test.corp
-	ldap+sspi:///test.corp
-	ldap+ntlm://TEST\\victim:password@10.10.10.2
+	ldap://10.10.10.2 (anonymous bind)
+	ldaps://test.corp (anonymous bind)
+	ldap+sspi-ntlm://test.corp
+	ldap+sspi-kerberos://test.corp
+	ldap://TEST\\victim:<password>@10.10.10.2 (defaults to SASL GSSAPI NTLM)
+	ldap+simple://TEST\\victim:<password>@10.10.10.2 (SASL SIMPLE auth)
+	ldap+plain://TEST\\victim:<password>@10.10.10.2 (SASL SIMPLE auth)
+	ldap+ntlm-password://TEST\\victim:<password>@10.10.10.2
+	ldap+ntlm-nt://TEST\\victim:<nthash>@10.10.10.2
+	ldap+kerberos-password://TEST\\victim:<password>@10.10.10.2
+	ldap+kerberos-rc4://TEST\\victim:<rc4key>@10.10.10.2
+	ldap+kerberos-aes://TEST\\victim:<aes>@10.10.10.2
 	ldap://TEST\\victim:password@10.10.10.2/DC=test,DC=corp/
 	ldap://TEST\\victim:password@10.10.10.2/DC=test,DC=corp/?timeout=99&proxytype=socks5&proxyhost=127.0.0.1&proxyport=1080&proxytimeout=44
 ```
