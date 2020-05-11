@@ -1,5 +1,8 @@
 [![Documentation Status](https://readthedocs.org/projects/msldap/badge/?version=latest)](https://msldap.readthedocs.io/en/latest/?badge=latest)
 
+# msldap client
+![Documentation Status](https://user-images.githubusercontent.com/19204702/81515211-3761e880-9333-11ea-837f-bcbe2a67ee48.gif )
+
 # msldap
 LDAP library for MS AD
 
