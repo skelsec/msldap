@@ -26,10 +26,9 @@ OR
 `pip install msldap`
 
 # Prerequisites
- - `ldap3` module. It's pure python so you dont have to compile anything.
  - `winsspi` module. For windows only. This supports SSPI based authentication.  
  - `asn1crypto` module. Some LDAP queries incorporate ASN1 strucutres to be sent on top of the ASN1 transport XD
- - `socks5line` module. To support socks5 proxying.
+ - `asysocks` module. To support socks proxying.
  - `aiocmd` For the interactive client
  - `asciitree` For plotting nice trees in the interactive client
  
