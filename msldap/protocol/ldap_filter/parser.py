@@ -142,7 +142,7 @@ class Grammar(object):
     _input_size = None
     _actions = None
 
-    REGEX_1 = re.compile('^[^!*\\x29]')
+    REGEX_1 = re.compile('^[^*\\x29]') #re.compile('^[^!*\\x29]')
     REGEX_2 = re.compile('^[a-fA-F0-9]')
     REGEX_3 = re.compile('^[\\x20]')
     REGEX_4 = re.compile('^[\\x09]')

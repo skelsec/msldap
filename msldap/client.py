@@ -396,6 +396,7 @@ class MSLDAPClient:
 			if err is not None:
 				return None, err
 			return entry['attributes'].get('nTSecurityDescriptor'), None
+		return None, None
 
 	async def set_objectacl_by_dn(self, object_dn, data, flags = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION):
 		"""
