@@ -224,7 +224,7 @@ LDAP_ATTRIBUTE_TYPES = {
 	'lockoutThreshold' : list_int_one,
 	'lockOutObservationWindow' : list_int_one,
 	'lockoutDuration' : list_int_one,
-	'forceLogoff' : list_str_one,
+	'forceLogoff' : int2timedelta,
 	'creationTime' : int2dt,
 	'maxPwdAge' : int2timedelta,
 	'pwdHistoryLength' : list_int_one,
