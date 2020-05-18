@@ -8,8 +8,9 @@ from msldap.ldap_objects.common import MSLDAP_UAC, vn
 
 MSADGPO_ATTRS = [
 	'cn', 'displayName', 'distinguishedName', 'flags', 'gPCFileSysPath', 
-	'gPCFunctionalityVersion', 'gPCMachineExtensionNames', 'objectClass',
-	'objectGUID', 'systemFlags', 'versionNumber', 'whenChanged', 'whenCreated',
+	'gPCFunctionalityVersion', 'gPCMachineExtensionNames', 'gPCUserExtensionNames',
+	'objectClass', 'objectGUID', 'systemFlags', 'versionNumber', 'whenChanged',
+	'whenCreated',
 ]
 
 class MSADGPO:
@@ -21,6 +22,7 @@ class MSADGPO:
 		self.gPCFileSysPath = None #str
 		self.gPCFunctionalityVersion = None #str
 		self.gPCMachineExtensionNames = None
+		self.gPCUserExtensionNames = None
 		self.objectClass = None #str
 		self.objectGUID = None #uid
 		self.systemFlags = None #str
@@ -39,6 +41,7 @@ class MSADGPO:
 		adi.gPCFileSysPath = entry['attributes'].get('gPCFileSysPath')
 		adi.gPCFunctionalityVersion = entry['attributes'].get('gPCFunctionalityVersion')
 		adi.gPCMachineExtensionNames = entry['attributes'].get('gPCMachineExtensionNames')
+		adi.gPCUserExtensionNames = entry['attributes'].get('gPCUserExtensionNames')
 		adi.objectClass = entry['attributes'].get('objectClass')
 		adi.objectGUID = entry['attributes'].get('objectGUID')
 		adi.systemFlags = entry['attributes'].get('systemFlags')
@@ -57,6 +60,7 @@ class MSADGPO:
 		t['gPCFileSysPath'] = vn(self.gPCFileSysPath)
 		t['gPCFunctionalityVersion'] = vn(self.gPCFunctionalityVersion)
 		t['gPCMachineExtensionNames'] = vn(self.gPCMachineExtensionNames)
+		t['gPCUserExtensionNames'] = vn(self.gPCUserExtensionNames)
 		t['systemFlags'] = vn(self.systemFlags)
 		t['objectClass'] = vn(self.objectClass)
 		t['objectGUID'] = vn(self.objectGUID)

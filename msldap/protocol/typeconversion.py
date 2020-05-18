@@ -254,6 +254,7 @@ LDAP_ATTRIBUTE_TYPES = {
 	'versionNumber' : list_int_one,
 	'gPCFunctionalityVersion' : list_int_one,
 	'gPCMachineExtensionNames' : list_str,
+	'gPCUserExtensionNames' : list_str,
 	'groupType' : list_int_one,
 	'member' : list_str,
 	'adminCount' : list_int_one,
@@ -282,6 +283,9 @@ LDAP_ATTRIBUTE_TYPES_ENC = {
 	'userPrincipalName' : list_str_one_enc,
 	'servicePrincipalName' : list_str_enc,
 	'msds-additionaldnshostname' : list_str_enc,
+	'gPCMachineExtensionNames' : list_str_enc,
+	'gPCUserExtensionNames' : list_str_enc,
+	'versionNumber' : list_int_one_enc,
 }
 
 def encode_attributes(x):
