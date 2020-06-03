@@ -4,6 +4,14 @@
 #  Tamas Jos (@skelsec)
 #
 
+
+MSADOU_ATTRS = [ 	
+	'description', 'distinguishedName', 'dSCorePropagationData', 'gPLink', 'instanceType', 
+	'isCriticalSystemObject', 'name', 'nTSecurityDescriptor', 'objectCategory', 'objectClass', 
+	'objectGUID', 'ou', 'showInAdvancedViewOnly', 'systemFlags', 'uSNChanged', 'uSNCreated',
+	'whenChanged', 'whenCreated',
+]
+
 class MSADOU:
 	def __init__(self):
 		self.description = None #dunno

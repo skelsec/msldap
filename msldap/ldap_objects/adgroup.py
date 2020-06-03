@@ -7,6 +7,14 @@
 from msldap.wintypes import *
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
 
+MSADGroup_ATTRS = [ 	
+	'cn', 'distinguishedName', 'objectGUID', 'objectSid', 'groupType', 
+	'instanceType', 'name', 'member', 'sAMAccountName', 'systemFlags', 
+	'whenChanged', 'whenCreated', 'description', 'nTSecurityDescriptor',
+	'sAMAccountType',
+]
+
+
 class MSADGroup:
 	def __init__(self):
 		self.cn = None #str

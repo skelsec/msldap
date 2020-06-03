@@ -429,7 +429,7 @@ class MSLDAPClient:
 		:rtype: Iterator[(:class:`MSADGroup`, :class:`Exception`)]
 		"""
 		ldap_filter = r'(objectClass=group)'
-		async for entry, err in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+		async for entry, err in self.pagedsearch(ldap_filter, MSADGroup_ATTRS):
 			if err is not None:
 				yield None, err
 				return
@@ -443,7 +443,7 @@ class MSLDAPClient:
 		:rtype: Iterator[(:class:`MSADOU`, :class:`Exception`)]
 		"""
 		ldap_filter = r'(objectClass=organizationalUnit)'
-		async for entry, err in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+		async for entry, err in self.pagedsearch(ldap_filter, MSADOU_ATTRS):
 			if err is not None:
 				yield None, err
 				return
@@ -460,7 +460,7 @@ class MSLDAPClient:
 		"""
 
 		ldap_filter = r'(&(objectClass=group)(distinguishedName=%s))' % escape_filter_chars(group_dn)
-		async for entry, err in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+		async for entry, err in self.pagedsearch(ldap_filter, MSADGroup_ATTRS):
 			if err is not None:
 				return None, err
 			return MSADGroup.from_ldap(entry), None
@@ -476,7 +476,7 @@ class MSLDAPClient:
 		"""
 
 		ldap_filter = r'(&(objectClass=user)(distinguishedName=%s))' % user_dn
-		async for entry, err in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
+		async for entry, err in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
 			if err is not None:
 				return None, err
 			return MSADUser.from_ldap(entry), None
