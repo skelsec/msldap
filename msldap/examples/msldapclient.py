@@ -11,8 +11,8 @@ import csv
 import shlex
 import datetime
 
-from aiocmd import aiocmd
-from asciitree import LeftAligned
+from msldap.external.aiocmd.aiocmd import aiocmd
+from msldap.external.asciitree.asciitree import LeftAligned
 from tqdm import tqdm
 
 from msldap import logger
@@ -82,7 +82,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		"""Fetches kerberoastable user accounts"""
 		try:
 			await self.do_ldapinfo(False)
-			async for user, err in self.connection.get_all_service_user_objects():
+			async for user, err in self.connection.get_all_service_users():
 				if err is not None:
 					raise err
 				print(user.sAMAccountName)
@@ -93,7 +93,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		"""Fetches ASREP-roastable user accounts"""
 		try:
 			await self.do_ldapinfo(False)
-			async for user, err in self.connection.get_all_knoreq_user_objects():
+			async for user, err in self.connection.get_all_knoreq_users():
 				if err is not None:
 					raise err
 				print(user.sAMAccountName)

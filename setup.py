@@ -49,11 +49,9 @@ setup(
 		'asn1crypto',
 		'winsspi>=0.0.9;platform_system=="Windows"',
 		'minikerberos>=0.2.1',
-		'aiocmd',
-		'asciitree',
-		'asysocks',
+		'asysocks>=0.0.3',
 		'winacl>=0.0.2',
-		'prompt-toolkit<3.0.0',
+		'prompt-toolkit>=3.0.2',
 		'tqdm',
 	],
 	entry_points={
