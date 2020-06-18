@@ -44,6 +44,9 @@ class SocksProxyConnection:
 		self.proxy_task.cancel()
 		self.handle_in_task.cancel()
 
+	async def terminate(self):
+		await self.disconnect()
+
 	def get_peer_certificate(self):
 		raise Exception('Not yet implemented! SSL implementation on socks is missing!')
 		return self.writer.get_extra_info('socket').getpeercert(True)
