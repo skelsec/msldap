@@ -6,6 +6,7 @@
 
 from msldap.wintypes import *
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
+from winacl.dtyp.sid import SID
 
 MSADGroup_ATTRS = [ 	
 	'cn', 'distinguishedName', 'objectGUID', 'objectSid', 'groupType', 
@@ -77,9 +78,9 @@ class MSADGroup:
 				t.description = ', '.join(t.description)
 		
 		
-		temp = entry['attributes'].get('nTSecurityDescriptor')
-		if temp:
-			t.nTSecurityDescriptor = SID.from_bytes(temp)
+		#temp = entry['attributes'].get('nTSecurityDescriptor')
+		#if temp:
+		#	t.nTSecurityDescriptor = SID.from_bytes(temp)
 		return t
 		
 
