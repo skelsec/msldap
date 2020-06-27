@@ -49,7 +49,7 @@ setup(
 		'asn1crypto',
 		'winsspi>=0.0.9;platform_system=="Windows"',
 		'minikerberos>=0.2.1',
-		'asysocks>=0.0.3',
+		'asysocks>=0.0.5',
 		'winacl>=0.0.2',
 		'prompt-toolkit>=3.0.2',
 		'tqdm',

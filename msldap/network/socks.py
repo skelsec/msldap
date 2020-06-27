@@ -41,8 +41,12 @@ class SocksProxyConnection:
 		Disconnects from the socket.
 		Stops the reader and writer streams.
 		"""
-		self.proxy_task.cancel()
-		self.handle_in_task.cancel()
+		if self.client is not None:
+			await self.client.terminate()
+		if self.proxy_task is not None:
+			self.proxy_task.cancel()
+		if self.handle_in_q is not None:
+			self.handle_in_task.cancel()
 
 	async def terminate(self):
 		await self.disconnect()
@@ -114,6 +118,8 @@ class SocksProxyConnection:
 
 			self.target.proxy.target.endpoint_ip = self.target.host
 			self.target.proxy.target.endpoint_port = int(self.target.port)
+			self.target.proxy.target.endpoint_timeout = int(self.target.timeout)
+			self.target.proxy.target.timeout = int(self.target.timeout)
 
 			self.client = SOCKSClient(comms, self.target.proxy.target, self.target.proxy.auth)
 			self.proxy_task = asyncio.create_task(self.client.run())
