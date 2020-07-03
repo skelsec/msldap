@@ -33,6 +33,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		self.connection = None
 		self.adinfo = None
 		self.ldapinfo = None
+		self.domain_name = None
 
 	async def do_login(self, url = None):
 		"""Performs connection and login"""
@@ -73,6 +74,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		try:
 			if self.adinfo is None:
 				self.adinfo = self.connection._ldapinfo
+				self.domain_name = self.adinfo.distinguishedName.replace('DC','').replace('=','').replace(',','.')
 			if show is True:
 				print(self.adinfo)
 		except:
@@ -100,6 +102,23 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 
+	async def do_computeraddr(self):
+		"""Fetches all computer accounts"""
+		try:
+			await self.do_adinfo(False)
+			#machine_filename = '%s_computers_%s.txt' % (self.domain_name, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+		
+			async for machine, err in self.connection.get_all_machines():
+				if err is not None:
+					raise err
+					
+				dns = machine.dNSHostName
+				if dns is None:
+					dns = '%s.%s' % (machine.sAMAccountName[:-1], self.domain_name)
+
+				print(str(dns))
+		except:
+			traceback.print_exc()
 
 	async def do_dump(self):
 		"""Fetches ALL user and machine accounts from the domain with a LOT of attributes"""
