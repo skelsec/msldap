@@ -108,7 +108,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			await self.do_adinfo(False)
 			#machine_filename = '%s_computers_%s.txt' % (self.domain_name, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
 		
-			async for machine, err in self.connection.get_all_machines():
+			async for machine, err in self.connection.get_all_machines(attrs=['sAMAccountName', 'dNSHostName']):
 				if err is not None:
 					raise err
 					

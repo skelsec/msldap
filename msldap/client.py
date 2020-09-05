@@ -179,10 +179,12 @@ class MSLDAPClient:
 			yield MSADUser.from_ldap(entry, self._ldapinfo), None
 		logger.debug('Finished polling for entries!')
 
-	async def get_all_machines(self):
+	async def get_all_machines(self, attrs = MSADMachine_ATTRS):
 		"""
 		Fetches all machine objects available in the LDAP tree and yields them as MSADMachine object.
 
+		:param attrs: Lists of attributes to request (eg. `['sAMAccountName', 'dNSHostName']`) Default: all attrs.
+		:type attrs: list
 		:return: Async generator which yields (`MSADMachine`, None) tuple on success or (None, `Exception`) on error
 		:rtype: Iterator[(:class:`MSADMachine`, :class:`Exception`)]
 		
@@ -190,7 +192,7 @@ class MSLDAPClient:
 		logger.debug('Polling AD for all user objects')
 		ldap_filter = r'(sAMAccountType=805306369)'
 
-		async for entry, err in self.pagedsearch(ldap_filter, MSADMachine_ATTRS):
+		async for entry, err in self.pagedsearch(ldap_filter, attrs):
 			if err is not None:
 				yield None, err
 				return
