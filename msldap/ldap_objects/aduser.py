@@ -80,7 +80,7 @@ class MSADUser:
 		self.canLogon = None #bool
 
 	# https://msdn.microsoft.com/en-us/library/cc245739.aspx
-	def calc_PasswordMustChange(self):
+	def calc_PasswordMustChange(self, adinfo):
 		# Crtieria 1
 		flags = [MSLDAP_UAC.DONT_EXPIRE_PASSWD, MSLDAP_UAC.SMARTCARD_REQUIRED, MSLDAP_UAC.INTERDOMAIN_TRUST_ACCOUNT, MSLDAP_UAC.WORKSTATION_TRUST_ACCOUNT, MSLDAP_UAC.SERVER_TRUST_ACCOUNT]
 		for flag in flags:
@@ -91,10 +91,10 @@ class MSADUser:
 		if self.pwdLastSet == 0:
 			return datetime.datetime.min
 
-		if (self.when_pw_expires - datetime.datetime.now()).total_seconds() > 0:
+		if adinfo.maxPwdAge == 0:
 			return datetime.datetime.max #never
 
-		return self.pwdLastSet.replace(tzinfo=None)
+		return (self.pwdLastSet - adinfo.maxPwdAge).replace(tzinfo=None)
 
 
 	# https://msdn.microsoft.com/en-us/library/cc223991.aspx
@@ -103,8 +103,8 @@ class MSADUser:
 		for flag in flags:
 			if flag & self.userAccountControl:
 				return False
-
-		if (self.accountExpires.replace(tzinfo=None) - datetime.datetime.now()).total_seconds() < 0:
+		
+		if (not (MSLDAP_UAC.DONT_EXPIRE_PASSWD & self.userAccountControl)) and (self.accountExpires.replace(tzinfo=None) - datetime.datetime.now()).total_seconds() < 0:
 			return False
 
 		#
@@ -162,11 +162,10 @@ class MSADUser:
 			adi.userAccountControl = MSLDAP_UAC(temp)
 
 			if adinfo:
-				adi.when_pw_change = (adi.pwdLastSet - adinfo.minPwdAge/10000000).replace(tzinfo=None)
-				adi.when_pw_expires = (adi.pwdLastSet - adinfo.maxPwdAge/10000000).replace(tzinfo=None)
-				adi.must_change_pw = adi.calc_PasswordMustChange() #datetime
-				if adi.sAMAccountName[-1] != '$':
-					adi.canLogon = adi.calc_CanLogon() #bool
+				adi.when_pw_change = (adi.pwdLastSet - adinfo.minPwdAge).replace(tzinfo=None)
+				adi.when_pw_expires = (adi.pwdLastSet - adinfo.maxPwdAge).replace(tzinfo=None) if adinfo.maxPwdAge != 0 else adi.pwdLastSet
+				adi.must_change_pw = adi.calc_PasswordMustChange(adinfo) #datetime
+				adi.canLogon = adi.calc_CanLogon() #bool
 
 
 		return adi

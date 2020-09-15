@@ -4,6 +4,7 @@
 #  Tamas Jos (@skelsec)
 #
 
+import datetime
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
 
 MSADMachine_ATTRS = [
@@ -63,6 +64,53 @@ class MSADMachine:
 		self.whenCreated = None
 		self.servicePrincipalName = None
 		self.allowedtodelegateto = None
+
+		## calculated properties
+		self.when_pw_change = None #datetime
+		self.when_pw_expires = None #datetime
+		self.must_change_pw = None #datetime
+		self.canLogon = None #bool
+
+	# https://msdn.microsoft.com/en-us/library/cc245739.aspx
+	def calc_PasswordMustChange(self, adinfo):
+		# Crtieria 1
+		flags = [MSLDAP_UAC.DONT_EXPIRE_PASSWD, MSLDAP_UAC.SMARTCARD_REQUIRED, MSLDAP_UAC.INTERDOMAIN_TRUST_ACCOUNT, MSLDAP_UAC.WORKSTATION_TRUST_ACCOUNT, MSLDAP_UAC.SERVER_TRUST_ACCOUNT]
+		for flag in flags:
+			if flag & self.userAccountControl:
+				return datetime.datetime.max #never
+
+		#criteria 2
+		if self.pwdLastSet == 0:
+			return datetime.datetime.min
+
+		if adinfo.maxPwdAge == 0:
+			return datetime.datetime.max #never
+
+		return (self.pwdLastSet - adinfo.maxPwdAge).replace(tzinfo=None)
+
+
+	# https://msdn.microsoft.com/en-us/library/cc223991.aspx
+	def calc_CanLogon(self):
+		flags = [MSLDAP_UAC.ACCOUNTDISABLE, MSLDAP_UAC.LOCKOUT, MSLDAP_UAC.SMARTCARD_REQUIRED, MSLDAP_UAC.INTERDOMAIN_TRUST_ACCOUNT, MSLDAP_UAC.WORKSTATION_TRUST_ACCOUNT, MSLDAP_UAC.SERVER_TRUST_ACCOUNT]
+		for flag in flags:
+			if flag & self.userAccountControl:
+				return False
+		
+		if (not (MSLDAP_UAC.DONT_EXPIRE_PASSWD & self.userAccountControl)) and (self.accountExpires.replace(tzinfo=None) - datetime.datetime.now()).total_seconds() < 0:
+			return False
+
+		#
+		# TODO: logonHours check!
+		#
+		
+		if self.must_change_pw == datetime.datetime.min:
+			#can logon, but must change the password!
+			return True
+
+		if (self.must_change_pw - datetime.datetime.now()).total_seconds() < 0:
+			return False
+
+		return True
 		
 	@staticmethod
 	def from_ldap(entry, adinfo = None):
@@ -106,6 +154,13 @@ class MSADMachine:
 		temp = entry['attributes'].get('userAccountControl')
 		if temp:
 			adi.userAccountControl = MSLDAP_UAC(temp)
+
+			if adinfo:
+				adi.when_pw_change = (adi.pwdLastSet - adinfo.minPwdAge).replace(tzinfo=None)
+				adi.when_pw_expires = (adi.pwdLastSet - adinfo.maxPwdAge).replace(tzinfo=None) if adinfo.maxPwdAge != 0 else adi.pwdLastSet
+				adi.must_change_pw = adi.calc_PasswordMustChange(adinfo) #datetime
+				adi.canLogon = adi.calc_CanLogon() #bool
+
 		return adi
 		
 	def to_dict(self):
