@@ -88,12 +88,15 @@ class MSADUser:
 				return datetime.datetime.max #never
 
 		#criteria 2
-		if self.pwdLastSet == 0:
+		if self.pwdLastSet == datetime.timedelta():
 			return datetime.datetime.min
 
-		if adinfo.maxPwdAge == 0:
+		if adinfo.maxPwdAge == datetime.timedelta(): #empty timedelta
 			return datetime.datetime.max #never
 
+		if adinfo.maxPwdAge.days < -3650: #this is needed, because some ADs have mawPwdAge set for a huge number BUT not to the minimum
+			return datetime.datetime.max #never
+			
 		return (self.pwdLastSet - adinfo.maxPwdAge).replace(tzinfo=None)
 
 
@@ -163,7 +166,10 @@ class MSADUser:
 
 			if adinfo:
 				adi.when_pw_change = (adi.pwdLastSet - adinfo.minPwdAge).replace(tzinfo=None)
-				adi.when_pw_expires = (adi.pwdLastSet - adinfo.maxPwdAge).replace(tzinfo=None) if adinfo.maxPwdAge != 0 else adi.pwdLastSet
+				if adinfo.maxPwdAge.days < -3650: #this is needed, because some ADs have mawPwdAge set for a huge number BUT not to the minimum
+					adi.when_pw_expires = datetime.timedelta.max
+				else:
+					adi.when_pw_expires = (adi.pwdLastSet - adinfo.maxPwdAge).replace(tzinfo=None) if adinfo.maxPwdAge != 0 else adi.pwdLastSet
 				adi.must_change_pw = adi.calc_PasswordMustChange(adinfo) #datetime
 				adi.canLogon = adi.calc_CanLogon() #bool
 

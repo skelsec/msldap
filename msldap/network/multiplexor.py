@@ -46,12 +46,12 @@ class MultiplexorProxyConnection:
 			tp.target.server_port = server_info['listen_port']
 			tp.target.is_bind = False
 			tp.target.proto = SocksProtocol.TCP
-			tp.target.timeout = 10
+			tp.target.timeout = self.target.timeout
 			tp.target.buffer_size = 4096
 			
 			tp.target.endpoint_ip = self.target.host
 			tp.target.endpoint_port = self.target.port
-			tp.target.endpoint_timeout = self.target.timeout
+			tp.target.endpoint_timeout = None # TODO: maybe implement endpoint timeout in the msldap target?
 			tp.type = MSLDAPProxyType.SOCKS5
 
 			newtarget = copy.deepcopy(self.target)

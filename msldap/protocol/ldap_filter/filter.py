@@ -1,7 +1,7 @@
 import re
 import platform
 
-import msldap.protocol.ldap_filter.parser as parser
+from msldap.protocol.ldap_filter import parser
 from msldap.protocol.ldap_filter.soundex import soundex_compare
 
 

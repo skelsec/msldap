@@ -32,16 +32,17 @@ setup(
 	# Details
 	url="https://github.com/skelsec/msldap",
 
-	zip_safe = True,
+	zip_safe = False,
 	#
 	# license="LICENSE.txt",
 	description="Python library to play with MS LDAP",
 	long_description="Python library to play with MS LDAP",
 
 	# long_description=open("README.txt").read(),
-	python_requires='>=3.6',
+	python_requires='>=3.7',
 	classifiers=(
-		"Programming Language :: Python :: 3.6",
+		"Programming Language :: Python :: 3.7",
+		"Programming Language :: Python :: 3.8",
 		"License :: OSI Approved :: MIT License",
 		"Operating System :: OS Independent",
 	),
