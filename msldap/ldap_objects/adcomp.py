@@ -161,7 +161,7 @@ class MSADMachine:
 			if adinfo:
 				adi.when_pw_change = (adi.pwdLastSet - adinfo.minPwdAge).replace(tzinfo=None)
 				if adinfo.maxPwdAge.days < -3650: #this is needed, because some ADs have mawPwdAge set for a huge number BUT not to the minimum
-					adi.when_pw_expires = datetime.timedelta.max
+					adi.when_pw_expires = datetime.datetime.max
 				else:
 					adi.when_pw_expires = (adi.pwdLastSet - adinfo.maxPwdAge).replace(tzinfo=None) if adinfo.maxPwdAge != 0 else adi.pwdLastSet
 				adi.must_change_pw = adi.calc_PasswordMustChange(adinfo) #datetime
