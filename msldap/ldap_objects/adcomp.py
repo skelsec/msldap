@@ -16,6 +16,7 @@ MSADMachine_ATTRS = [
 	'operatingSystem', 'operatingSystemVersion','primaryGroupID', 
 	'pwdLastSet', 'sAMAccountName', 'sAMAccountType', 'sn', 'userAccountControl', 
 	'whenChanged', 'whenCreated', 'servicePrincipalName','msDS-AllowedToDelegateTo',
+	'msDS-AllowedToActOnBehalfOfOtherIdentity'
 ]
 			
 MSADMachine_TSV_ATTRS = [
@@ -64,6 +65,7 @@ class MSADMachine:
 		self.whenCreated = None
 		self.servicePrincipalName = None
 		self.allowedtodelegateto = None
+		self.allowedtoactonbehalfofotheridentity = None
 
 		## calculated properties
 		self.when_pw_change = None #datetime
@@ -153,6 +155,7 @@ class MSADMachine:
 		adi.servicePrincipalName = entry['attributes'].get('servicePrincipalName')
 		
 		adi.allowedtodelegateto = entry['attributes'].get('msDS-AllowedToDelegateTo')
+		adi.allowedtoactonbehalfofotheridentity = entry['attributes'].get('msDS-AllowedToActOnBehalfOfOtherIdentity')
 
 		temp = entry['attributes'].get('userAccountControl')
 		if temp:
@@ -218,3 +221,10 @@ class MSADMachine:
 	def get_row(self, attrs):
 		t = self.to_dict()
 		return [str(t.get(x)) if x[:4]!='UAC_' else str(self.uac_to_textflag(x)) for x in attrs]
+
+
+	def __str__(self):
+		t = ''
+		for k in self.__dict__:
+			t += '%s : %s\r\n' % (k, self.__dict__[k])
+		return t

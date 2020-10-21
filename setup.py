@@ -51,7 +51,7 @@ setup(
 		'winsspi>=0.0.9;platform_system=="Windows"',
 		'minikerberos>=0.2.4',
 		'asysocks>=0.0.10',
-		'winacl>=0.0.2',
+		'winacl>=0.0.7',
 		'prompt-toolkit>=3.0.2',
 		'tqdm',
 	],

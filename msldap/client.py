@@ -262,6 +262,25 @@ class MSLDAPClient:
 			return None, None
 		logger.debug('Finished polling for entries!')
 
+	async def get_machine(self, sAMAccountName):
+		"""
+		Fetches one machine object from the AD, based on the sAMAccountName attribute (read: username) 
+		
+		:param sAMAccountName: The username of the machine.
+		:type sAMAccountName: str
+		:return: A tuple with the user as `MSADMachine` and an `Exception` is there was any
+		:rtype: (:class:`MSADMachine`, :class:`Exception`)
+		"""
+		logger.debug('Polling AD for user %s'% sAMAccountName)
+		ldap_filter = r'(&(sAMAccountType=805306369)(sAMAccountName=%s))' % sAMAccountName
+		async for entry, err in self.pagedsearch(ldap_filter, MSADMachine_ATTRS):
+			if err is not None:
+				return None, err
+			return MSADMachine.from_ldap(entry, self._ldapinfo), None
+		else:
+			return None, None
+		logger.debug('Finished polling for entries!')
+
 	async def get_ad_info(self):
 		"""
 		Polls for basic AD information (needed for determine password usage characteristics!)
@@ -834,6 +853,25 @@ class MSLDAPClient:
 			'member': [('add', [user_dn])]
 		}
 		return await self._con.modify(group_dn, changes)
+
+	async def del_user_from_group(self, user_dn: str, group_dn: str):
+		"""
+		Removes user from group
+
+		:param user_dn: The user's DN
+		:type user_dn: str
+		:param group_dn: The groups's DN
+		:type group_dn: str
+		:return: A tuple of (True, None) on success or (False, Exception) on error. 
+		:rtype: (:class:`bool`, :class:`Exception`)
+
+
+		"""
+		changes = {
+			'member': [('delete', [user_dn])]
+		}
+		return await self._con.modify(group_dn, changes)
+		
 
 	async def get_object_by_dn(self, dn, expected_class = None):
 		ldap_filter = r'(distinguishedName=%s)' % dn

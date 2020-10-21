@@ -91,7 +91,7 @@ def list_bytes_one(x):
 	return x[0]
 
 def list_bytes_one_enc(x):
-	return [x]
+	return x
 
 def int2timedelta(x):
 	x = int(x[0])
@@ -268,7 +268,9 @@ LDAP_ATTRIBUTE_TYPES = {
 	'trustPartner' : list_str_one,
 	'securityIdentifier' : list_bytes_one,
 	'versionNumber' : list_int_one,
-	'unicodePwd' : list_str_one
+	'unicodePwd' : list_str_one,
+	'ms-mcs-AdmPwd' : list_str_one,
+	'msDS-AllowedToActOnBehalfOfOtherIdentity' : list_bytes_one,
 }
 
 LDAP_ATTRIBUTE_TYPES_ENC = {
@@ -286,6 +288,9 @@ LDAP_ATTRIBUTE_TYPES_ENC = {
 	'gPCMachineExtensionNames' : list_str_enc,
 	'gPCUserExtensionNames' : list_str_enc,
 	'versionNumber' : list_int_one_enc,
+	'member' : list_str_enc,
+	'msDS-AllowedToActOnBehalfOfOtherIdentity' : list_bytes_one_enc,
+	'nTSecurityDescriptor' : list_bytes_one_enc,
 }
 
 def encode_attributes(x):

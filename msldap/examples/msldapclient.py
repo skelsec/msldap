@@ -10,6 +10,7 @@ import logging
 import csv
 import shlex
 import datetime
+import copy
 
 from msldap.external.aiocmd.aiocmd import aiocmd
 from msldap.external.asciitree.asciitree import LeftAligned
@@ -22,6 +23,7 @@ from msldap.commons.url import MSLDAPURLDecoder
 from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
 
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
+from winacl.dtyp.sid import SID
 
 
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
@@ -208,6 +210,170 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 
+	async def do_machine(self, samaccountname):
+		"""Feteches a machine object based on the sAMAccountName of the machine"""
+		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
+			machine, err = await self.connection.get_machine(samaccountname)
+			if err is not None:
+				raise err
+			if machine is None:
+				print('machine not found!')
+			else:
+				print(machine)
+				####TEST
+				x = SECURITY_DESCRIPTOR.from_bytes(machine.allowedtoactonbehalfofotheridentity)
+				print(x)
+		except:
+			traceback.print_exc()
+
+	#async def do_addallowedtoactonbehalfofotheridentity(self, target_name, add_computer_name):
+	#	"""Adds a SID to the msDS-AllowedToActOnBehalfOfOtherIdentity protperty of target_dn"""
+	#	try:
+	#		await self.do_ldapinfo(False)
+	#		await self.do_adinfo(False)
+	#
+	#		try:
+	#			new_owner_sid = SID.from_string(sid)
+	#		except:
+	#			print('Incorrect SID!')
+	#			return False, Exception('Incorrect SID')
+	#
+	#
+	#		target_sd = None
+	#		if target_attribute is None or target_attribute == '':
+	#			target_attribute = 'nTSecurityDescriptor'
+	#			res, err = await self.connection.get_objectacl_by_dn(target_dn)
+	#			if err is not None:
+	#				raise err
+	#			target_sd = SECURITY_DESCRIPTOR.from_bytes(res)
+	#		else:
+	#			
+	#			query = '(distinguishedName=%s)' % target_dn
+	#			async for entry, err in self.connection.pagedsearch(query, [target_attribute]):
+	#				if err is not None:
+	#					raise err
+	#				print(entry['attributes'][target_attribute])
+	#				target_sd = SECURITY_DESCRIPTOR.from_bytes(entry['attributes'][target_attribute])
+	#				break
+	#			else:
+	#				print('Target DN not found!')
+	#				return False, Exception('Target DN not found!')
+	#
+	#		print(target_sd)
+	#		new_sd = copy.deepcopy(target_sd)
+	#		new_sd.Owner = new_owner_sid
+	#		print(new_sd)
+	#
+	#		changes = {
+	#			target_attribute : [('replace', [new_sd.to_bytes()])]
+	#		}
+	#		_, err = await self.connection.modify(target_dn, changes)
+	#		if err is not None:
+	#			raise err
+	#
+	#		print('Change OK!')
+	#	except:
+	#		traceback.print_exc()
+
+	async def do_changeowner(self, new_owner_sid, target_dn, target_attribute = None):
+		"""Changes the owner in a Security Descriptor to the new_owner_sid on an LDAP object or on an LDAP object's attribute identified by target_dn and target_attribute. target_attribute can be omitted to change the target_dn's SD's owner"""
+		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
+
+			try:
+				new_owner_sid = SID.from_string(new_owner_sid)
+			except:
+				print('Incorrect SID!')
+				return False, Exception('Incorrect SID')
+
+
+			target_sd = None
+			if target_attribute is None or target_attribute == '':
+				target_attribute = 'nTSecurityDescriptor'
+				res, err = await self.connection.get_objectacl_by_dn(target_dn)
+				if err is not None:
+					raise err
+				target_sd = SECURITY_DESCRIPTOR.from_bytes(res)
+			else:
+				
+				query = '(distinguishedName=%s)' % target_dn
+				async for entry, err in self.connection.pagedsearch(query, [target_attribute]):
+					if err is not None:
+						raise err
+					print(entry['attributes'][target_attribute])
+					target_sd = SECURITY_DESCRIPTOR.from_bytes(entry['attributes'][target_attribute])
+					break
+				else:
+					print('Target DN not found!')
+					return False, Exception('Target DN not found!')
+
+			new_sd = copy.deepcopy(target_sd)
+			new_sd.Owner = new_owner_sid
+
+			changes = {
+				target_attribute : [('replace', [new_sd.to_bytes()])]
+			}
+			_, err = await self.connection.modify(target_dn, changes)
+			if err is not None:
+				raise err
+
+			print('Change OK!')
+		except:
+			traceback.print_exc()
+
+	#async def do_setsd(self, sddl, target_dn, target_attribute):
+	#	"""Changes the owner in a Security Descriptor to the new_owner_sid on an LDAP object or on an LDAP object's attribute identified by target_dn and target_attribute. target_attribute can be omitted to change the target_dn's SD's owner"""
+	#	try:
+	#		await self.do_ldapinfo(False)
+	#		await self.do_adinfo(False)
+	#
+	#		try:
+	#			new_sd = SECURITY_DESCRIPTOR.from_s
+	#		except:
+	#			print('Incorrect SID!')
+	#			return False, Exception('Incorrect SID')
+	#
+	#
+	#		target_sd = None
+	#		if target_attribute is None or target_attribute == '':
+	#			target_attribute = 'nTSecurityDescriptor'
+	#			res, err = await self.connection.get_objectacl_by_dn(target_dn)
+	#			if err is not None:
+	#				raise err
+	#			target_sd = SECURITY_DESCRIPTOR.from_bytes(res)
+	#		else:
+	#			
+	#			query = '(distinguishedName=%s)' % target_dn
+	#			async for entry, err in self.connection.pagedsearch(query, [target_attribute]):
+	#				if err is not None:
+	#					raise err
+	#				print(entry['attributes'][target_attribute])
+	#				target_sd = SECURITY_DESCRIPTOR.from_bytes(entry['attributes'][target_attribute])
+	#				break
+	#			else:
+	#				print('Target DN not found!')
+	#				return False, Exception('Target DN not found!')
+	#
+	#		print(target_sd)
+	#		new_sd = copy.deepcopy(target_sd)
+	#		new_sd.Owner = new_owner_sid
+	#		print(new_sd)
+	#
+	#		changes = {
+	#			target_attribute : [('replace', [new_sd.to_bytes()])]
+	#		}
+	#		_, err = await self.connection.modify(target_dn, changes)
+	#		if err is not None:
+	#			raise err
+	#
+	#		print('Change OK!')
+	#	except:
+	#		traceback.print_exc()
+	#		
+
 	async def do_acl(self, dn):
 		"""Feteches security info for a given DN"""
 		try:
@@ -360,6 +526,26 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			print('Hostname added!')
+		except:
+			traceback.print_exc()
+
+	async def do_addusertogroup(self, user_dn, group_dn):
+		"""Adds user to specified group. Both user and group must be in DN format!"""
+		try:
+			_, err = await self.connection.add_user_to_group(user_dn, group_dn)
+			if err is not None:
+				raise err
+			print('User added to group!')
+		except:
+			traceback.print_exc()
+
+	async def do_deluserfromgroup(self, user_dn, group_dn):
+		"""Removes user from specified group. Both user and group must be in DN format!"""
+		try:
+			_, err = await self.connection.del_user_from_group(user_dn, group_dn)
+			if err is not None:
+				raise err
+			print('User added to group!')
 		except:
 			traceback.print_exc()
 			

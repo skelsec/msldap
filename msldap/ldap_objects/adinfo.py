@@ -11,7 +11,8 @@ MSADInfo_ATTRS = [
 	'name', 'nextRid', 'nTSecurityDescriptor', 'objectCategory', 'objectClass', 
 	'objectGUID', 'objectSid', 'pwdHistoryLength', 
 	'pwdProperties', 'serverState', 'systemFlags', 'uASCompat', 'uSNChanged', 
-	'uSNCreated', 'whenChanged', 'whenCreated', 'rIDManagerReference','msDS-Behavior-Version'
+	'uSNCreated', 'whenChanged', 'whenCreated', 'rIDManagerReference',
+	'msDS-Behavior-Version'
 ]
 class MSADInfo:
 	def __init__(self):
@@ -152,4 +153,5 @@ class MSADInfo:
 		t += 'uSNCreated: %s\n' % self.uSNCreated
 		t += 'whenChanged: %s\n' % self.whenChanged
 		t += 'whenCreated: %s\n' % self.whenCreated
+		t += 'domainmodelevel: %s\n' % self.domainmodelevel
 		return t 
