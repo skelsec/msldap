@@ -20,7 +20,7 @@ setup(
 
 	# Application author details:
 	author="Tamas Jos",
-	author_email="info@skelsec.com",
+	author_email="info@skelsecprojects.com",
 
 	# Packages
 	packages=find_packages(),
@@ -51,7 +51,7 @@ setup(
 		'winsspi>=0.0.9;platform_system=="Windows"',
 		'minikerberos>=0.2.4',
 		'asysocks>=0.0.10',
-		'winacl>=0.0.7',
+		'winacl>=0.1.0',
 		'prompt-toolkit>=3.0.2',
 		'tqdm',
 	],

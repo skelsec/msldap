@@ -435,12 +435,18 @@ class MSLDAPClient:
 		"""
 		
 		req_flags = SDFlagsRequestValue({'Flags' : flags})
-		controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
+		controls = [
+					Control({
+						'controlType' : b'1.2.840.113556.1.4.801',
+						'controlValue': req_flags.dump(),
+						'criticality' : True,
+					})
+				]
 
 		changes = {
 			'nTSecurityDescriptor': [('replace', [data])]
 		}
-		return await self._con.modify(object_dn, changes, controls = controls)		
+		return await self._con.modify(object_dn, changes, controls = controls)	
 		
 	async def get_all_groups(self):
 		"""
@@ -903,7 +909,10 @@ class MSLDAPClient:
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
 		:rtype: (:class:`bool`, :class:`Exception`)
 		"""
-		return await self._con.modify(dn, changes, controls=controls)
+		controls_conv = []
+		for control in controls:		
+			controls_conv.append(Control(control))
+		return await self._con.modify(dn, changes, controls=controls_conv)
 
 
 	async def add(self, dn, attributes):

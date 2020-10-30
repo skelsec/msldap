@@ -463,7 +463,7 @@ class MSLDAPClientConnection:
 		:param changes: Describes the changes to be made on the object. Must be a dictionary of the following format: {'attribute': [('change_type', [value])]}
 		:type changes: dict
 		:param controls: additional controls to be passed in the query
-		:type controls: dict
+		:type controls: List[class:`Control`] 
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
 		:rtype: (:class:`bool`, :class:`Exception`)
 		"""
@@ -549,7 +549,7 @@ class MSLDAPClientConnection:
 		:param timeLimit: Maximum time the search should take. If time limit reached the server SHOULD return an error
 		:type timeLimit: int
 		:param controls: additional controls to be passed in the query
-		:type controls: dict
+		:type controls: List[class:`Control`]
 		:param return_done: Controls wether the final 'done' LDAP message should be returned, or just the actual results
 		:type return_done: bool
 
@@ -589,8 +589,6 @@ class MSLDAPClientConnection:
 					msg_type = message['protocolOp'].name
 					message = message.native
 					if msg_type == 'searchResDone':
-						#print(message)
-						#print('BREAKING!')
 						if return_done is True:
 							yield (message, None)
 						break

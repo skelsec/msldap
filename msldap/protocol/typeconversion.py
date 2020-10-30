@@ -269,7 +269,7 @@ LDAP_ATTRIBUTE_TYPES = {
 	'securityIdentifier' : list_bytes_one,
 	'versionNumber' : list_int_one,
 	'unicodePwd' : list_str_one,
-	'ms-mcs-AdmPwd' : list_str_one,
+	'ms-Mcs-AdmPwd' : list_str_one,
 	'msDS-AllowedToActOnBehalfOfOtherIdentity' : list_bytes_one,
 }
 
