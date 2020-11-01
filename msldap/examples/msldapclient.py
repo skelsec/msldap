@@ -229,6 +229,34 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 
+	async def do_schemaentry(self, cn):
+		"""Feteches a schema object entry object based on the DN of the object (must start with CN=)"""
+		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
+			schemaentry, err = await self.connection.get_schemaentry(cn)
+			if err is not None:
+				raise err
+			
+			print(str(schemaentry))
+
+		except:
+			traceback.print_exc()
+
+	async def do_allschemaentry(self):
+		"""Feteches all schema object entry objects"""
+		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
+			async for schemaentry, err in self.connection.get_all_schemaentry():
+				if err is not None:
+					raise err
+				
+				print(str(schemaentry))
+
+		except:
+			traceback.print_exc()
+
 	#async def do_addallowedtoactonbehalfofotheridentity(self, target_name, add_computer_name):
 	#	"""Adds a SID to the msDS-AllowedToActOnBehalfOfOtherIdentity protperty of target_dn"""
 	#	try:

@@ -674,7 +674,7 @@ class MSLDAPClientConnection:
 						if err is not None:
 							yield (None, err)
 							return
-
+						
 						if 'resultCode' in res['protocolOp']:
 							for control in res['controls']:
 								if control['controlType'] == b'1.2.840.113556.1.4.319':

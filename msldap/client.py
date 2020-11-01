@@ -228,6 +228,60 @@ class MSLDAPClient:
 		async for entry, err in self.pagedsearch(ldap_filter, attributes):
 			yield entry, err
 
+	async def get_schemaentry(self, dn):
+		"""
+		Fetches one Schema entriy identified by dn
+
+		:return: (`MSADSchemaEntry`, None) tuple on success or (None, `Exception`) on error
+		:rtype: (:class:`MSADSchemaEntry`, :class:`Exception`)
+		"""
+		logger.debug('Polling Schema entry for %s'% dn)
+		
+		async for entry, err in self._con.pagedsearch(
+			dn, 
+			r'(distinguishedName=%s)' % escape_filter_chars(dn),
+			attributes = [x.encode() for x in MSADSCHEMAENTRY_ATTRS], 
+			size_limit = self.ldap_query_page_size, 
+			search_scope=BASE, 
+			controls = None, 
+			):
+				if err is not None:
+					raise err
+		
+				return MSADSchemaEntry.from_ldap(entry), None
+		else:
+			return None, None
+		logger.debug('Finished polling for entries!')
+	
+	async def get_all_schemaentry(self):
+		"""
+		Fetches all Schema entries under CN=Schema,CN=Configuration,...
+
+		:return: Async generator which yields (`MSADSchemaEntry`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`MSADSchemaEntry`, :class:`Exception`)]
+		"""
+		res = await self.get_tree_plot('CN=Schema,CN=Configuration,' + self._tree, level = 1)		
+		for x in res:
+			for dn in res[x]:
+				async for entry, err in self._con.pagedsearch(
+					dn, 
+					r'(distinguishedName=%s)' % escape_filter_chars(dn),
+					attributes = [x.encode() for x in MSADSCHEMAENTRY_ATTRS], 
+					size_limit = self.ldap_query_page_size, 
+					search_scope=BASE, 
+					controls = None, 
+					):
+						if err is not None:
+							yield None, err
+							return
+									
+						yield MSADSchemaEntry.from_ldap(entry), None
+						break
+				else:
+					yield None, None
+					
+		logger.debug('Finished polling for entries!')
+
 	async def get_laps(self, sAMAccountName):
 		"""
 		Fetches the LAPS password for a machine. This functionality is only available to specific high-privileged users.

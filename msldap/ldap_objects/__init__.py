@@ -13,6 +13,7 @@ from msldap.ldap_objects.adgroup import MSADGroup, MSADGroup_ATTRS
 from msldap.ldap_objects.adou import MSADOU, MSADOU_ATTRS
 from msldap.ldap_objects.adgpo import MSADGPO, MSADGPO_ATTRS
 from msldap.ldap_objects.adtrust import MSADDomainTrust, MSADDomainTrust_ATTRS
+from msldap.ldap_objects.adschemaentry import MSADSCHEMAENTRY_ATTRS, MSADSchemaEntry
 
 __all__ = [
     'MSADUser', 
@@ -34,4 +35,6 @@ __all__ = [
     'MSADDomainTrust_ATTRS',
     'MSADGroup_ATTRS',
     'MSADOU_ATTRS',
+    'MSADSCHEMAENTRY_ATTRS',
+    'MSADSchemaEntry',
 ]

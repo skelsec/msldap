@@ -7,12 +7,8 @@ from msldap.protocol.messages import Filter, Filters, \
 
 
 def equality(attr, value):
-	#print(attr)
-	#print(value)
 	if attr[-1] == ':':
-		#possible OID
 		name, oid_raw = attr[:-1].split(':')
-		#print(oid_raw)
 		return Filter({
 				'extensibleMatch' : MatchingRuleAssertion({
 						'matchingRule' : oid_raw.encode(),
@@ -61,9 +57,6 @@ def equality(attr, value):
 	
 
 def query_syntax_converter_inner(ftr):
-		#print(ftr.__dict__)
-		#print(ftr.comp)
-		#print(ftr.type)
 		if ftr.type == 'filter':
 			if ftr.comp == '=':
 				return equality(ftr.attr, ftr.val)
