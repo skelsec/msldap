@@ -14,7 +14,7 @@ MSADUser_ATTRS = [
 	'objectCategory', 'objectClass', 'objectGUID', 'objectSid', 'primaryGroupID', 
 	'pwdLastSet', 'sAMAccountName', 'sAMAccountType', 'sn', 'userAccountControl', 
 	'userPrincipalName', 'whenChanged', 'whenCreated','memberOf','member', 'servicePrincipalName',
-	'msDS-AllowedToDelegateTo',
+	'msDS-AllowedToDelegateTo', 'adminCount'
 ]
 MSADUser_TSV_ATTRS = [
 	'sAMAccountName', 'userPrincipalName' ,'canLogon', 'badPasswordTime', 'description',
@@ -22,7 +22,7 @@ MSADUser_TSV_ATTRS = [
 	'whenCreated', 'whenChanged', 'member', 'memberOf', 'servicePrincipalName', 
 	'objectSid', 'cn', 'UAC_SCRIPT', 'UAC_ACCOUNTDISABLE', 'UAC_LOCKOUT', 'UAC_PASSWD_NOTREQD', 
 	'UAC_PASSWD_CANT_CHANGE', 'UAC_ENCRYPTED_TEXT_PASSWORD_ALLOWED', 'UAC_DONT_EXPIRE_PASSWD', 
-	'UAC_USE_DES_KEY_ONLY', 'UAC_DONT_REQUIRE_PREAUTH', 'UAC_PASSWORD_EXPIRED'
+	'UAC_USE_DES_KEY_ONLY', 'UAC_DONT_REQUIRE_PREAUTH', 'UAC_PASSWORD_EXPIRED', 'adminCount'
 ]
 
 class MSADUser:
@@ -67,6 +67,7 @@ class MSADUser:
 		self.sAMAccountType = None #int
 		self.userAccountControl = None #UserAccountControl intflag
 		self.allowedtodelegateto = None
+		self.admincount = None
 
 		
 		## other
@@ -159,6 +160,7 @@ class MSADUser:
 		adi.countryCode = entry['attributes'].get('countryCode')
 		
 		adi.allowedtodelegateto = entry['attributes'].get('msDS-AllowedToDelegateTo')
+		adi.admincount = entry['attributes'].get('adminCount')
 		
 		temp = entry['attributes'].get('userAccountControl')
 		if temp:
@@ -213,6 +215,7 @@ class MSADUser:
 		t['when_pw_change'] = vn(self.when_pw_change)
 		t['when_pw_expires'] = vn(self.when_pw_expires)
 		t['must_change_pw'] = vn(self.must_change_pw)
+		t['admincount'] = self.admincount
 		t['canLogon'] = vn(self.canLogon)
 		return t
 
@@ -261,6 +264,7 @@ class MSADUser:
 		t += 'when_pw_change: %s\n' % self.when_pw_change
 		t += 'when_pw_expires: %s\n' % self.when_pw_expires
 		t += 'must_change_pw: %s\n' % self.must_change_pw
+		t += 'admincount: %s\n' % self.admincount
 		t += 'canLogon: %s\n' % self.canLogon
 
 		return t 
