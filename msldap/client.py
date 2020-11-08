@@ -909,6 +909,8 @@ class MSLDAPClient:
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
 		:rtype: (:class:`bool`, :class:`Exception`)
 		"""
+		if controls is None:
+			controls = []
 		controls_conv = []
 		for control in controls:		
 			controls_conv.append(Control(control))
