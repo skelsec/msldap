@@ -23,6 +23,8 @@ from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
 
 class MSLDAPClientConnection:
 	def __init__(self, target, creds):
+		if target is None:
+			raise Exception('Target cant be none!')
 		self.target = target
 		self.creds = creds
 		self.auth = AuthenticatorBuilder(self.creds, self.target).build()
@@ -198,8 +200,10 @@ class MSLDAPClientConnection:
 
 		logger.debug('Disconnecting!')
 		self.bind_ok = False
-		self.handle_incoming_task.cancel()
-		await self.network.terminate()
+		if self.handle_incoming_task is not None:
+			self.handle_incoming_task.cancel()
+		if self.network is not None:
+			await self.network.terminate()
 
 
 	def __bind_success(self):

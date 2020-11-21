@@ -84,8 +84,10 @@ class MSLDAPCredential:
 	:type settings: dict
 	:param etypes: Supported encryption types for Kerberos authentication.
 	:type etypes: List[:class:`int`]
+	:param encrypt: Use protocol-level encryption. Doesnt work on LDAPS
+	:type encrypt: bool
 	"""
-	def __init__(self, domain=None, username= None, password = None, auth_method = None, settings = None, etypes = None):
+	def __init__(self, domain=None, username= None, password = None, auth_method = None, settings = None, etypes = None, encrypt = False):
 		self.auth_method = auth_method
 		self.domain   = domain
 		self.username = username
@@ -94,6 +96,7 @@ class MSLDAPCredential:
 		self.encryption_preferred = False
 		self.settings = settings
 		self.etypes = etypes
+		self.encrypt = encrypt
 
 	def get_msuser(self):
 		if not self.domain:
