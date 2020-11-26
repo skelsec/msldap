@@ -580,6 +580,9 @@ async def amain(args):
 		await client.run()
 	else:
 		for command in args.commands:
+			if command == 'i':
+				await client.run()
+				return
 			cmd = shlex.split(command)
 			res = await client._run_single_command(cmd[0], cmd[1:])
 			if res is False:
@@ -591,7 +594,7 @@ def main():
 	parser.add_argument('-v', '--verbose', action='count', default=0, help='Verbosity, can be stacked')
 	parser.add_argument('-n', '--no-interactive', action='store_true')
 	parser.add_argument('url', help='Connection string in URL format.')
-	parser.add_argument('commands', nargs='*')
+	parser.add_argument('commands', nargs='*', help="Takes a series of commands which will be executed until error encountered. If the command is 'i' is encountered during execution it drops back to interactive shell.")
 
 	args = parser.parse_args()
 	
