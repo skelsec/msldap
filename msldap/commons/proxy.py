@@ -17,6 +17,7 @@ class MSLDAPProxyType(enum.Enum):
 	SOCKS5_SSL = 'SOCKS5_SSL'
 	MULTIPLEXOR = 'MULTIPLEXOR'
 	MULTIPLEXOR_SSL = 'MULTIPLEXOR_SSL'
+	WSNET = 'WSNET'
 
 class MSLDAPProxy:
 	"""
@@ -59,6 +60,8 @@ class MSLDAPProxy:
 			cu = SocksClientURL.from_params(url_str)
 			proxy.target = cu.get_target()
 			proxy.auth = cu.get_creds()
+		elif proxy.type == MSLDAPProxyType.WSNET:
+			return proxy
 		else:
 			proxy.target  = MSLDAPMultiplexorProxy.from_params(url_str)
 		

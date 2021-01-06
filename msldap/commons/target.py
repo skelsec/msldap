@@ -6,7 +6,10 @@
 #
 
 import enum
-import ssl
+try:
+	import ssl
+except:
+	print('MSLDAP import ssl failed. FAILING SILENTLY!!!!')
 
 class LDAPProtocol(enum.Enum):
 	TCP = 'TCP'

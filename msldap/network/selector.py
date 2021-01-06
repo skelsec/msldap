@@ -20,6 +20,9 @@ class MSLDAPNetworkSelector:
 		if target.proxy is not None:
 			if target.proxy.type in MSLDAP_SOCKS_PROXY_TYPES:
 				return SocksProxyConnection(target)
+			elif target.proxy.type == MSLDAPProxyType.WSNET:
+				from msldap.network.wsnet import WSNetProxyConnection
+				return WSNetProxyConnection(target)
 			else:
 				mpc = MultiplexorProxyConnection(target)
 				socks_proxy = await mpc.connect()

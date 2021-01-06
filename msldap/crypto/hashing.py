@@ -2,6 +2,7 @@ import hashlib
 import hmac
 
 from msldap.crypto.BASE import hashBASE, hmacBASE
+from aiosmb.crypto.MD4 import MD4
 
 class md5(hashBASE):
 	def __init__(self, data = None):
@@ -15,17 +16,19 @@ class md5(hashBASE):
 	def hexdigest(self):
 		return self._hash.hexdigest()
 
-class md4(hashBASE):
-	def __init__(self, data = None):
-		hashBASE.__init__(self, data)
-	def setup_hash(self):
-		self._hash = hashlib.new('md4')
-	def update(self, data):
-		return self._hash.update(data)
-	def digest(self):
-		return self._hash.digest()
-	def hexdigest(self):
-		return self._hash.hexdigest()
+#class md4(hashBASE):
+#	def __init__(self, data = None):
+#		hashBASE.__init__(self, data)
+#	def setup_hash(self):
+#		self._hash = hashlib.new('md4')
+#	def update(self, data):
+#		return self._hash.update(data)
+#	def digest(self):
+#		return self._hash.digest()
+#	def hexdigest(self):
+#		return self._hash.hexdigest()
+
+md4 = MD4
 
 class hmac_md5(hmacBASE):
 	def __init__(self, key):
