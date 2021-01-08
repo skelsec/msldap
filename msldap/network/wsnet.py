@@ -27,7 +27,6 @@ class WSNetProxyConnection:
 		self.target = target
 		
 		self.client = None
-		self.proxy_task = None
 		self.handle_in_task = None
 
 		self.out_queue = None#asyncio.Queue()
@@ -43,8 +42,6 @@ class WSNetProxyConnection:
 		"""
 		if self.client is not None:
 			await self.client.terminate()
-		if self.proxy_task is not None:
-			self.proxy_task.cancel()
 		if self.handle_in_q is not None:
 			self.handle_in_task.cancel()
 
@@ -101,7 +98,7 @@ class WSNetProxyConnection:
 			await self.in_queue.put((None, e))
 
 		finally:
-			self.proxy_task.cancel()
+			await self.client.terminate()
 
 
 		

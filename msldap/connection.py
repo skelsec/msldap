@@ -43,6 +43,12 @@ class MSLDAPClientConnection:
 		self.message_table_notify = {}
 		self.encryption_sequence_counter = 0 # this will be set by the inderlying auth algo
 		self.cb_data = None #for channel binding
+	
+	async def __aenter__(self):
+		return self
+		
+	async def __aexit__(self, exc_type, exc, traceback):
+		await asyncio.wait_for(self.disconnect(), timeout = 1)
 
 	async def __handle_incoming(self):
 		try:
