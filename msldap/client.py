@@ -4,6 +4,7 @@
 #  Tamas Jos (@skelsec)
 #
 
+import asyncio
 from msldap import logger
 from msldap.commons.common import MSLDAPClientStatus
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest, SDFlagsRequestValue
@@ -38,7 +39,20 @@ class MSLDAPClient:
 		self._tree = None
 		self._ldapinfo = None
 		self._con = None
+	
+	async def __aenter__(self):
+		return self
 		
+	async def __aexit__(self, exc_type, exc, traceback):
+		await asyncio.wait_for(self.disconnect(), timeout = 1)
+	
+	async def disconnect(self):
+		try:
+			if self._con is not None:
+				await self._con.disconnect()
+		
+		except Exception as e:
+			return False, e
 
 	async def connect(self):
 		try:
