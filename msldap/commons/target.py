@@ -6,10 +6,13 @@
 #
 
 import enum
+
+import platform
 try:
 	import ssl
 except:
-	print('MSLDAP import ssl failed. FAILING SILENTLY!!!!')
+	if platform.system() == 'Emscripten':
+		pass
 
 class LDAPProtocol(enum.Enum):
 	TCP = 'TCP'
