@@ -6,6 +6,7 @@ from msldap.commons.credential import MSLDAPCredential, LDAPAuthProtocol
 from msldap.authentication.spnego.native import SPNEGO
 from msldap.authentication.ntlm.native import NTLMAUTHHandler, NTLMHandlerSettings
 from msldap.authentication.kerberos.native import MSLDAPKerberos
+from msldap.commons.proxy import MSLDAPProxyType
 from minikerberos.common.target import KerberosTarget
 from minikerberos.common.proxy import KerberosProxy
 from minikerberos.common.creds import KerberosCredential
@@ -250,12 +251,18 @@ class AuthenticatorBuilder:
 			kcred.encrypt = self.creds.encrypt
 			
 			if self.target.proxy is not None:
-				kcred.target.proxy = KerberosProxy()
-				kcred.target.proxy.type = self.target.proxy.type
-				kcred.target.proxy.target = copy.deepcopy(self.target.proxy.target)
-				kcred.target.proxy.target.endpoint_ip = self.target.dc_ip
-				kcred.target.proxy.target.endpoint_port = 88
-				kcred.target.proxy.creds = copy.deepcopy(self.target.proxy.auth)
+				if self.target.proxy.type == MSLDAPProxyType.WSNET:
+					kcred.target.proxy = KerberosProxy()
+					kcred.target.proxy.type = 'WSNET'
+
+
+				else:
+					kcred.target.proxy = KerberosProxy()
+					kcred.target.proxy.type = self.target.proxy.type
+					kcred.target.proxy.target = copy.deepcopy(self.target.proxy.target)
+					kcred.target.proxy.target.endpoint_ip = self.target.dc_ip
+					kcred.target.proxy.target.endpoint_port = 88
+					kcred.target.proxy.creds = copy.deepcopy(self.target.proxy.auth)
 
 			handler = MSLDAPKerberos(kcred)
 			

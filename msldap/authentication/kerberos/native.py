@@ -114,7 +114,8 @@ class MSLDAPKerberos:
 
 	async def setup_kc(self):
 		try:
-			if self.target.proxy is None:
+			print(repr(self.target.proxy))
+			if self.target.proxy is None or self.target.proxy.type == 'WSNET':
 				self.kc = AIOKerberosClient(self.ccred, self.target)
 			elif  self.target.proxy.type in MSLDAP_SOCKS_PROXY_TYPES:
 				target = AIOKerberosClientSocksSocket(self.target)
