@@ -160,7 +160,3 @@ def test_template():
 def test_construct():
 	pass
 	
-if __name__ == '__main__':
-	from aiosmb.utils.hexdump import hexdump
-	
-	test()

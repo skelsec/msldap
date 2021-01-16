@@ -2,7 +2,7 @@ import hashlib
 import hmac
 
 from msldap.crypto.BASE import hashBASE, hmacBASE
-from aiosmb.crypto.MD4 import MD4
+from msldap.crypto.MD4 import MD4
 
 class md5(hashBASE):
 	def __init__(self, data = None):

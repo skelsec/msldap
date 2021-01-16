@@ -202,7 +202,3 @@ def test():
 	print(repr(cc3))
 	cc4 = NTLMv2ClientChallenge.from_bytes(cc3.to_bytes())
 
-if __name__ == '__main__':
-	from aiosmb.utils.hexdump import hexdump
-	import os
-	test()
