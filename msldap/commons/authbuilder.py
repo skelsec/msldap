@@ -65,6 +65,17 @@ class MSLDAPNTLMSSPICredential:
 		self.domain = None
 		self.encrypt = False
 
+class MSLDAPWSNETCredential:
+	def __init__(self):
+		self.type = 'NTLM'
+		self.username = '<CURRENT>'
+		self.domain = '<CURRENT>'
+		self.password = '<CURRENT>'
+		self.target = None
+		self.is_guest = False
+		self.agent_id = None
+		self.encrypt = False
+
 class MSLDAPMultiplexorCredential:
 	def __init__(self):
 		self.type = 'NTLM'
@@ -251,18 +262,11 @@ class AuthenticatorBuilder:
 			kcred.encrypt = self.creds.encrypt
 			
 			if self.target.proxy is not None:
-				if self.target.proxy.type == MSLDAPProxyType.WSNET:
-					kcred.target.proxy = KerberosProxy()
-					kcred.target.proxy.type = 'WSNET'
-
-
-				else:
 					kcred.target.proxy = KerberosProxy()
 					kcred.target.proxy.type = self.target.proxy.type
 					kcred.target.proxy.target = copy.deepcopy(self.target.proxy.target)
-					kcred.target.proxy.target.endpoint_ip = self.target.dc_ip
-					kcred.target.proxy.target.endpoint_port = 88
-					kcred.target.proxy.creds = copy.deepcopy(self.target.proxy.auth)
+					kcred.target.proxy.target[-1].endpoint_ip = self.target.dc_ip
+					kcred.target.proxy.target[-1].endpoint_port = 88
 
 			handler = MSLDAPKerberos(kcred)
 			
@@ -346,3 +350,42 @@ class AuthenticatorBuilder:
 				spneg.add_auth_context('MS KRB5 - Microsoft Kerberos 5', handler)
 				return spneg
 
+		elif self.creds.auth_method.value.startswith('WSNET'):
+			if self.creds.auth_method in [LDAPAuthProtocol.WSNET_NTLM]:
+				from msldap.authentication.ntlm.wsnet import MSLDAPWSNetNTLMAuth
+				
+				ntlmcred = MSLDAPWSNETCredential()
+				ntlmcred.type = 'NTLM'
+				if self.creds.username is not None:
+					ntlmcred.username = '<CURRENT>'
+				if self.creds.domain is not None:
+					ntlmcred.domain = '<CURRENT>'
+				if self.creds.password is not None:
+					ntlmcred.password = '<CURRENT>'
+				ntlmcred.is_guest = False
+				
+				handler = MSLDAPWSNetNTLMAuth(ntlmcred)
+				spneg = SPNEGO()
+				spneg.add_auth_context('NTLMSSP - Microsoft NTLM Security Support Provider', handler)
+				return spneg
+			
+
+			elif self.creds.auth_method in [LDAPAuthProtocol.WSNET_KERBEROS]:
+				from msldap.authentication.kerberos.wsnet import MSLDAPWSNetKerberosAuth
+
+				ntlmcred = MSLDAPWSNETCredential()
+				ntlmcred.type = 'KERBEROS'
+				ntlmcred.target = self.target
+				if self.creds.username is not None:
+					ntlmcred.username = '<CURRENT>'
+				if self.creds.domain is not None:
+					ntlmcred.domain = '<CURRENT>'
+				if self.creds.password is not None:
+					ntlmcred.password = '<CURRENT>'
+				ntlmcred.is_guest = False
+
+				handler = MSLDAPWSNetKerberosAuth(ntlmcred)
+				#setting up SPNEGO
+				spneg = SPNEGO()
+				spneg.add_auth_context('MS KRB5 - Microsoft Kerberos 5', handler)
+				return spneg

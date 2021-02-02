@@ -349,7 +349,7 @@ class NTLMAUTHHandler:
 		self.calc_signkey('Client')
 		self.calc_signkey('Server')
 
-	async def authenticate(self, authData, flags = None, seq_number = 0, cb_data = None):				
+	async def authenticate(self, authData, flags = None, seq_number = 0, cb_data = None):
 		if self.mode.upper() == 'CLIENT':
 			if self.iteration_cnt == 0:
 				if authData is not None:
