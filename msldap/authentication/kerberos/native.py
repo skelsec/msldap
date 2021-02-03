@@ -25,10 +25,12 @@ from minikerberos.network.aioclientsockssocket import AIOKerberosClientSocksSock
 # SMBKerberosCredential
 
 MSLDAP_SOCKS_PROXY_TYPES = [
-				MSLDAPProxyType.SOCKS4 , 
-				MSLDAPProxyType.SOCKS4_SSL , 
-				MSLDAPProxyType.SOCKS5 , 
-				MSLDAPProxyType.SOCKS5_SSL]
+	MSLDAPProxyType.SOCKS4, 
+	MSLDAPProxyType.SOCKS4_SSL, 
+	MSLDAPProxyType.SOCKS5, 
+	MSLDAPProxyType.SOCKS5_SSL,
+	MSLDAPProxyType.WSNET,
+]
 
 class MSLDAPKerberos:
 	def __init__(self, settings):
@@ -103,10 +105,8 @@ class MSLDAPKerberos:
 				ChecksumFlags.GSS_C_CONF_FLAG |\
 				ChecksumFlags.GSS_C_INTEG_FLAG |\
 				ChecksumFlags.GSS_C_REPLAY_FLAG |\
-				ChecksumFlags.GSS_C_SEQUENCE_FLAG #|\
-				#ChecksumFlags.GSS_C_MUTUAL_FLAG
-
-		#self.kc = AIOKerberosClient(self.ccred, self.target)
+				ChecksumFlags.GSS_C_SEQUENCE_FLAG
+		
 	
 	def get_session_key(self):
 		return self.session_key.contents, None
@@ -114,12 +114,9 @@ class MSLDAPKerberos:
 
 	async def setup_kc(self):
 		try:
-			print(repr(self.target.proxy))
-			if self.target.proxy is None or self.target.proxy.type == 'WSNET':
+			# sockst/wsnet proxying is handled by the minikerberos&asysocks modules
+			if self.target.proxy is None or self.target.proxy.type in MSLDAP_SOCKS_PROXY_TYPES:
 				self.kc = AIOKerberosClient(self.ccred, self.target)
-			elif  self.target.proxy.type in MSLDAP_SOCKS_PROXY_TYPES:
-				target = AIOKerberosClientSocksSocket(self.target)
-				self.kc = AIOKerberosClient(self.ccred, target)
 
 			elif self.target.proxy.type in [MSLDAPProxyType.MULTIPLEXOR, MSLDAPProxyType.MULTIPLEXOR_SSL]:
 				from msldap.network.multiplexor import MultiplexorProxyConnection
