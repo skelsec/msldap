@@ -76,6 +76,22 @@ class MSLDAPWSNETCredential:
 		self.agent_id = None
 		self.encrypt = False
 
+class MSLDAPSSPIProxyCredential:
+	def __init__(self):
+		self.type = 'NTLM'
+		self.username = '<CURRENT>'
+		self.domain = '<CURRENT>'
+		self.password = '<CURRENT>'
+		self.target = None
+		self.is_guest = False
+		self.agent_id = None
+		self.encrypt = False
+		self.host = '127.0.0.1'
+		self.port = 9999
+		self.proto = 'ws'
+
+		
+
 class MSLDAPMultiplexorCredential:
 	def __init__(self):
 		self.type = 'NTLM'
@@ -345,6 +361,61 @@ class AuthenticatorBuilder:
 				ntlmcred.encrypt = self.creds.encrypt
 
 				handler = MSLDAPKerberosMultiplexor(ntlmcred)
+				#setting up SPNEGO
+				spneg = SPNEGO()
+				spneg.add_auth_context('MS KRB5 - Microsoft Kerberos 5', handler)
+				return spneg
+
+		elif self.creds.auth_method.value.startswith('SSPIPROXY'):
+			if self.creds.auth_method == LDAPAuthProtocol.SSPIPROXY_NTLM:
+				from msldap.authentication.ntlm.sspiproxy import MSLDAPSSPIProxyNTLMAuth
+				ntlmcred = MSLDAPSSPIProxyCredential()
+				ntlmcred.type = 'NTLM'
+				if self.creds.username is not None:
+					ntlmcred.username = '<CURRENT>'
+				if self.creds.domain is not None:
+					ntlmcred.domain = '<CURRENT>'
+				if self.creds.password is not None:
+					ntlmcred.password = '<CURRENT>'
+				ntlmcred.is_guest = False
+				ntlmcred.encrypt = self.creds.encrypt
+				ntlmcred.host = self.creds.settings['host'][0]
+				ntlmcred.port = int(self.creds.settings['port'][0])
+				ntlmcred.proto = 'ws'
+				if 'proto' in self.creds.settings:
+					ntlmcred.proto = self.creds.settings['proto'][0]
+				if 'agentid' in self.creds.settings:
+					ntlmcred.agent_id = bytes.fromhex(self.creds.settings['agentid'][0])
+				
+				handler = MSLDAPSSPIProxyNTLMAuth(ntlmcred)
+				#setting up SPNEGO
+				spneg = SPNEGO()
+				spneg.add_auth_context('NTLMSSP - Microsoft NTLM Security Support Provider', handler)
+				return spneg
+
+			elif self.creds.auth_method == LDAPAuthProtocol.SSPIPROXY_KERBEROS:
+				from msldap.authentication.kerberos.sspiproxyws import MSLDAPSSPIProxyKerberosAuth
+
+				ntlmcred = MSLDAPSSPIProxyCredential()
+				ntlmcred.type = 'KERBEROS'
+				ntlmcred.target = self.target
+				if self.creds.username is not None:
+					ntlmcred.username = '<CURRENT>'
+				if self.creds.domain is not None:
+					ntlmcred.domain = '<CURRENT>'
+				if self.creds.password is not None:
+					ntlmcred.password = '<CURRENT>'
+				ntlmcred.is_guest = False
+				ntlmcred.encrypt = self.creds.encrypt
+				ntlmcred.host = self.creds.settings['host'][0]
+				ntlmcred.port = self.creds.settings['port'][0]
+				ntlmcred.proto = 'ws'
+				if 'proto' in self.creds.settings:
+					ntlmcred.proto = self.creds.settings['proto'][0]
+				if 'agentid' in self.creds.settings:
+					ntlmcred.agent_id = bytes.fromhex(self.creds.settings['agentid'][0])
+
+				handler = MSLDAPSSPIProxyKerberosAuth(ntlmcred)
 				#setting up SPNEGO
 				spneg = SPNEGO()
 				spneg.add_auth_context('MS KRB5 - Microsoft Kerberos 5', handler)
