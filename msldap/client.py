@@ -733,23 +733,6 @@ class MSLDAPClient:
 				yield None, err
 				return
 			yield MSADDomainTrust.from_ldap(entry), None
-
-
-	async def create_user(self, username, password):
-		"""
-		Creates a new user object with a password.
-		WARNING: this function only creates the user, but will not enable it! To create a user account to be used immediately, use the `create_user_dn` function!
-		
-		:param user_dn: The user's DN
-		:type user_dn: str
-		:param password: The password of the user
-		:type password: str
-		:return: A tuple of (True, None) on success or (False, Exception) on error. 
-		:rtype: (:class:`bool`, :class:`Exception`)
-
-		"""
-		user_dn = 'CN=%s,CN=Users,%s' % (username, self._tree)
-		return await self.create_user_dn(user_dn, password)
 		
 	async def create_user_dn(self, user_dn, password):
 		"""

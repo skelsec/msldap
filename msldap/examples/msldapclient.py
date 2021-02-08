@@ -80,8 +80,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				self.domain_name = self.adinfo.distinguishedName.replace('DC','').replace('=','').replace(',','.')
 			if show is True:
 				print(self.adinfo)
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_spns(self):
 		"""Fetches kerberoastable user accounts"""
@@ -91,9 +93,12 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				if err is not None:
 					raise err
 				print(user.sAMAccountName)
+			
+			return True
 		except:
 			traceback.print_exc()
-	
+			return False
+
 	async def do_asrep(self):
 		"""Fetches ASREP-roastable user accounts"""
 		try:
@@ -102,8 +107,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				if err is not None:
 					raise err
 				print(user.sAMAccountName)
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_computeraddr(self):
 		"""Fetches all computer accounts"""
@@ -120,8 +127,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 					dns = '%s.%s' % (machine.sAMAccountName[:-1], self.domain_name)
 
 				print(str(dns))
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_dump(self):
 		"""Fetches ALL user and machine accounts from the domain with a LOT of attributes"""
@@ -148,9 +157,11 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 					pbar.update()
 					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS)))
 			print('Computer dump was written to %s' % users_filename)
+			return True
 		except:
 			traceback.print_exc()
-		
+			return False
+
 	async def do_query(self, query, attributes = None):
 		"""Performs a raw LDAP query against the server. Secondary parameter is the requested attributes SEPARATED WITH COMMA (,)"""
 		try:
@@ -165,8 +176,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				if err is not None:
 					raise err
 				print(entry)
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_tree(self, dn = None, level = 1):
 		"""Prints a tree from the given DN (if not set, the top) and with a given depth (default: 1)"""
@@ -192,9 +205,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			tr = LeftAligned()
 			print(tr(tree_data))
 
-
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_user(self, samaccountname):
 		"""Feteches a user object based on the sAMAccountName of the user"""
@@ -208,8 +222,11 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				print('User not found!')
 			else:
 				print(user)
+			
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_machine(self, samaccountname):
 		"""Feteches a machine object based on the sAMAccountName of the machine"""
@@ -226,8 +243,11 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				####TEST
 				x = SECURITY_DESCRIPTOR.from_bytes(machine.allowedtoactonbehalfofotheridentity)
 				print(x)
+			
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_schemaentry(self, cn):
 		"""Feteches a schema object entry object based on the DN of the object (must start with CN=)"""
@@ -239,9 +259,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				raise err
 			
 			print(str(schemaentry))
-
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_allschemaentry(self):
 		"""Feteches all schema object entry objects"""
@@ -253,9 +274,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 					raise err
 				
 				print(str(schemaentry))
-
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	#async def do_addallowedtoactonbehalfofotheridentity(self, target_name, add_computer_name):
 	#	"""Adds a SID to the msDS-AllowedToActOnBehalfOfOtherIdentity protperty of target_dn"""
@@ -350,8 +372,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				raise err
 
 			print('Change OK!')
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_setsd(self, target_dn, sddl):
 		"""Updates the security descriptor of an object"""
@@ -369,9 +393,11 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			print('Change OK!')
+			return True
 		except:
 			print('Erro while updating security descriptor!')
 			traceback.print_exc()
+			return False
 			
 	async def do_getsd(self, dn):
 		"""Feteches security info for a given DN"""
@@ -383,8 +409,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				raise err
 			sd = SECURITY_DESCRIPTOR.from_bytes(sec_info)
 			print(sd.to_sddl())
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_gpos(self):
 		"""Feteches security info for a given DN"""
@@ -395,8 +423,11 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				if err is not None:
 					raise err
 				print(gpo)
+			
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_laps(self):
 		"""Feteches all laps passwords"""
@@ -408,8 +439,11 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				if 'ms-Mcs-AdmPwd' in entry['attributes']:
 					pwd = entry['attributes']['ms-Mcs-AdmPwd']
 				print('%s : %s' % (entry['attributes']['cn'], pwd))
+			
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_groupmembership(self, dn):
 		"""Feteches names all groupnames the user is a member of for a given DN"""
@@ -428,9 +462,11 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				
 			if len(group_sids) == 0:
 				print('No memberships found')
+			
+			return True
 		except Exception as e:
-			print(e)
 			traceback.print_exc()
+			return False
 
 	async def do_bindtree(self, newtree):
 		"""Changes the LDAP TREE for future queries. 
@@ -445,18 +481,23 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				if err is not None:
 					raise err
 				print(entry.get_line())
+			
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
-	async def do_adduser(self, username, password):
+	async def do_adduser(self, user_dn, password):
 		"""Creates a new domain user with password"""
 		try:
-			_, err = await self.connection.create_user(username, password)
+			_, err = await self.connection.create_user_dn(user_dn, password)
 			if err is not None:
 				raise err
 			print('User added')
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	
 	async def do_deluser(self, user_dn):
@@ -466,8 +507,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			print('Goodbye, Caroline.')
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_changeuserpw(self, user_dn, newpass, oldpass = None):
 		"""Changes user password, if you are admin then old pw doesnt need to be supplied"""
@@ -476,8 +519,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			print('User password changed')
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_unlockuser(self, user_dn):
 		"""Unlock user by setting lockoutTime to 0"""
@@ -486,8 +531,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			print('User unlocked')
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_enableuser(self, user_dn):
 		"""Unlock user by flipping useraccountcontrol bits"""
@@ -496,8 +543,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			print('User enabled')
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_disableuser(self, user_dn):
 		"""Unlock user by flipping useraccountcontrol bits"""
@@ -506,8 +555,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			print('User disabled')
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_addspn(self, user_dn, spn):
 		"""Adds an SPN entry to the users account"""
@@ -516,8 +567,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			print('SPN added!')
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_addhostname(self, user_dn, hostname):
 		"""Adds additional hostname to computer account"""
@@ -526,8 +579,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			print('Hostname added!')
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_addusertogroup(self, user_dn, group_dn):
 		"""Adds user to specified group. Both user and group must be in DN format!"""
@@ -536,8 +591,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			print('User added to group!')
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	async def do_deluserfromgroup(self, user_dn, group_dn):
 		"""Removes user from specified group. Both user and group must be in DN format!"""
@@ -546,8 +603,10 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			print('User added to group!')
+			return True
 		except:
 			traceback.print_exc()
+			return False
 			
 	async def do_test(self):
 		"""testing, dontuse"""
@@ -558,8 +617,11 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 
 				if entry.objectClass[-1] != 'user':
 					print(entry.objectClass)
+
+			return True
 		except:
 			traceback.print_exc()
+			return False
 
 	"""
 	async def do_info(self):

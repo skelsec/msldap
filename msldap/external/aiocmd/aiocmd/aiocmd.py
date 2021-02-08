@@ -95,10 +95,10 @@ class PromptToolkitCmd:
         try:
             com_func = self._get_command(command)
             if asyncio.iscoroutinefunction(com_func):
-                await com_func(*args)
+                res = await com_func(*args)
             else:
-                com_func(*args)
-            return
+                res = com_func(*args)
+            return res
         except (ExitPromptException, asyncio.CancelledError):
             raise
         except Exception as ex:

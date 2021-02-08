@@ -18,6 +18,8 @@ class MSLDAPProxyType(enum.Enum):
 	MULTIPLEXOR = 'MULTIPLEXOR'
 	MULTIPLEXOR_SSL = 'MULTIPLEXOR_SSL'
 	WSNET = 'WSNET'
+	WSNETWS = 'WSNETWS'
+	WSNETWSS = 'WSNETWSS'
 
 class MSLDAPProxy:
 	"""
@@ -56,7 +58,7 @@ class MSLDAPProxy:
 			return None
 		
 		proxy.type = MSLDAPProxyType(query['proxytype'][0].upper())
-		if proxy.type in [MSLDAPProxyType.WSNET, MSLDAPProxyType.SOCKS4, MSLDAPProxyType.SOCKS4_SSL, MSLDAPProxyType.SOCKS5, MSLDAPProxyType.SOCKS5_SSL]:
+		if proxy.type in [MSLDAPProxyType.WSNET, MSLDAPProxyType.WSNETWS, MSLDAPProxyType.WSNETWSS,MSLDAPProxyType.SOCKS4, MSLDAPProxyType.SOCKS4_SSL, MSLDAPProxyType.SOCKS5, MSLDAPProxyType.SOCKS5_SSL]:
 			proxy.target = SocksClientURL.from_params(url_str)
 		else:
 			proxy.target  = MSLDAPMultiplexorProxy.from_params(url_str)

@@ -11,6 +11,8 @@ MSLDAP_SOCKS_PROXY_TYPES = [
 	MSLDAPProxyType.SOCKS5, 
 	MSLDAPProxyType.SOCKS5_SSL,
 	MSLDAPProxyType.WSNET,	
+	MSLDAPProxyType.WSNETWS,
+	MSLDAPProxyType.WSNETWSS,
 ]
 
 class MSLDAPNetworkSelector:
