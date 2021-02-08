@@ -49,8 +49,8 @@ setup(
 	install_requires=[
 		'asn1crypto',
 		'winsspi>=0.0.9;platform_system=="Windows"',
-		'minikerberos>=0.2.8',
-		'asysocks>=0.0.11',
+		'minikerberos>=0.2.9',
+		'asysocks>=0.1.0',
 		'winacl>=0.1.0',
 		'prompt-toolkit>=3.0.2',
 		'tqdm',
