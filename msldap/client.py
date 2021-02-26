@@ -4,7 +4,9 @@
 #  Tamas Jos (@skelsec)
 #
 
+import copy
 import asyncio
+
 from msldap import logger
 from msldap.commons.common import MSLDAPClientStatus
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest, SDFlagsRequestValue
@@ -14,6 +16,11 @@ from msldap.protocol.query import escape_filter_chars
 from msldap.connection import MSLDAPClientConnection
 from msldap.protocol.messages import Control
 from msldap.ldap_objects import *
+
+from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
+from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK
+from winacl.dtyp.sid import SID
+from winacl.dtyp.guid import GUID
 
 class MSLDAPClient:
 	"""
@@ -514,7 +521,7 @@ class MSLDAPClient:
 		changes = {
 			'nTSecurityDescriptor': [('replace', [data])]
 		}
-		return await self._con.modify(object_dn, changes, controls = controls)	
+		return await self._con.modify(object_dn, changes, controls = controls)
 		
 	async def get_all_groups(self):
 		"""
@@ -562,7 +569,7 @@ class MSLDAPClient:
 			
 	async def get_user_by_dn(self, user_dn):
 		"""
-		Fetches the DN for an object specified by `objectsid`
+		Fetches the DN for an object specified by `user_dn`
 
 		:param user_dn: The user's DN
 		:type user_dn: str
@@ -993,6 +1000,133 @@ class MSLDAPClient:
 		"""
 
 		return await self._con.delete(dn)
+
+	async def add_priv_addmember(self, user_dn, group_dn):
+		"""Adds AddMember rights to the user on the group specified by group_dn"""
+		try:
+			#getting SID of target dn
+			user_obj, err = await self.get_user_by_dn(user_dn)
+			if err is not None:
+				raise err
+			
+			res, err = await self.get_objectacl_by_dn(group_dn)
+			if err is not None:
+				raise err
+			if res is None:
+				raise Exception('Failed to get forest\'s SD')
+			group_sd = SECURITY_DESCRIPTOR.from_bytes(res)
+			user_sid = user_obj.objectSid
+
+			new_sd = copy.deepcopy(group_sd)
+			
+			ace_1 = ACCESS_ALLOWED_OBJECT_ACE()
+			ace_1.Sid = SID.from_string(user_sid)
+			ace_1.ObjectType = GUID.from_string('bf9679c0-0de6-11d0-a285-00aa003049e2')
+			ace_1.Mask = ADS_ACCESS_MASK.WRITE_PROP
+			ace_1.AceFlags = 0
+
+			new_sd.Dacl.aces.append(ace_1)
+
+			changes = {
+				'nTSecurityDescriptor' : [('replace', [new_sd.to_bytes()])]
+			}
+			_, err = await self.modify(group_dn, changes)
+			if err is not None:
+				raise err
+
+			return True, None
+		except Exception as e:
+			return False, e
+
+	async def add_priv_dcsync(self, user_dn, forest_dn = None):
+		"""Adds DCSync rights to the given user by modifying the forest's Security Descriptor to add GetChanges and GetChangesAll ACE"""
+		try:
+			#getting SID of target dn
+			user_obj, err = await self.get_user_by_dn(user_dn)
+			if err is not None:
+				raise err
+			
+			if forest_dn is None:					
+				forest_dn = self._ldapinfo.distinguishedName
+			
+			res, err = await self.get_objectacl_by_dn(forest_dn)
+			if err is not None:
+				raise err
+			if res is None:
+				raise Exception('Failed to get forest\'s SD')
+			forest_sd = SECURITY_DESCRIPTOR.from_bytes(res)
+			user_sid = user_obj.objectSid
+
+
+			new_sd = copy.deepcopy(forest_sd)
+			
+			ace_1 = ACCESS_ALLOWED_OBJECT_ACE()
+			ace_1.Sid = SID.from_string(user_sid)
+			ace_1.ObjectType = GUID.from_string('1131f6aa-9c07-11d1-f79f-00c04fc2dcd2')
+			ace_1.Mask = ADS_ACCESS_MASK.CONTROL_ACCESS
+			ace_1.AceFlags = 0
+
+
+			new_sd.Dacl.aces.append(ace_1)
+			
+			ace_2 = ACCESS_ALLOWED_OBJECT_ACE()
+			ace_2.Sid = SID.from_string(user_sid)
+			ace_2.ObjectType = GUID.from_string('1131f6ad-9c07-11d1-f79f-00c04fc2dcd2')
+			ace_2.Mask = ADS_ACCESS_MASK.CONTROL_ACCESS
+			ace_2.AceFlags = 0
+
+			new_sd.Dacl.aces.append(ace_2)
+
+			changes = {
+				'nTSecurityDescriptor' : [('replace', [new_sd.to_bytes()])]
+			}
+			_, err = await self.modify(forest_dn, changes)
+			if err is not None:
+				raise err
+
+			return True, None
+		except Exception as e:
+			return False, e
+
+	async def change_priv_owner(self, new_owner_sid, target_dn, target_attribute = None):
+		"""Changes the owner in a Security Descriptor to the new_owner_sid on an LDAP object or on an LDAP object's attribute identified by target_dn and target_attribute. target_attribute can be omitted to change the target_dn's SD's owner"""
+		try:
+			try:
+				new_owner_sid = SID.from_string(new_owner_sid)
+			except:
+				return False, Exception('Incorrect SID')
+
+
+			target_sd = None
+			if target_attribute is None or target_attribute == '':
+				target_attribute = 'nTSecurityDescriptor'
+				res, err = await self.get_objectacl_by_dn(target_dn)
+				if err is not None:
+					raise err
+				target_sd = SECURITY_DESCRIPTOR.from_bytes(res)
+			else:
+				query = '(distinguishedName=%s)' % target_dn
+				async for entry, err in self.pagedsearch(query, [target_attribute]):
+					if err is not None:
+						raise err
+					target_sd = SECURITY_DESCRIPTOR.from_bytes(entry['attributes'][target_attribute])
+					break
+				else:
+					raise Exception('Target DN not found!')
+
+			new_sd = copy.deepcopy(target_sd)
+			new_sd.Owner = new_owner_sid
+
+			changes = {
+				target_attribute : [('replace', [new_sd.to_bytes()])]
+			}
+			_, err = await self.modify(target_dn, changes)
+			if err is not None:
+				raise err
+
+			return True, None
+		except Exception as e:
+			return False, e
 
 	#async def get_permissions_for_dn(self, dn):
 	#	"""
