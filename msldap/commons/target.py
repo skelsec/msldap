@@ -36,8 +36,12 @@ class MSLDAPTarget:
 	:type proxy: :class:`MSLDAPProxy`
 	:param timeout: connection timeout in seconds
 	:type timeout: int
+	:param ldap_query_page_size: Maximum number of elements to fetch in each paged_query call.
+	:type ldap_query_page_size: int
+	:param ldap_query_ratelimit: rate limit of paged queries. This will cause a sleep (in seconds) between fetching of each page of the query
+	:type ldap_query_ratelimit: float
 	"""
-	def __init__(self, host, port = 389, proto = LDAPProtocol.TCP, tree = None, proxy = None, timeout = 10):
+	def __init__(self, host, port = 389, proto = LDAPProtocol.TCP, tree = None, proxy = None, timeout = 10, ldap_query_page_size = 1000, ldap_query_ratelimit = 0):
 		self.proto = proto
 		self.host = host
 		self.tree = tree
@@ -48,6 +52,8 @@ class MSLDAPTarget:
 		self.serverip = None
 		self.domain = None
 		self.sslctx = None
+		self.ldap_query_page_size = ldap_query_page_size
+		self.ldap_query_ratelimit = ldap_query_ratelimit
 
 	def get_ssl_context(self):
 		if self.proto == LDAPProtocol.SSL:

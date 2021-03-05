@@ -107,6 +107,7 @@ class MSLDAPURLDecoder:
 		self.ldap_tree = None
 		self.target_timeout = 5
 		self.target_pagesize = 1000
+		self.target_ratelimit = 0
 		self.dc_ip = None
 		self.serverip = None
 		self.proxy = None
@@ -147,7 +148,9 @@ class MSLDAPURLDecoder:
 			port = self.ldap_port, 
 			proto = self.ldap_scheme, 
 			tree=self.ldap_tree,
-			timeout = self.target_timeout	
+			timeout = self.target_timeout,
+			ldap_query_page_size = self.target_pagesize,
+			ldap_query_ratelimit = self.target_ratelimit
 		)
 		target.domain = self.domain
 		target.dc_ip = self.dc_ip
@@ -164,7 +167,7 @@ class MSLDAPURLDecoder:
 		"""
 		cred = self.get_credential()
 		target = self.get_target()
-		return MSLDAPClient(target, cred, ldap_query_page_size = self.target_pagesize)
+		return MSLDAPClient(target, cred)
 	
 	def get_connection(self):
 		"""
@@ -332,6 +335,10 @@ class MSLDAPURLDecoder:
 					self.etypes = [int(x) for x in query[k]]
 				elif k.startswith('auth'):
 					self.auth_settings[k[len('auth'):]] = query[k]
+				elif k == 'rate':
+					self.target_ratelimit = float(query[k][0])
+				elif k == 'pagesize':
+					self.target_pagesize = int(query[k][0])
 				#elif k.startswith('same'):
 				#	self.auth_settings[k[len('same'):]] = query[k]
 

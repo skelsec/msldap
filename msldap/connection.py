@@ -619,7 +619,7 @@ class MSLDAPClientConnection:
 		except Exception as e:
 			yield (None, e)
 
-	async def pagedsearch(self, base, query, attributes, search_scope = 2, size_limit = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None):
+	async def pagedsearch(self, base, query, attributes, search_scope = 2, size_limit = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None, rate_limit = 0):
 		"""
 		Paged search is the same as the search operation and uses it under the hood. Adds automatic control to read all results in a paged manner.
 		
@@ -641,6 +641,8 @@ class MSLDAPClientConnection:
 		:type timeLimit: int
 		:param controls: additional controls to be passed in the query
 		:type controls: dict
+		:param rate_limit: time to sleep bwetween each query
+		:type rate_limit: float
 		:return: Async generator which yields (`dict`, None) tuple on success or (None, `Exception`) on error
 		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
 		"""
@@ -651,7 +653,7 @@ class MSLDAPClientConnection:
 		try:
 			cookie = b''
 			while True:
-				
+				await asyncio.sleep(rate_limit)
 				ctrl_list_temp = [
 					Control({
 						'controlType' : b'1.2.840.113556.1.4.319',

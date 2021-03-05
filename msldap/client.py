@@ -38,11 +38,11 @@ class MSLDAPClient:
 	:rtype: dict
 
 	"""
-	def __init__(self, target, creds, ldap_query_page_size = 1000):
+	def __init__(self, target, creds):
 		self.creds = creds
 		self.target = target
 
-		self.ldap_query_page_size = ldap_query_page_size 
+		self.ldap_query_page_size = self.target.ldap_query_page_size
 		self._tree = None
 		self._ldapinfo = None
 		self._con = None
@@ -135,7 +135,8 @@ class MSLDAPClient:
 			query, 
 			attributes = attributes, 
 			size_limit = self.ldap_query_page_size, 
-			controls = controls
+			controls = controls,
+			rate_limit=self.target.ldap_query_ratelimit
 			):
 				
 				if err is not None:
@@ -169,6 +170,7 @@ class MSLDAPClient:
 			size_limit = self.ldap_query_page_size, 
 			search_scope=LEVEL, 
 			controls = None, 
+			rate_limit=self.target.ldap_query_ratelimit
 			):
 				if err is not None:
 					raise err
@@ -290,7 +292,8 @@ class MSLDAPClient:
 					attributes = [x.encode() for x in MSADSCHEMAENTRY_ATTRS], 
 					size_limit = self.ldap_query_page_size, 
 					search_scope=BASE, 
-					controls = None, 
+					controls = None,
+					rate_limit=self.target.ldap_query_ratelimit
 					):
 						if err is not None:
 							yield None, err
@@ -642,6 +645,7 @@ class MSLDAPClient:
 			attributes = attributes, 
 			size_limit = self.ldap_query_page_size, 
 			search_scope=BASE, 
+			rate_limit=self.target.ldap_query_ratelimit
 			):
 				if err is not None:
 					yield None, err
@@ -678,6 +682,7 @@ class MSLDAPClient:
 						attributes = [b'tokenGroups'], 
 						size_limit = self.ldap_query_page_size, 
 						search_scope=BASE, 
+						rate_limit=self.target.ldap_query_ratelimit
 						):
 							
 							#print(entry2)
