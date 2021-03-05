@@ -69,8 +69,12 @@ class MSLDAPURLDecoder:
 		- proxytype: currently only socks5 proxy is supported
 		- proxyhost: Ip or hostname of the proxy server
 		- proxyport: port of the proxy server
-		- proxytimeout: timeout ins ecodns for the proxy connection
+		- proxytimeout: timeout in secodns for the proxy connection
 		- dc: the IP address of the domain controller, MUST be used for kerberos authentication
+		- encrypt: enable encryption. Only for NTLM. DOESNT WORK WITH LDAPS
+		- etype: Supported encryption types for Kerberos authentication. Multiple can be specified.
+		- rate: LDAP paged search query rate limit. Will sleep for seconds between each new page. Default: 0 (no limit)
+		- pagesize: LDAP paged search query size per page. Max: 1000. Default: 1000
 
 	Examples:
 	ldap://10.10.10.2 (anonymous bind)
