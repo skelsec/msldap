@@ -17,6 +17,7 @@ from msldap.commons.credential import MSLDAP_GSS_METHODS
 from msldap.network.selector import MSLDAPNetworkSelector
 from msldap.commons.credential import LDAPAuthProtocol
 from msldap.commons.target import LDAPProtocol
+from msldap.commons.exceptions import LDAPServerException, LDAPBindException, LDAPAddException, LDAPModifyException, LDAPDeleteException
 from asn1crypto.x509 import Certificate
 from hashlib import sha256
 from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
@@ -261,11 +262,10 @@ class MSLDAPClientConnection:
 					return False, res
 				res = res.native
 				if res['protocolOp']['resultCode'] != 'success':
-					return False, Exception(
-						'BIND failed! Result code: "%s" Reason: "%s"' % (
+					return False, LDAPBindException(
 							res['protocolOp']['resultCode'], 
 							res['protocolOp']['diagnosticMessage']
-						))
+						)
 				
 				auth = {
 					'sicily_nego' : data
@@ -287,11 +287,10 @@ class MSLDAPClientConnection:
 					return False, res
 				res = res.native
 				if res['protocolOp']['resultCode'] != 'success':
-					return False, Exception(
-						'BIND failed! Result code: "%s" Reason: "%s"' % (
+					return False, LDAPBindException(
 							res['protocolOp']['resultCode'], 
 							res['protocolOp']['diagnosticMessage']
-						))
+						)
 
 				data, to_continue, err = await self.auth.authenticate(res['protocolOp']['matchedDN'])
 				if err is not None:
@@ -317,11 +316,10 @@ class MSLDAPClientConnection:
 					return False, res
 				res = res.native
 				if res['protocolOp']['resultCode'] != 'success':
-					return False, Exception(
-						'BIND failed! Result code: "%s" Reason: "%s"' % (
+					return False, LDAPBindException(
 							res['protocolOp']['resultCode'], 
 							res['protocolOp']['diagnosticMessage']
-						))
+						)
 				
 
 				self.__bind_success()
@@ -360,11 +358,10 @@ class MSLDAPClientConnection:
 					return True, None
 				
 				else:
-					return False, Exception(
-						'BIND failed! Result code: "%s" Reason: "%s"' % (
+					return False, LDAPBindException(
 							res['protocolOp']['resultCode'], 
 							res['protocolOp']['diagnosticMessage']
-						))
+						)
 
 			elif self.creds.auth_method in MSLDAP_GSS_METHODS:
 				challenge = None
@@ -415,11 +412,10 @@ class MSLDAPClientConnection:
 						continue
 
 					else:
-						return False, Exception(
-							'BIND failed! Result code: "%s" Reason: "%s"' % (
+						return False, LDAPBindException(
 								res['protocolOp']['resultCode'], 
 								res['protocolOp']['diagnosticMessage']
-							))
+							)
 					
 			else:
 				raise Exception('Not implemented authentication method: %s' % self.creds.auth_method.name)
@@ -455,9 +451,10 @@ class MSLDAPClientConnection:
 				message = message.native
 				if msg_type == 'addResponse':
 					if message['protocolOp']['resultCode'] != 'success':
-						return False, Exception('Failed to add DN! LDAP error! Reason: %s Diag: %s' % (
+						return False, LDAPAddException(
+							entry,
 							message['protocolOp']['resultCode'],
-							message['protocolOp']['diagnosticMessage'])
+							message['protocolOp']['diagnosticMessage']
 						)
 
 			return True, None
@@ -497,9 +494,10 @@ class MSLDAPClientConnection:
 				message = message.native
 				if msg_type == 'modifyResponse':
 					if message['protocolOp']['resultCode'] != 'success':
-						return False, Exception('Failed to add DN! LDAP error! Reason: %s Diag: %s' % (
+						return False, LDAPModifyException(
+							entry,
 							message['protocolOp']['resultCode'],
-							message['protocolOp']['diagnosticMessage'])
+							message['protocolOp']['diagnosticMessage']
 						)
 
 			return True, None
@@ -529,9 +527,10 @@ class MSLDAPClientConnection:
 				message = message.native
 				if msg_type == 'delResponse':
 					if message['protocolOp']['resultCode'] != 'success':
-						return False, Exception('Failed to add DN! LDAP error! Reason: %s Diag: %s' % (
+						return False, LDAPDeleteException(
+							entry,
 							message['protocolOp']['resultCode'],
-							message['protocolOp']['diagnosticMessage'])
+							message['protocolOp']['diagnosticMessage']
 						)
 
 			return True, None

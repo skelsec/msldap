@@ -50,7 +50,7 @@ class derefAliases(core.Enumerated):
 
 class resultCode(core.Enumerated):
 	_map = {
-		0   : 'success',
+		0  : 'success',
 		1  : 'operationsError',
 		2  : 'protocolError',
 		3  : 'timeLimitExceeded',

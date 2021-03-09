@@ -627,6 +627,24 @@ class MSLDAPClient:
 				return None, err
 			
 			return entry['attributes']['distinguishedName'], None
+
+	async def get_objectsid_for_dn(self, dn):
+		"""
+		Fetches the objectsid for an object specified by `dn`
+
+		:param dn: The object's distinguishedName
+		:type dn: str
+		:return: The SID of the pobject
+		:rtype: (:class:`str`, :class:`Exception`)
+
+		"""
+
+		ldap_filter = r'(distinguishedName=%s)' % escape_filter_chars(dn)
+		async for entry, err in self.pagedsearch(ldap_filter, ['objectSid']):
+			if err is not None:
+				return None, err
+			
+			return entry['attributes']['objectSid'], None
 				
 	async def get_tokengroups(self, dn):
 		"""
@@ -1010,7 +1028,7 @@ class MSLDAPClient:
 		"""Adds AddMember rights to the user on the group specified by group_dn"""
 		try:
 			#getting SID of target dn
-			user_obj, err = await self.get_user_by_dn(user_dn)
+			user_sid, err = await self.get_objectsid_for_dn(user_dn)
 			if err is not None:
 				raise err
 			
@@ -1020,7 +1038,6 @@ class MSLDAPClient:
 			if res is None:
 				raise Exception('Failed to get forest\'s SD')
 			group_sd = SECURITY_DESCRIPTOR.from_bytes(res)
-			user_sid = user_obj.objectSid
 
 			new_sd = copy.deepcopy(group_sd)
 			
@@ -1047,7 +1064,7 @@ class MSLDAPClient:
 		"""Adds DCSync rights to the given user by modifying the forest's Security Descriptor to add GetChanges and GetChangesAll ACE"""
 		try:
 			#getting SID of target dn
-			user_obj, err = await self.get_user_by_dn(user_dn)
+			user_sid, err = await self.get_objectsid_for_dn(user_dn)
 			if err is not None:
 				raise err
 			
@@ -1060,7 +1077,6 @@ class MSLDAPClient:
 			if res is None:
 				raise Exception('Failed to get forest\'s SD')
 			forest_sd = SECURITY_DESCRIPTOR.from_bytes(res)
-			user_sid = user_obj.objectSid
 
 
 			new_sd = copy.deepcopy(forest_sd)
