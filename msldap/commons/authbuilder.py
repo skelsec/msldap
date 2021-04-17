@@ -225,7 +225,8 @@ class AuthenticatorBuilder:
 				LDAPAuthProtocol.KERBEROS_AES,
 				LDAPAuthProtocol.KERBEROS_PASSWORD, 
 				LDAPAuthProtocol.KERBEROS_CCACHE, 
-				LDAPAuthProtocol.KERBEROS_KEYTAB]:
+				LDAPAuthProtocol.KERBEROS_KEYTAB,
+				LDAPAuthProtocol.KERBEROS_KIRBI]:
 			
 			if self.target is None:
 				raise Exception('Target must be specified with Kerberos!')
@@ -237,9 +238,16 @@ class AuthenticatorBuilder:
 				raise Exception('target must have a dc_ip for kerberos!')
 			
 			kcred = MSLDAPKerberosCredential()
-			kc = KerberosCredential()
-			kc.username = self.creds.username
-			kc.domain = self.creds.domain
+			if self.creds.auth_method == LDAPAuthProtocol.KERBEROS_KIRBI:
+				kc = KerberosCredential.from_kirbi(self.creds.password, self.creds.username, self.creds.domain)
+			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_CCACHE:
+				kc = KerberosCredential.from_ccache_file(self.creds.password, self.creds.username, self.creds.domain)
+			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_KEYTAB:
+				kc = KerberosCredential.from_kirbi(self.creds.password, self.creds.username, self.creds.domain)
+			else:
+				kc = KerberosCredential()
+				kc.username = self.creds.username
+				kc.domain = self.creds.domain
 			kcred.enctypes = []
 			if self.creds.auth_method == LDAPAuthProtocol.KERBEROS_PASSWORD:
 				kc.password = self.creds.password
@@ -262,10 +270,12 @@ class AuthenticatorBuilder:
 			
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_CCACHE:
 				kc.ccache = self.creds.password
-				kcred.enctypes = [23,17,18]
+				kcred.enctypes = [23,17,18] # TODO: fix this
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_KEYTAB:
 				kc.keytab = self.creds.password
-				kcred.enctypes = [23,17,18]
+				kcred.enctypes = [23,17,18] # TODO: fix this
+			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_KIRBI:
+				kcred.enctypes = [23,17,18] # TODO: fix this
 			else:
 				raise Exception('No suitable secret type found to set up kerberos!')
 

@@ -12,7 +12,7 @@ import os
 from minikerberos.common import *
 
 
-from minikerberos.protocol.asn1_structs import AP_REP, EncAPRepPart, EncryptedData, AP_REQ
+from minikerberos.protocol.asn1_structs import AP_REP, EncAPRepPart, EncryptedData, AP_REQ, Ticket
 from msldap.authentication.kerberos.gssapi import get_gssapi, KRB5_MECH_INDEP_TOKEN
 from msldap.commons.proxy import MSLDAPProxyType
 from minikerberos.protocol.structures import ChecksumFlags
@@ -20,7 +20,7 @@ from minikerberos.protocol.encryption import Enctype, Key, _enctype_table
 from minikerberos.protocol.constants import MESSAGE_TYPE
 from minikerberos.aioclient import AIOKerberosClient
 from minikerberos.network.aioclientsockssocket import AIOKerberosClientSocksSocket
-
+from msldap import logger
 
 # SMBKerberosCredential
 
@@ -50,6 +50,7 @@ class MSLDAPKerberos:
 		self.etype = None
 		self.seq_number = 0
 		self.expected_server_seq_number = None
+		self.from_ccache = False
 	
 		self.setup()
 	
@@ -143,12 +144,20 @@ class MSLDAPKerberos:
 					return None, None, err
 
 			if self.iterations == 0:
-				self.seq_number = 0 #int.from_bytes(os.urandom(4), byteorder='big', signed=False)
+				self.seq_number = 0
 				self.iterations += 1
-
-				#tgt = await self.kc.get_TGT()
-				tgt = await self.kc.get_TGT(override_etype = self.preferred_etypes)
-				tgs, encpart, self.session_key = await self.kc.get_TGS(self.spn)#, override_etype = self.preferred_etypes)
+				
+				try:
+					#check TGS first, maybe ccache already has what we need
+					for target in self.ccred.ccache.list_targets():
+						# just printing this to debug...
+						logger.debug('CCACHE SPN record: %s' % target)
+					tgs, encpart, self.session_key = await self.kc.get_TGS(self.spn)
+					
+					self.from_ccache = True
+				except:
+					tgt = await self.kc.get_TGT(override_etype = self.preferred_etypes)
+					tgs, encpart, self.session_key = await self.kc.get_TGS(self.spn)#, override_etype = self.preferred_etypes)
 
 				#self.expected_server_seq_number = encpart.get('nonce', seq_number)
 				
@@ -156,18 +165,25 @@ class MSLDAPKerberos:
 				if ChecksumFlags.GSS_C_MUTUAL_FLAG in self.flags or ChecksumFlags.GSS_C_DCE_STYLE in self.flags:
 					if ChecksumFlags.GSS_C_MUTUAL_FLAG in self.flags:
 						ap_opts.append('mutual-required')
-					apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = self.flags, seq_number = self.seq_number, ap_opts=ap_opts, cb_data = cb_data)
+					if self.from_ccache is False:
+						apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = self.flags, seq_number = self.seq_number, ap_opts=ap_opts, cb_data = cb_data)
+					else:
+						apreq = self.kc.construct_apreq_from_ticket(Ticket(tgs['ticket']).dump(), self.session_key, tgs['crealm'], tgs['cname']['name-string'][0], flags = self.flags, seq_number = self.seq_number, ap_opts = ap_opts, cb_data = cb_data)
 					return apreq, True, None
 				
 				else:
 					#no mutual or dce auth will take one step only
-					apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = self.flags, seq_number = self.seq_number, ap_opts=[], cb_data = cb_data)
+					if self.from_ccache is False:
+						apreq = self.kc.construct_apreq(tgs, encpart, self.session_key, flags = self.flags, seq_number = self.seq_number, ap_opts=[], cb_data = cb_data)
+					else:
+						apreq = self.kc.construct_apreq_from_ticket(Ticket(tgs['ticket']).dump(), self.session_key, tgs['crealm'], tgs['cname']['name-string'][0], flags = self.flags, seq_number = self.seq_number, ap_opts = ap_opts, cb_data = cb_data)
+					
+					
 					self.gssapi = get_gssapi(self.session_key)
 					return apreq, False, None
 
 			else:
 				self.iterations += 1
-				#raise Exception('Not implemented!')
 				if ChecksumFlags.GSS_C_DCE_STYLE in self.flags:
 					# adata = authData[16:]
 					# if ChecksumFlags.GSS_C_DCE_STYLE in self.flags:
