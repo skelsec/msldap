@@ -196,6 +196,8 @@ class SPNEGO:
 			#everything is netotiated, but authentication needs more setps
 			neg_token_raw = NegotiationToken.load(token)
 			neg_token = neg_token_raw.native
+			if neg_token['negState'] == 'accept-completed':
+				return None, True, None
 			if neg_token['responseToken'] is None:
 				# https://tools.ietf.org/html/rfc4178#section-5
 				# mechlistmic exchange happening at the end of the authentication
