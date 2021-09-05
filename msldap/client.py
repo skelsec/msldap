@@ -38,14 +38,20 @@ class MSLDAPClient:
 	:rtype: dict
 
 	"""
-	def __init__(self, target, creds):
+	def __init__(self, target, creds, connection = None):
 		self.creds = creds
 		self.target = target
+		self.ldap_query_page_size = 1000
+		if self.target is not None:
+			self.ldap_query_page_size = self.target.ldap_query_page_size
+		
+		self.ldap_query_ratelimit = 0
+		if self.target is not None:
+			self.ldap_query_ratelimit = self.target.ldap_query_ratelimit
 
-		self.ldap_query_page_size = self.target.ldap_query_page_size
 		self._tree = None
 		self._ldapinfo = None
-		self._con = None
+		self._con = connection
 	
 	async def __aenter__(self):
 		return self
@@ -63,13 +69,14 @@ class MSLDAPClient:
 
 	async def connect(self):
 		try:
-			self._con = MSLDAPClientConnection(self.target, self.creds)
-			_, err = await self._con.connect()
-			if err is not None:
-				raise err
-			res, err = await self._con.bind()
-			if err is not None:
-				return False, err
+			if self._con is None:
+				self._con = MSLDAPClientConnection(self.target, self.creds)
+				_, err = await self._con.connect()
+				if err is not None:
+					raise err
+				res, err = await self._con.bind()
+				if err is not None:
+					return False, err
 			res, err = await self._con.get_serverinfo()
 			if err is not None:
 				raise err
@@ -136,7 +143,7 @@ class MSLDAPClient:
 			attributes = attributes, 
 			size_limit = self.ldap_query_page_size, 
 			controls = controls,
-			rate_limit=self.target.ldap_query_ratelimit
+			rate_limit=self.ldap_query_ratelimit
 			):
 				
 				if err is not None:
@@ -170,7 +177,7 @@ class MSLDAPClient:
 			size_limit = self.ldap_query_page_size, 
 			search_scope=LEVEL, 
 			controls = None, 
-			rate_limit=self.target.ldap_query_ratelimit
+			rate_limit=self.ldap_query_ratelimit
 			):
 				if err is not None:
 					raise err
@@ -293,7 +300,7 @@ class MSLDAPClient:
 					size_limit = self.ldap_query_page_size, 
 					search_scope=BASE, 
 					controls = None,
-					rate_limit=self.target.ldap_query_ratelimit
+					rate_limit=self.ldap_query_ratelimit
 					):
 						if err is not None:
 							yield None, err
@@ -663,7 +670,7 @@ class MSLDAPClient:
 			attributes = attributes, 
 			size_limit = self.ldap_query_page_size, 
 			search_scope=BASE, 
-			rate_limit=self.target.ldap_query_ratelimit
+			rate_limit=self.ldap_query_ratelimit
 			):
 				if err is not None:
 					yield None, err
@@ -700,7 +707,7 @@ class MSLDAPClient:
 						attributes = [b'tokenGroups'], 
 						size_limit = self.ldap_query_page_size, 
 						search_scope=BASE, 
-						rate_limit=self.target.ldap_query_ratelimit
+						rate_limit=self.ldap_query_ratelimit
 						):
 							
 							#print(entry2)

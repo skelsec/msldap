@@ -23,12 +23,13 @@ from hashlib import sha256
 from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
 
 class MSLDAPClientConnection:
-	def __init__(self, target, creds):
-		if target is None:
-			raise Exception('Target cant be none!')
+	def __init__(self, target, creds, auth=None):
 		self.target = target
 		self.creds = creds
-		self.auth = AuthenticatorBuilder(self.creds, self.target).build()
+		if auth is not None:
+			self.auth = auth
+		else:
+			self.auth = AuthenticatorBuilder(self.creds, self.target).build()
 		self.connected = False
 		self.bind_ok = False
 		self.__sign_messages = False
