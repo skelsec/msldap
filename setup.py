@@ -50,7 +50,7 @@ setup(
 		'asn1crypto',
 		'winsspi>=0.0.9;platform_system=="Windows"',
 		'minikerberos>=0.2.14',
-		'asysocks>=0.1.1',
+		'asysocks>=0.1.4',
 		'winacl>=0.1.1',
 		'prompt-toolkit>=3.0.2',
 		'tqdm',
