@@ -2,12 +2,14 @@
 import enum
 import asyncio
 import ipaddress
+import traceback
 
 from msldap import logger
 
 from asysocks.client import SOCKSClient
 from asysocks.common.comms import SocksQueueComms
 from msldap.protocol.utils import calcualte_length
+from msldap.commons.target import LDAPProtocol
 
 
 class SocksProxyConnection:
@@ -44,8 +46,7 @@ class SocksProxyConnection:
 		await self.disconnect()
 
 	def get_peer_certificate(self):
-		raise Exception('Not yet implemented! SSL implementation on socks is missing!')
-		return self.writer.get_extra_info('socket').getpeercert(True)
+		return self.client.get_peercert()
 
 	def get_one_message(self,data):
 		if len(data) < 6:
@@ -102,20 +103,26 @@ class SocksProxyConnection:
 		
 		"""
 		try:
+			wrap_ssl = False
+			if self.target.proto == LDAPProtocol.SSL:
+				wrap_ssl = True
 			self.out_queue = asyncio.Queue()
 			self.in_queue = asyncio.Queue()
 
 			self.proxy_in_queue = asyncio.Queue()
-			comms = SocksQueueComms(self.out_queue, self.proxy_in_queue)
+			comms = SocksQueueComms(self.out_queue, self.proxy_in_queue, wrap_ssl=wrap_ssl)
 
 			self.target.proxy.target[-1].endpoint_ip = self.target.host if self.target.serverip is None else self.target.serverip
 			self.target.proxy.target[-1].endpoint_port = int(self.target.port)
 			self.target.proxy.target[-1].endpoint_timeout = None #TODO: maybe implement endpoint timeout?
 			self.target.proxy.target[-1].timeout = self.target.timeout
 			self.client = SOCKSClient(comms, self.target.proxy.target)
-			self.proxy_task = asyncio.create_task(self.client.run())
+			proxy_coro = await self.client.run(True)
+			self.proxy_task = asyncio.create_task(proxy_coro)
+			await self.client.proxy_running_evt.wait()
 			self.handle_in_task = asyncio.create_task(self.handle_in_q())
 			return True, None
 		except Exception as e:
+			traceback.print_exc()
 			return False, e
 
