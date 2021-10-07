@@ -38,9 +38,10 @@ class MSLDAPClient:
 	:rtype: dict
 
 	"""
-	def __init__(self, target, creds, connection = None):
+	def __init__(self, target, creds, connection = None, keepalive = False):
 		self.creds = creds
 		self.target = target
+		self.keepalive = keepalive
 		self.ldap_query_page_size = 1000
 		if self.target is not None:
 			self.ldap_query_page_size = self.target.ldap_query_page_size
@@ -52,6 +53,7 @@ class MSLDAPClient:
 		self._tree = None
 		self._ldapinfo = None
 		self._con = connection
+		self.__keepalive_task = None
 	
 	async def __aenter__(self):
 		return self
@@ -59,8 +61,27 @@ class MSLDAPClient:
 	async def __aexit__(self, exc_type, exc, traceback):
 		await asyncio.wait_for(self.disconnect(), timeout = 1)
 	
+	async def __keepalive(self):
+		try:
+			while True:
+				if self._con is not None:
+					ldap_filter = r'(distinguishedName=%s)' % self._tree
+					async for entry, err in self.pagedsearch(ldap_filter, MSADInfo_ATTRS):
+						if err is not None:
+							return None, err
+				await asyncio.sleep(10)
+
+		
+		except asyncio.CancelledError:
+			return
+
+		except Exception as e:
+			print('Keepalive exception: %s' % e)
+	
 	async def disconnect(self):
 		try:
+			if self.__keepalive_task is not None:
+				self.__keepalive_task.cancel()
 			if self._con is not None:
 				await self._con.disconnect()
 		
@@ -83,6 +104,8 @@ class MSLDAPClient:
 			self._serverinfo = res
 			self._tree = res['defaultNamingContext']
 			self._ldapinfo, err = await self.get_ad_info()
+			if self.keepalive is True:
+				self.__keepalive_task = asyncio.create_task(self.__keepalive())
 			if err is not None:
 				raise err
 			return True, None

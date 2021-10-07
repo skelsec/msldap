@@ -54,6 +54,7 @@ setup(
 		'winacl>=0.1.1',
 		'prompt-toolkit>=3.0.2',
 		'tqdm',
+		'wcwidth',
 	],
 	entry_points={
 		'console_scripts': [
