@@ -56,6 +56,9 @@ class MSLDAPClientConnection:
 		try:
 			while True:
 				message_data, err = await self.network.in_queue.get()
+				if message_data is None and err is None:
+					return
+
 				if err is not None:
 					logger.debug('Client terminating bc __handle_incoming got an error!')
 					raise err
@@ -208,10 +211,15 @@ class MSLDAPClientConnection:
 
 		logger.debug('Disconnecting!')
 		self.bind_ok = False
-		if self.handle_incoming_task is not None:
-			self.handle_incoming_task.cancel()
+		await self.network.in_queue.put((None,None))
+		await self.network.out_queue.put(None)
+		await asyncio.sleep(0)
+		
 		if self.network is not None:
 			await self.network.terminate()
+		
+		if self.handle_incoming_task is not None:
+			self.handle_incoming_task.cancel()
 
 
 	def __bind_success(self):
@@ -421,6 +429,7 @@ class MSLDAPClientConnection:
 			else:
 				raise Exception('Not implemented authentication method: %s' % self.creds.auth_method.name)
 		except Exception as e:
+			await self.disconnect()
 			return False, e
 
 	async def add(self, entry, attributes):

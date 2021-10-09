@@ -54,6 +54,8 @@ class MSLDAPClient:
 		self._ldapinfo = None
 		self._con = connection
 		self.__keepalive_task = None
+		self.keepalive_period = 10
+		self.disconnected_evt = None
 	
 	async def __aenter__(self):
 		return self
@@ -63,13 +65,13 @@ class MSLDAPClient:
 	
 	async def __keepalive(self):
 		try:
-			while True:
+			while not self.disconnected_evt.is_set():
 				if self._con is not None:
 					ldap_filter = r'(distinguishedName=%s)' % self._tree
 					async for entry, err in self.pagedsearch(ldap_filter, MSADInfo_ATTRS):
 						if err is not None:
 							return None, err
-				await asyncio.sleep(10)
+				await asyncio.sleep(self.keepalive_period)
 
 		
 		except asyncio.CancelledError:
@@ -77,6 +79,7 @@ class MSLDAPClient:
 
 		except Exception as e:
 			print('Keepalive exception: %s' % e)
+			await self.disconnect()
 	
 	async def disconnect(self):
 		try:
@@ -84,12 +87,15 @@ class MSLDAPClient:
 				self.__keepalive_task.cancel()
 			if self._con is not None:
 				await self._con.disconnect()
+			
+			self.disconnected_evt.set()
 		
 		except Exception as e:
 			return False, e
 
 	async def connect(self):
 		try:
+			self.disconnected_evt = asyncio.Event()
 			if self._con is None:
 				self._con = MSLDAPClientConnection(self.target, self.creds)
 				_, err = await self._con.connect()
