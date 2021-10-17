@@ -118,7 +118,8 @@ class MSLDAPURLDecoder:
 
 		self.__pwpreprocess = None
 
-		self.parse()
+		if url is not None:
+			self.parse()
 
 
 	def get_credential(self):
