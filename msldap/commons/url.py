@@ -10,6 +10,7 @@ import hashlib
 import getpass
 import base64
 import enum
+import copy
 from urllib.parse import urlparse, parse_qs
 
 from msldap.commons.credential import MSLDAPCredential, LDAPAuthProtocol, MSLDAP_KERBEROS_PROTOCOLS
@@ -93,7 +94,9 @@ class MSLDAPURLDecoder:
 	ldap://TEST\\victim:password@10.10.10.2/DC=test,DC=corp/?timeout=99&proxytype=socks5&proxyhost=127.0.0.1&proxyport=1080&proxytimeout=44
 	"""
 	
-	def __init__(self, url):
+	def __init__(self, url, credential:MSLDAPCredential = None, target:MSLDAPTarget = None ):
+		self.credential = credential
+		self.target = target
 		self.url = url
 		self.ldap_scheme = None
 		self.auth_scheme = None
@@ -129,6 +132,8 @@ class MSLDAPURLDecoder:
 		:return: Credential object
 		:rtype: :class:`MSLDAPCredential`
 		"""
+		if self.credential is not None:
+			return copy.deepcopy(self.credential)
 		t = MSLDAPCredential(
 			domain=self.domain, 
 			username=self.username, 
@@ -148,6 +153,9 @@ class MSLDAPURLDecoder:
 		:return: Target object
 		:rtype: :class:`MSLDAPTarget`
 		"""
+		if self.target is not None:
+			return copy.deepcopy(self.target)
+
 		target = MSLDAPTarget(
 			self.ldap_host, 
 			port = self.ldap_port, 
