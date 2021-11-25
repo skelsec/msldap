@@ -1,6 +1,6 @@
 from msldap import logger
 from msldap.authentication.ntlm.native import NTLMAUTHHandler, NTLMHandlerSettings
-from pyodidewsnet.clientauth import WSNETAuth
+from wsnet.pyodide.clientauth import WSNETAuth
 import enum
 
 class ISC_REQ(enum.IntFlag):

@@ -15,7 +15,7 @@ from msldap.authentication.spnego.asn1_structs import KRB5Token
 from msldap.authentication.kerberos.gssapi import get_gssapi, GSSWrapToken, KRB5_MECH_INDEP_TOKEN
 from minikerberos.protocol.asn1_structs import AP_REQ, AP_REP, TGS_REP
 from minikerberos.protocol.encryption import Enctype, Key, _enctype_table
-from pyodidewsnet.sspiproxyws import SSPIProxyWS
+from wsnet.operator.sspiproxy import WSNETSSPIProxy
 
 
 # mutual auth not supported
@@ -52,7 +52,7 @@ class MSLDAPSSPIProxyKerberosAuth:
 		self.settings = settings
 		self.mode = 'CLIENT'
 		url = '%s://%s:%s' % (self.settings.proto, self.settings.host, self.settings.port)
-		self.sspi = SSPIProxyWS(url, self.settings.agent_id)
+		self.sspi = WSNETSSPIProxy(url, self.settings.agent_id)
 		self.client = None
 		self.target = None
 		self.gssapi = None

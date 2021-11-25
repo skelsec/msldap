@@ -14,7 +14,7 @@ import ipaddress
 from msldap import logger
 from msldap.protocol.utils import calcualte_length
 
-from pyodidewsnet.client import WSNetworkTCP
+from wsnet.pyodide.client import WSNetworkTCP
 
 
 

@@ -15,7 +15,7 @@ from msldap.authentication.spnego.asn1_structs import KRB5Token
 from msldap.authentication.kerberos.gssapi import get_gssapi, GSSWrapToken, KRB5_MECH_INDEP_TOKEN
 from minikerberos.protocol.asn1_structs import AP_REQ, AP_REP, TGS_REP
 from minikerberos.protocol.encryption import Enctype, Key, _enctype_table
-from pyodidewsnet.clientauth import WSNETAuth
+from wsnet.pyodide.clientauth import WSNETAuth
 
 
 # mutual auth not supported

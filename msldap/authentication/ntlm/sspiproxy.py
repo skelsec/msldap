@@ -1,6 +1,6 @@
 from msldap import logger
 from msldap.authentication.ntlm.native import NTLMAUTHHandler, NTLMHandlerSettings
-from pyodidewsnet.sspiproxyws import SSPIProxyWS
+from wsnet.operator.sspiproxy import WSNETSSPIProxy
 import enum
 
 class ISC_REQ(enum.IntFlag):
@@ -33,7 +33,7 @@ class MSLDAPSSPIProxyNTLMAuth:
 		self.settings = settings
 		self.mode = None #'CLIENT'
 		url = '%s://%s:%s' % (self.settings.proto, self.settings.host, self.settings.port)
-		self.sspi = SSPIProxyWS(url, self.settings.agent_id)
+		self.sspi = WSNETSSPIProxy(url, self.settings.agent_id)
 		self.operator = None
 		self.client = None
 		self.target = None
