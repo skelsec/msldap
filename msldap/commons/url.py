@@ -170,6 +170,20 @@ class MSLDAPURLDecoder:
 		target.proxy = self.proxy
 		target.serverip = self.serverip
 		return target
+	
+	def __str__(self):
+		t = '==== MSLDAPURLDecoder ====\r\n'
+		for k in self.__dict__:
+			val = self.__dict__[k]
+			if isinstance(val, enum.IntFlag):
+				val = val
+			elif isinstance(val, enum.Enum):
+				val = val.name
+			
+			t += '%s: %s\r\n' % (k, str(val))
+			
+		return t
+
 
 	def get_client(self):
 		"""
