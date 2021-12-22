@@ -4,6 +4,7 @@
 #  Tamas Jos (@skelsec)
 #
 
+from codecs import lookup
 import copy
 import asyncio
 
@@ -16,6 +17,7 @@ from msldap.protocol.query import escape_filter_chars
 from msldap.connection import MSLDAPClientConnection
 from msldap.protocol.messages import Control
 from msldap.ldap_objects import *
+from msldap.commons.utils import KNOWN_SIDS
 
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
 from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK
@@ -56,6 +58,8 @@ class MSLDAPClient:
 		self.__keepalive_task = None
 		self.keepalive_period = 10
 		self.disconnected_evt = None
+		self._sid_cache = {} #SID -> (domain, user)
+		self._domainsid_cache = {} # SID -> domain
 	
 	async def __aenter__(self):
 		return self
@@ -110,6 +114,7 @@ class MSLDAPClient:
 			self._serverinfo = res
 			self._tree = res['defaultNamingContext']
 			self._ldapinfo, err = await self.get_ad_info()
+			self._domainsid_cache[self._ldapinfo.objectSid] = self._ldapinfo.name
 			if self.keepalive is True:
 				self.__keepalive_task = asyncio.create_task(self.__keepalive())
 			if err is not None:
@@ -121,7 +126,7 @@ class MSLDAPClient:
 	def get_server_info(self):
 		return self._serverinfo
 
-	async def pagedsearch(self, query, attributes, controls = None):
+	async def pagedsearch(self, query, attributes, controls = None, tree = None):
 		"""
 		Performs a paged search on the AD, using the filter and attributes as a normal query does.
 			!The LDAP connection MUST be active before invoking this function!
@@ -148,7 +153,9 @@ class MSLDAPClient:
 				print('Theconnection is in stopped state!')
 				return
 
-		if self._tree is None:
+		if tree is None:
+			tree = self._tree
+		if tree is None:
 			raise Exception('BIND first!')
 		t = []
 		for x in attributes:
@@ -167,7 +174,7 @@ class MSLDAPClient:
 		controls = t
 
 		async for entry, err in self._con.pagedsearch(
-			self._tree, 
+			tree, 
 			query, 
 			attributes = attributes, 
 			size_limit = self.ldap_query_page_size, 
@@ -681,7 +688,27 @@ class MSLDAPClient:
 				return None, err
 			
 			return entry['attributes']['objectSid'], None
-				
+	
+	async def get_tokengroups_user(self, samaccountname):
+		ldap_filter = r'(sAMAccountName=%s)' % escape_filter_chars(samaccountname)
+		user_dn = None
+		async for entry, err in self.pagedsearch(ldap_filter, ['distinguishedName']):
+			if err is not None:
+				return None, err
+			
+			user_dn = entry['attributes']['distinguishedName']
+		
+		if user_dn is None:
+			return None, Exception('User not found! %s' % samaccountname)
+
+		tokengroup = []
+		async for sids, err in self.get_tokengroups(user_dn):
+			if err is not None:
+				return None, err
+			tokengroup.append(sids)
+		
+		return tokengroup, None
+		
 	async def get_tokengroups(self, dn):
 		"""
 		Yields SIDs of groups that the given DN is a member of.
@@ -1184,6 +1211,142 @@ class MSLDAPClient:
 			return True, None
 		except Exception as e:
 			return False, e
+
+	async def list_root_cas(self):
+		try:
+			ldap_filter = "(objectClass=certificationAuthority)"
+			tree = "CN=Certification Authorities,CN=Public Key Services,CN=Services,CN=Configuration,%s" % self._ldapinfo.distinguishedName
+			async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADCA_ATTRS, tree = tree):
+				if err is not None:
+					yield None, err
+					return
+				yield MSADCA.from_ldap(entry, 'ROOTCA'), None
+
+		except Exception as e:
+			yield None, e
+			return
+	
+	async def list_ntcas(self):
+		try:
+			ldap_filter = "(objectClass=certificationAuthority)"
+			tree = "CN=NTAuthCertificates,CN=Public Key Services,CN=Services,CN=Configuration,%s" % self._ldapinfo.distinguishedName
+			async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADCA_ATTRS, tree = tree):
+				if err is not None:
+					yield None, err
+					return
+				yield MSADCA.from_ldap(entry, 'NTCA'), None
+
+		except Exception as e:
+			yield None, e
+			return
+
+	async def list_aiacas(self):
+		try:
+			ldap_filter = "(objectClass=certificationAuthority)"
+			tree = "CN=AIA,CN=Public Key Services,CN=Services,CN=Configuration,%s" % self._ldapinfo.distinguishedName
+			async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADCA_ATTRS, tree = tree):
+				if err is not None:
+					yield None, err
+					return
+				yield MSADCA.from_ldap(entry, 'AIACA'), None
+
+		except Exception as e:
+			yield None, e
+			return
+
+	async def list_enrollment_services(self):
+		try:
+			ldap_filter = "(objectCategory=pKIEnrollmentService)"
+			tree = "CN=Configuration,%s" % self._ldapinfo.distinguishedName
+
+			async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADEnrollmentService_ATTRS, tree = tree):
+				if err is not None:
+					yield None, err
+					return
+				yield MSADEnrollmentService.from_ldap(entry), None
+			
+		except Exception as e:
+			yield None, e
+			return
+
+	async def list_certificate_templates(self, name = None):
+		try:
+			req_flags = SDFlagsRequestValue({'Flags' : SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION})
+			controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
+
+			ldap_filter = "(objectCategory=pKICertificateTemplate)"
+			if name is not None:
+				ldap_filter = "(&(objectCategory=pKICertificateTemplate)(name=%s))" % name
+			tree = "CN=Configuration,%s" % self._ldapinfo.distinguishedName
+
+			async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADCertificateTemplate_ATTRS, controls=controls, tree = tree):
+				if err is not None:
+					yield None, err
+					return
+				yield MSADCertificateTemplate.from_ldap(entry), None
+			
+		except Exception as e:
+			yield None, e
+			return
+
+	async def resolv_sd(self, sd):
+		"Resolves all SIDs found in security descriptor, returns lookup table"
+		try:
+			if isinstance(sd, bytes):
+				sd = SECURITY_DESCRIPTOR.from_bytes(sd)
+			
+			lookup_table = {}
+			sids = {}
+			sids[str(sd.Owner)] = 1
+			sids[str(sd.Group)] = 1
+			if sd.Dacl is not None:
+				for ace in sd.Dacl.aces:
+					sids[str(ace.Sid)] = 1
+			if sd.Sacl is not None:
+				for ace in sd.Sacl.aces:
+					sids[str(ace.Sid)] = 1
+			
+			for sid in sids:
+				domain, username, err = await self.resolv_sid(sid)
+				if err is not None:
+					raise err
+				lookup_table[sid] = (domain, username)
+			
+			return lookup_table, None
+
+		except Exception as e:
+			return None, e
+	
+	async def resolv_sid(self, sid, use_cache = True):
+		"""Performs a SID lookup for object and returns the domain name and the samaccountname"""
+		try:
+			sid = str(sid).upper()
+			if sid in KNOWN_SIDS:
+				return "BUILTIN", KNOWN_SIDS[sid], None
+			domain = None
+			username = None
+			domainsid = sid.rsplit('-',1)[0]
+			if domainsid not in self._domainsid_cache:
+				return None, None, Exception('Domain not found! for %s' % domainsid)
+			domain = self._domainsid_cache[domainsid]
+			if sid in self._sid_cache:
+				username = self._sid_cache[sid]
+			
+			else:
+				ldap_filter = r'(objectSid=%s)' % sid
+				async for entry, err in self.pagedsearch(ldap_filter, attributes = ['sAMAccountName']):
+					if err is not None:
+						return None, None, err
+					username = entry['attributes'].get('sAMAccountName')
+				
+				if username is None:
+					raise Exception('User not found! %s' % sid)
+			
+			if use_cache is True:
+				self._sid_cache[sid] = username
+			return domain, username, None
+		except Exception as e:
+			return None, None, e
 
 	#async def get_permissions_for_dn(self, dn):
 	#	"""

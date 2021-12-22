@@ -93,6 +93,9 @@ def list_bytes_one(x):
 def list_bytes_one_enc(x):
 	return x
 
+def bytes2timedelta(x):
+	return int2timedelta([int.from_bytes(x[0], byteorder='little', signed=True)])
+
 def int2timedelta(x):
 	x = int(x[0])
 	if x == '-9223372036854775808':
@@ -166,6 +169,8 @@ def list_ts2dt(x):
 		t.append(ts2dt((a, None)))
 	return t
 
+def list_ts2dt_one(x):
+	return ts2dt(x[0])
 
 LDAP_ATTRIBUTE_TYPES = {
 	'supportedCapabilities' : list_str,
@@ -275,6 +280,28 @@ LDAP_ATTRIBUTE_TYPES = {
 	'unicodePwd' : list_str_one,
 	'ms-Mcs-AdmPwd' : list_str_one,
 	'msDS-AllowedToActOnBehalfOfOtherIdentity' : list_bytes_one,
+	'cACertificate': list_bytes_one,
+	'certificateTemplates': list_str,
+	'cACertificateDN': list_str_one,
+	'msPKI-Enrollment-Servers': list_str, # it's actually a 5-part multi string split by '\n'
+	'revision' : list_int_one,
+	'pKIKeyUsage' : list_bytes_one,
+	'pKIDefaultKeySpec' : list_str_one,
+	'pKIMaxIssuingDepth' : list_int_one,
+	'pKICriticalExtensions' : list_str_one,
+	'pKIExpirationPeriod' : bytes2timedelta,
+	'pKIOverlapPeriod' : bytes2timedelta,
+	'pKIExtendedKeyUsage' : list_str,
+	'msPKI-RA-Signature' : list_int_one,
+	'msPKI-Enrollment-Flag' : list_int_one,
+	'msPKI-Private-Key-Flag' : list_int_one,
+	'msPKI-Certificate-Name-Flag' : list_int_one,
+	'msPKI-Minimal-Key-Size' : list_int_one,
+	'msPKI-Template-Schema-Version': list_int_one, 
+    'msPKI-Template-Minor-Revision': list_int_one, 
+	'msPKI-Cert-Template-OID' : list_str_one,
+	'msPKI-Certificate-Application-Policy' : list_str,
+	'msPKI-RA-Application-Policies' : list_str, #I'm guessing here
 }
 
 LDAP_ATTRIBUTE_TYPES_ENC = {
