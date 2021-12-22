@@ -14,6 +14,9 @@ from msldap.ldap_objects.adou import MSADOU, MSADOU_ATTRS
 from msldap.ldap_objects.adgpo import MSADGPO, MSADGPO_ATTRS
 from msldap.ldap_objects.adtrust import MSADDomainTrust, MSADDomainTrust_ATTRS
 from msldap.ldap_objects.adschemaentry import MSADSCHEMAENTRY_ATTRS, MSADSchemaEntry
+from msldap.ldap_objects.adca import MSADCA, MSADCA_ATTRS
+from msldap.ldap_objects.adenrollmentservice import MSADEnrollmentService_ATTRS, MSADEnrollmentService
+from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate, MSADCertificateTemplate_ATTRS
 
 __all__ = [
     'MSADUser', 
@@ -37,4 +40,11 @@ __all__ = [
     'MSADOU_ATTRS',
     'MSADSCHEMAENTRY_ATTRS',
     'MSADSchemaEntry',
+    'MSADCA',
+    'MSADCA_ATTRS',
+    'MSADEnrollmentService_ATTRS',
+    'MSADEnrollmentService',
+    'MSADCertificateTemplate', 
+    'MSADCertificateTemplate_ATTRS',
+
 ]

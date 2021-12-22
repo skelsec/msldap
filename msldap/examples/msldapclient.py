@@ -5,12 +5,14 @@
 #
 
 import asyncio
+from os import terminal_size
 import traceback
 import logging
 import csv
 import shlex
 import datetime
 import copy
+import typing
 
 from msldap.external.aiocmd.aiocmd import aiocmd
 from msldap.external.asciitree.asciitree import LeftAligned
@@ -23,9 +25,12 @@ from msldap.commons.url import MSLDAPURLDecoder
 from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
 
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
-from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK
+from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK, AceFlags, ACE_OBJECT_PRESENCE
 from winacl.dtyp.sid import SID
 from winacl.dtyp.guid import GUID
+
+from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate, EX_RIGHT_CERTIFICATE_ENROLLMENT
+from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest
 
 
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
@@ -605,7 +610,181 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 			return False
+
+	async def do_rootcas(self, to_print = True):
+		"""Lists Root CA certificates"""
+		try:
+			cas = []
+			async for ca, err in self.connection.list_root_cas():
+				if err is not None:
+					raise err
+				cas.append(ca)
+				if to_print is True:
+					print(ca)
+			return cas
+		except:
+			traceback.print_exc()
+			return False
+
+	async def do_ntcas(self, to_print = True):
+		"""Lists NT CA certificates"""
+		try:
+			cas = []
+			async for ca, err in self.connection.list_ntcas():
+				if err is not None:
+					raise err
+				cas.append(ca)
+				if to_print is True:
+					print(ca)
+			return cas
+		except:
+			traceback.print_exc()
+			return False
+	
+	async def do_aiacas(self, to_print = True):
+		"""Lists AIA CA certificates"""
+		try:
+			cas = []
+			async for ca, err in self.connection.list_aiacas():
+				if err is not None:
+					raise err
+				cas.append(ca)
+				if to_print is True:
+					print(ca)
+			return cas
+		except:
+			traceback.print_exc()
+			return False
+
+	async def do_enrollmentservices(self, to_print=True):
+		"""Lists AIA CA certificates"""
+		try:
+			services = []
+			async for srv, err in self.connection.list_enrollment_services():
+				if err is not None:
+					raise err
+				services.append(srv)
+				if to_print is True:
+					print(srv)
+			return services
+		except:
+			traceback.print_exc()
+			return False
+
+	async def do_addenrollmentright(self, certtemplatename, user_dn):
+		try:
+			user_sid, err = await self.connection.get_objectsid_for_dn(user_dn)
+			if err is not None:
+				raise err
 			
+			template = None
+			async for template, err in self.connection.list_certificate_templates(certtemplatename):
+				if err is not None:
+					raise err
+				break
+			
+			if template is None:
+				raise Exception("Template could not be found!")
+			template = typing.cast(MSADCertificateTemplate, template)
+			new_sd = copy.deepcopy(template.nTSecurityDescriptor)
+			ace = ACCESS_ALLOWED_OBJECT_ACE()
+			ace.Sid = SID.from_string(user_sid)
+			ace.ObjectType = GUID.from_string(EX_RIGHT_CERTIFICATE_ENROLLMENT)
+			ace.AceFlags = AceFlags(0)
+			ace.Mask = ADS_ACCESS_MASK.READ_PROP | ADS_ACCESS_MASK.WRITE_PROP | ADS_ACCESS_MASK.CONTROL_ACCESS
+			ace.Flags = ACE_OBJECT_PRESENCE.ACE_OBJECT_TYPE_PRESENT
+			new_sd.Dacl.aces.append(ace)
+			_, err = await self.connection.set_objectacl_by_dn(template.distinguishedName, new_sd.to_bytes(), flags=SDFlagsRequest.DACL_SECURITY_INFORMATION)
+			if err is not None:
+				raise err
+			print('SD set sucessfully')
+			return True
+		except:
+			traceback.print_exc()
+			return False
+
+	async def do_certtemplates(self, name = None, to_print = True):
+		"""Lists certificate templates"""
+		try:
+			services = await self.do_enrollmentservices(to_print=False)
+			templates = []
+			async for template, err in self.connection.list_certificate_templates(name):
+				if err is not None:
+					raise err
+				
+				lt = None
+				if template.nTSecurityDescriptor is not None:
+					lt, err = await self.connection.resolv_sd(template.nTSecurityDescriptor)
+					if err is not None:
+						raise err
+				template.sid_lookup_table = lt
+				for srv in services:
+					if template.name in srv.certificateTemplates:
+						template.enroll_services.append('%s\\%s' % (srv.dNSHostName, srv.name))
+
+				templates.append(template)
+				if to_print is True:
+					print(template.prettyprint())
+
+			return templates
+		except:
+			traceback.print_exc()
+			return False
+
+	async def do_sidresolv(self, sid, to_print = True):
+		"""Returns the domain and username for SID"""
+		try:
+			domain, username, err = await self.connection.resolv_sid(sid)
+			if err is not None:
+				raise err
+			res = '%s\\%s' % (domain, username)
+			if to_print is True:
+				print(res)
+			return res
+		except:
+			traceback.print_exc()
+			return False
+
+	async def do_certify(self, cmd = None, username = None):
+		try:
+			es = await self.do_enrollmentservices(to_print=False)
+			if es is False:
+				raise Exception('Listing enrollment Services error! %s' % es)
+			if es is None:
+				raise Exception('No Enrollment Services present, stopping!')
+			
+			templates = await self.do_certtemplates(to_print=False)
+			if templates is False:
+				raise Exception('Listing templates error! %s' % es)
+			
+			if templates is None:
+				raise Exception('No templates exists!')
+			
+			for enrollment in es:
+				print(enrollment)
+			
+			if cmd is not None:
+				if cmd.lower().startswith('vuln') is True:
+					tokengroups = None
+					if username is not None:
+						tokengroups, err = await self.connection.get_tokengroups_user(username)
+						if err is not None:
+							raise err
+
+					for template in templates:
+						isvuln, reason = template.is_vulnerable(tokengroups)
+						if isvuln is True:
+							print(reason)
+							print(template)
+			else:
+				for template in templates:
+					print(template)
+
+			return True
+		except:
+			traceback.print_exc()
+			return False
+	
 	async def do_test(self):
 		"""testing, dontuse"""
 		try:
