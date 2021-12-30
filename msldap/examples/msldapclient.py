@@ -29,7 +29,7 @@ from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK, AceFlags
 from winacl.dtyp.sid import SID
 from winacl.dtyp.guid import GUID
 
-from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate, EX_RIGHT_CERTIFICATE_ENROLLMENT
+from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate, EX_RIGHT_CERTIFICATE_ENROLLMENT, CertificateNameFlag
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest
 
 
@@ -671,7 +671,42 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 			return False
 
+	async def do_addcerttemplatenameflagaltname(self, certtemplatename, flags = None):
+		"""Modifyies the msPKI-Certificate-Name-Flag value of the specified certificate template and enables ENROLLEE_SUPPLIES_SUBJECT_ALT_NAME bit. If 'flags' is present then it will assign that value."""
+		try:
+			template = None
+			async for template, err in self.connection.list_certificate_templates(certtemplatename):
+				if err is not None:
+					raise err
+				break
+			
+			if template is None:
+				raise Exception("Template could not be found!")
+			
+			template = typing.cast(MSADCertificateTemplate, template)
+			if flags is not None:
+				flags = int(flags)
+			else:
+				flags = int(CertificateNameFlag(template.Certificate_Name_Flag) | CertificateNameFlag.ENROLLEE_SUPPLIES_SUBJECT_ALT_NAME)
+
+			changes = {
+				'msPKI-Certificate-Name-Flag' : [('replace', [flags])]
+			}
+	
+			_, err = await self.connection.modify(template.distinguishedName, changes)
+			if err is not None:
+				raise err
+			
+			print('Modify OK!')
+			return True
+
+
+		except:
+			traceback.print_exc()
+			return False
+
 	async def do_addenrollmentright(self, certtemplatename, user_dn):
+		"""Grants enrollment rights to a user (by DN) for the specified certificate template."""
 		try:
 			user_sid, err = await self.connection.get_objectsid_for_dn(user_dn)
 			if err is not None:

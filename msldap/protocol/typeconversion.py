@@ -322,6 +322,7 @@ LDAP_ATTRIBUTE_TYPES_ENC = {
 	'member' : list_str_enc,
 	'msDS-AllowedToActOnBehalfOfOtherIdentity' : list_bytes_one_enc,
 	'nTSecurityDescriptor' : list_bytes_one_enc,
+	'msPKI-Certificate-Name-Flag' : list_int_one_enc
 }
 
 def encode_attributes(x):
