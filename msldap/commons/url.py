@@ -107,6 +107,8 @@ class MSLDAPURLDecoder:
 		self.encrypt = False
 		self.auth_settings = {}
 		self.etypes = None
+		self.altname = None
+		self.altdomain = None
 
 		self.ldap_proto = None
 		self.ldap_host = None
@@ -139,7 +141,9 @@ class MSLDAPURLDecoder:
 			username=self.username, 
 			password = self.password, 
 			auth_method=self.auth_scheme, 
-			settings = self.auth_settings
+			settings = self.auth_settings,
+			altname=self.altname,
+			altdomain=self.altdomain
 		)
 		t.encrypt = self.encrypt
 		t.etypes = self.etypes
@@ -366,6 +370,10 @@ class MSLDAPURLDecoder:
 					self.target_ratelimit = float(query[k][0])
 				elif k == 'pagesize':
 					self.target_pagesize = int(query[k][0])
+				elif k == 'altname':
+					self.altname = query[k][0]
+				elif k == 'altdomain':
+					self.altdomain = query[k][0]
 				#elif k.startswith('same'):
 				#	self.auth_settings[k[len('same'):]] = query[k]
 

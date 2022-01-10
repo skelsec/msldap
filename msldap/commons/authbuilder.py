@@ -226,7 +226,10 @@ class AuthenticatorBuilder:
 				LDAPAuthProtocol.KERBEROS_PASSWORD, 
 				LDAPAuthProtocol.KERBEROS_CCACHE, 
 				LDAPAuthProtocol.KERBEROS_KEYTAB,
-				LDAPAuthProtocol.KERBEROS_KIRBI]:
+				LDAPAuthProtocol.KERBEROS_KIRBI,
+				LDAPAuthProtocol.KERBEROS_PFX,
+				LDAPAuthProtocol.KERBEROS_PEM,
+				LDAPAuthProtocol.KERBEROS_CERTSTORE]:
 			
 			if self.target is None:
 				raise Exception('Target must be specified with Kerberos!')
@@ -244,6 +247,27 @@ class AuthenticatorBuilder:
 				kc = KerberosCredential.from_ccache_file(self.creds.password, self.creds.username, self.creds.domain)
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_KEYTAB:
 				kc = KerberosCredential.from_kirbi(self.creds.password, self.creds.username, self.creds.domain)
+			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_PFX:
+				kc = KerberosCredential.from_pfx_file(self.creds.username, self.creds.password, username = self.creds.altname, domain = self.creds.altdomain)
+				self.creds.username = kc.username
+				self.creds.domain = kc.domain
+				self.target.domain = kc.domain
+			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_PEM:
+				kc = KerberosCredential.from_pem_file(self.creds.username, self.creds.password, username = self.creds.altname, domain = self.creds.altdomain)
+				self.creds.username = kc.username
+				self.creds.domain = kc.domain
+				self.target.domain = kc.domain
+			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_CERTSTORE:
+				# username is the CN of the certificate
+				# secret is the name of the certstore, default: MY
+				certstore = self.creds.secret
+				if self.creds.secret is None:
+					certstore = 'MY'
+				kc = KerberosCredential.from_windows_certstore(self.creds.username, certstore, username = self.creds.altname, domain = self.creds.altdomain)
+				self.creds.username = kc.username
+				self.creds.domain = kc.domain
+				self.target.domain = kc.domain
+
 			else:
 				kc = KerberosCredential()
 				kc.username = self.creds.username
@@ -276,6 +300,8 @@ class AuthenticatorBuilder:
 				kcred.enctypes = [23,17,18] # TODO: fix this
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_KIRBI:
 				kcred.enctypes = [23,17,18] # TODO: fix this
+			elif self.creds.auth_method in [LDAPAuthProtocol.KERBEROS_PFX, LDAPAuthProtocol.KERBEROS_CERTSTORE, LDAPAuthProtocol.KERBEROS_PEM]:
+				kcred.enctypes = [17,18]
 			else:
 				raise Exception('No suitable secret type found to set up kerberos!')
 
