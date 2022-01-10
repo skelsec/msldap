@@ -35,7 +35,10 @@ class LDAPAuthProtocol(enum.Enum):
 	KERBEROS_PASSWORD = 'KERBEROS_PASSWORD' 
 	KERBEROS_CCACHE = 'KERBEROS_CCACHE' 
 	KERBEROS_KEYTAB = 'KERBEROS_KEYTAB'
-	KERBEROS_KIRBI = 'KERBEROS_KIRBI' 
+	KERBEROS_KIRBI = 'KERBEROS_KIRBI'
+	KERBEROS_PFX = 'KERBEROS_PFX'
+	KERBEROS_PEM = 'KERBEROS_PEM'
+	KERBEROS_CERTSTORE = 'KERBEROS_CERTSTORE'
 	MULTIPLEXOR_KERBEROS = 'MULTIPLEXOR_KERBEROS'
 	MULTIPLEXOR_NTLM = 'MULTIPLEXOR_NTLM'
 	MULTIPLEXOR_SSL_KERBEROS = 'MULTIPLEXOR_SSL_KERBEROS'
@@ -57,6 +60,9 @@ MSLDAP_GSS_METHODS = [
 		LDAPAuthProtocol.KERBEROS_CCACHE ,
 		LDAPAuthProtocol.KERBEROS_KEYTAB ,
 		LDAPAuthProtocol.KERBEROS_KIRBI ,
+		LDAPAuthProtocol.KERBEROS_PFX ,
+		LDAPAuthProtocol.KERBEROS_PEM ,
+		LDAPAuthProtocol.KERBEROS_CERTSTORE ,
 		LDAPAuthProtocol.SSPI_NTLM ,
 		LDAPAuthProtocol.SSPI_KERBEROS,
 		LDAPAuthProtocol.MULTIPLEXOR_KERBEROS,
@@ -77,6 +83,9 @@ MSLDAP_KERBEROS_PROTOCOLS = [
 	LDAPAuthProtocol.KERBEROS_CCACHE ,
 	LDAPAuthProtocol.KERBEROS_KEYTAB ,
 	LDAPAuthProtocol.KERBEROS_KIRBI ,
+	LDAPAuthProtocol.KERBEROS_PFX ,
+	LDAPAuthProtocol.KERBEROS_PEM ,
+	LDAPAuthProtocol.KERBEROS_CERTSTORE ,
 ]
 
 class MSLDAPCredential:
@@ -98,7 +107,7 @@ class MSLDAPCredential:
 	:param encrypt: Use protocol-level encryption. Doesnt work on LDAPS
 	:type encrypt: bool
 	"""
-	def __init__(self, domain=None, username= None, password = None, auth_method = None, settings = None, etypes = None, encrypt = False):
+	def __init__(self, domain=None, username= None, password = None, auth_method = None, settings = None, etypes = None, encrypt = False, altname = None, altdomain = None):
 		self.auth_method = auth_method
 		self.domain   = domain
 		self.username = username
@@ -108,6 +117,8 @@ class MSLDAPCredential:
 		self.settings = settings
 		self.etypes = etypes
 		self.encrypt = encrypt
+		self.altname = altname
+		self.altdomain = altdomain
 
 	def get_msuser(self):
 		if not self.domain:

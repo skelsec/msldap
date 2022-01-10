@@ -76,6 +76,9 @@ Detailed explanation with examples:
 		- kerberos-aes (dc option param must be used)
 		- kerberos-keytab (dc option param must be used)
 		- kerberos-ccache (dc option param must be used)
+		- kerberos-pfx (dc option param must be used)
+		- kerberos-pem (dc option param must be used)
+		- kerberos-certstore (dc option param must be used, windows only)
 		- sspi-ntlm (windows only!)
 		- sspi-kerberos (windows only!)
 		- anonymous
