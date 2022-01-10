@@ -1327,7 +1327,8 @@ class MSLDAPClient:
 			username = None
 			domainsid = sid.rsplit('-',1)[0]
 			if domainsid not in self._domainsid_cache:
-				return None, None, Exception('Domain not found! for %s' % domainsid)
+				logger.debug('Domain SID "%s" was not found! ' % domainsid)
+				return '', '', None
 			domain = self._domainsid_cache[domainsid]
 			if sid in self._sid_cache:
 				username = self._sid_cache[sid]
