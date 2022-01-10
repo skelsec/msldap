@@ -1,7 +1,6 @@
-![Supported Python versions](https://img.shields.io/badge/python-3.6+-blue.svg) [![Twitter](https://img.shields.io/twitter/follow/skelsec?label=skelsec&style=social)](https://twitter.com/intent/follow?screen_name=skelsec)  
-[![Documentation Status](https://readthedocs.org/projects/msldap/badge/?version=latest)](https://msldap.readthedocs.io/en/latest/?badge=latest)
+![Supported Python versions](https://img.shields.io/badge/python-3.6+-blue.svg) [![Documentation Status](https://readthedocs.org/projects/msldap/badge/?version=latest)](https://msldap.readthedocs.io/en/latest/?badge=latest) [![Twitter](https://img.shields.io/twitter/follow/skelsec?label=skelsec&style=social)](https://twitter.com/intent/follow?screen_name=skelsec)
 
-:triangular_flag_on_post: This is the public repository of minikerberos, for latest version and updates please consider supporting us through https://porchetta.industries/
+:triangular_flag_on_post: This is the public repository of msldap, for latest version and updates please consider supporting us through https://porchetta.industries/
 
 # msldap
 LDAP library for MS AD
