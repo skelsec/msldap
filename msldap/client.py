@@ -1349,6 +1349,41 @@ class MSLDAPClient:
 			return domain, username, None
 		except Exception as e:
 			return None, None, e
+	
+	async def whoami(self):
+		return await self._con.whoami()
+
+	async def whoamifull(self):
+		"""Full whoami"""
+		#TODO: it can be the case that the server returns the SID of the user
+		# implement that path!
+		result = {}
+		try:
+			res, err = await self.whoami()
+			if err is not None:
+				raise err
+			result['raw'] = res
+			if res.startswith('u:') is True:
+				domain, samaccountname = res[2:].split('\\', 1)
+				result['domain'] = domain
+				result['samaccountname'] = samaccountname
+				user, err = await self.get_user(samaccountname)
+				if err is not None:
+					raise err
+				result['sid'] = str(user.objectSid)
+				result['groups'] = {}
+				async for group_sid, err in self.get_tokengroups(user.distinguishedName):
+					if err is not None:
+						raise err
+					result['groups'][group_sid] = ('NA','NA')
+					domain, username, err = await self.resolv_sid(group_sid)
+					if err is not None:
+						raise err
+					result['groups'][group_sid] = (domain, username)				
+			
+			return result, None
+		except:
+			return result, None
 
 	#async def get_permissions_for_dn(self, dn):
 	#	"""

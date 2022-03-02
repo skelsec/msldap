@@ -217,7 +217,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 			return False
 
-	async def do_user(self, samaccountname):
+	async def do_user(self, samaccountname, to_print=True):
 		"""Feteches a user object based on the sAMAccountName of the user"""
 		try:
 			await self.do_ldapinfo(False)
@@ -225,12 +225,14 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			user, err = await self.connection.get_user(samaccountname)
 			if err is not None:
 				raise err
-			if user is None:
-				print('User not found!')
-			else:
-				print(user)
+
+			if to_print is True:
+				if user is None:
+					print('User not found!')
+				else:
+					print(user)
 			
-			return True
+			return user
 		except:
 			traceback.print_exc()
 			return False
@@ -781,6 +783,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			return False
 
 	async def do_certify(self, cmd = None, username = None):
+		"""ADCA security test"""
 		try:
 			es = await self.do_enrollmentservices(to_print=False)
 			if es is False:
@@ -819,7 +822,36 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 			return False
-	
+
+	async def do_whoamiraw(self):
+		"""Simple whoami"""
+		try:
+			res, err = await self.connection.whoami()
+			if err is not None:
+				raise err
+			print(res)
+		except:
+			traceback.print_exc()
+			return False
+		
+	async def do_whoami(self):
+		"""Full whoami"""
+		try:
+			res, err = await self.connection.whoamifull()
+			if err is not None:
+				raise err
+			
+			for x in res:
+				if isinstance(res[x], str) is True:
+					print('%s: %s' % (x, res[x]))
+				elif isinstance(res[x], dict) is True:
+					for k in res[x]:
+						print('Group: %s (%s)' % (k,'\\'.join(res[x][k])))
+			return True
+		except:
+			traceback.print_exc()
+			return False, None
+
 	async def do_test(self):
 		"""testing, dontuse"""
 		try:

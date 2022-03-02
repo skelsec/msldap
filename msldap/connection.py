@@ -7,7 +7,7 @@ from msldap.protocol.messages import LDAPMessage, BindRequest, \
 	protocolOp, AuthenticationChoice, SaslCredentials, \
 	SearchRequest, AttributeDescription, Filter, Filters, \
 	Controls, Control, SearchControlValue, AddRequest, \
-	ModifyRequest, DelRequest
+	ModifyRequest, DelRequest, ExtendedRequest, ExtendedResponse
 
 from msldap.protocol.utils import calcualte_length
 from msldap.protocol.typeconversion import convert_result, convert_attributes, encode_attributes, encode_changes
@@ -714,6 +714,29 @@ class MSLDAPClientConnection:
 		
 		except Exception as e:
 			yield (None, e)
+
+	async def whoami(self):
+		if self.status != MSLDAPClientStatus.RUNNING:
+			return None, Exception('Connection not running! Probably encountered an error')
+		
+		ext = {
+			'requestName': b'1.3.6.1.4.1.4203.1.11.3',
+		}
+		br = { 'extendedReq' : ExtendedRequest(ext)}
+		msg = { 'protocolOp' : protocolOp(br)}
+
+		msg_id = await self.send_message(msg)
+		res = await self.recv_message(msg_id)
+		res = res[0]
+		if isinstance(res, Exception):
+			return None, res
+		if res.native['protocolOp']['resultCode'] != 'success':
+			return False, LDAPBindException(
+					res['protocolOp']['resultCode'], 
+					res['protocolOp']['diagnosticMessage']
+				)
+		return res.native['protocolOp']['responseValue'].decode(), None
+		
 
 
 	async def get_serverinfo(self):
