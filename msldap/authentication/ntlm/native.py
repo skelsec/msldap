@@ -1,11 +1,6 @@
 import os
 import struct
-import hmac
-import copy
-import hashlib
 
-#from aiosmb.commons.connection.credential import SMBNTLMCredential
-#from aiosmb.commons.serverinfo import NTLMServerInfo
 from msldap.authentication.ntlm.templates.server import NTLMServerTemplates
 from msldap.authentication.ntlm.templates.client import NTLMClientTemplates
 from msldap.authentication.ntlm.structures.negotiate_flags import NegotiateFlags
@@ -16,7 +11,9 @@ from msldap.authentication.ntlm.messages.negotiate import NTLMNegotiate
 from msldap.authentication.ntlm.messages.challenge import NTLMChallenge
 from msldap.authentication.ntlm.messages.authenticate import NTLMAuthenticate
 from msldap.authentication.ntlm.creds_calc import *
-from msldap.crypto.symmetric import RC4
+from unicrypto.symmetric import RC4
+from unicrypto import hmac
+from unicrypto import hashlib
 		
 
 class NTLMHandlerSettings:
@@ -164,14 +161,14 @@ class NTLMAUTHHandler:
 			msg = NTLMSSP_MESSAGE_SIGNATURE()
 			if NegotiateFlags.NEGOTIATE_KEY_EXCH in self.ntlmChallenge.NegotiateFlags:
 				tt = struct.pack('<i', seqNum) + message
-				t = hmac_md5(signingKey)
+				t = hmac.new(signingKey, digestmod='md5')
 				t.update(tt)
 				
 				msg.Checksum = handle(t.digest()[:8])
 				msg.SeqNum = seqNum
 				seqNum += 1
 			else:
-				t = hmac_md5(signingKey)
+				t = hmac.new(signingKey, digestmod='md5')
 				t.update(struct.pack('<i',seqNum)+message)
 				msg.Checksum = t.digest()[:8]
 				msg.SeqNum = seqNum

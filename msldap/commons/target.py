@@ -8,11 +8,8 @@
 import enum
 
 import platform
-try:
-	import ssl
-except:
-	if platform.system() == 'Emscripten':
-		pass
+import ssl
+
 
 class LDAPProtocol(enum.Enum):
 	TCP = 'TCP'

@@ -6,8 +6,9 @@ from asn1crypto.core import ObjectIdentifier
 
 from minikerberos.protocol.constants import EncryptionType
 from minikerberos.protocol import encryption
-from minikerberos.crypto.hashing import md5, hmac_md5
-from minikerberos.crypto.RC4 import RC4
+from unicrypto.hashlib import md5
+from unicrypto import hmac # import md5, hmac_md5
+from unicrypto.symmetric import RC4
 
 #TODO: RC4 support!
 
@@ -205,21 +206,21 @@ class GSSAPI_RC4:
 		else:
 			mic.SND_SEQ = sequenceNumber.to_bytes(4, 'big', signed = False) + b'\xff'*4
 		
-		Ksign_ctx = hmac_md5(self.session_key.contents)
+		Ksign_ctx = hmac.new(self.session_key.contents, digestmod='md5')
 		Ksign_ctx.update(b'signaturekey\0')
 		Ksign = Ksign_ctx.digest()
 		
 		id = 15
 		temp = md5( id.to_bytes(4, 'little', signed = False) +  mic.to_bytes()[:8] ).digest()
-		chksum_ctx = hmac_md5(Ksign)
+		chksum_ctx = hmac.new(Ksign, digestmod='md5')
 		chksum_ctx.update(temp)
 		mic.SGN_CKSUM = chksum_ctx.digest()[:8]
 		
 		id = 0
-		temp = hmac_md5(self.session_key.contents)
+		temp = hmac.new(self.session_key.contents, digestmod='md5')
 		temp.update(id.to_bytes(4, 'little', signed = False))
 		
-		Kseq_ctx = hmac_md5(temp.digest())
+		Kseq_ctx = hmac.new(temp.digest(), digestmod='md5')
 		Kseq_ctx.update(mic.SGN_CKSUM)
 		Kseq = Kseq_ctx.digest()
 		
@@ -264,7 +265,7 @@ class GSSAPI_RC4:
 		#	#testing purposes only, pls remove
 			
 		
-		temp = hmac_md5(self.session_key.contents)
+		temp = hmac.new(self.session_key.contents, digestmod='md5')
 		temp.update(b'signaturekey\0')
 		Ksign = temp.digest()
 		
@@ -276,20 +277,20 @@ class GSSAPI_RC4:
 			klocal += bytes([b ^ 0xf0])
 
 		id = 0
-		temp = hmac_md5(klocal)
+		temp = hmac.new(klocal, digestmod='md5')
 		temp.update(id.to_bytes(4, 'little', signed = False))
-		temp = hmac_md5(temp.digest())
+		temp = hmac.new(temp.digest(), digestmod='md5')
 		temp.update(seq_num.to_bytes(4, 'big', signed = False))
 		Kcrypt = temp.digest()
 
-		temp = hmac_md5(Ksign)
+		temp = hmac.new(Ksign, digestmod='md5')
 		temp.update(Sgn_Cksum)
 		token.SGN_CKSUM = temp.digest()[:8]
 		
 		id = 0
-		temp = hmac_md5(self.session_key.contents)
+		temp = hmac.new(self.session_key.contents, digestmod='md5')
 		temp.update(id.to_bytes(4, 'little', signed = False))
-		temp = hmac_md5(temp.digest())
+		temp = hmac.new(temp.digest(), digestmod='md5')
 		temp.update(token.SGN_CKSUM)
 		Kseq = temp.digest()
 		
@@ -309,18 +310,18 @@ class GSSAPI_RC4:
 			wrap = GSSWRAP_RC4.from_bytes(hdr)
 			
 			id = 0
-			temp = hmac_md5(self.session_key.contents)
+			temp = hmac.new(self.session_key.contents, digestmod='md5')
 			temp.update(id.to_bytes(4, 'little', signed = False))
-			temp = hmac_md5(temp.digest())
+			temp = hmac.new(temp.digest(), digestmod='md5')
 			temp.update(wrap.SGN_CKSUM)
 			Kseq = temp.digest()
 			
 			snd_seq = RC4(Kseq).encrypt(wrap.SND_SEQ)
 			
 			id = 0
-			temp = hmac_md5(klocal)
+			temp = hmac.new(klocal, digestmod='md5')
 			temp.update(id.to_bytes(4, 'little', signed = False))
-			temp = hmac_md5(temp.digest())
+			temp = hmac.new(temp.digest(), digestmod='md5')
 			temp.update(snd_seq[:4])
 			Kcrypt = temp.digest()
 			
@@ -331,7 +332,7 @@ class GSSAPI_RC4:
 			id = 13
 			Sgn_Cksum_calc = md5(id.to_bytes(4, 'little', signed = False) +  wrap.to_bytes()[:8] + dec_cofounder + dec_data).digest()
 
-			temp = hmac_md5(Ksign)
+			temp = hmac.new(Ksign, digestmod='md5')
 			temp.update(Sgn_Cksum_calc)
 			Sgn_Cksum_calc = temp.digest()[:8]
 
