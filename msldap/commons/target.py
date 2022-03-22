@@ -37,15 +37,17 @@ class MSLDAPTarget:
 	:type ldap_query_page_size: int
 	:param ldap_query_ratelimit: rate limit of paged queries. This will cause a sleep (in seconds) between fetching of each page of the query
 	:type ldap_query_ratelimit: float
+	:param dc_ip: Ip address of the kerberos server (if kerberos is used)
+	:type dc_ip: str
 	"""
-	def __init__(self, host, port = 389, proto = LDAPProtocol.TCP, tree = None, proxy = None, timeout = 10, ldap_query_page_size = 1000, ldap_query_ratelimit = 0):
+	def __init__(self, host, port = 389, proto = LDAPProtocol.TCP, tree = None, proxy = None, timeout = 10, ldap_query_page_size = 1000, ldap_query_ratelimit = 0, dc_ip:str = None):
 		self.proto = proto
 		self.host = host
 		self.tree = tree
 		self.port = port
 		self.proxy = proxy
 		self.timeout = timeout
-		self.dc_ip = None
+		self.dc_ip = dc_ip
 		self.serverip = None
 		self.domain = None
 		self.sslctx = None
