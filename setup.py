@@ -47,10 +47,10 @@ setup(
 		"Operating System :: OS Independent",
 	),
 	install_requires=[
-		'unicrypto>=0.0.2',
+		'unicrypto>=0.0.5',
 		'asn1crypto>=1.3.0',
 		'asysocks>=0.1.4',
-		'minikerberos>=0.2.19',
+		'minikerberos>=0.2.20',
 		'winsspi>=0.0.9;platform_system=="Windows"',
 		'winacl>=0.1.2',
 		'prompt-toolkit>=3.0.2',
