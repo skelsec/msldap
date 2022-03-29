@@ -293,7 +293,6 @@ class AuthenticatorBuilder:
 				kcred.enctypes = [23]
 			
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_CCACHE:
-				kc.ccache = self.creds.password
 				kcred.enctypes = [23,17,18] # TODO: fix this
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_KEYTAB:
 				kc.keytab = self.creds.password

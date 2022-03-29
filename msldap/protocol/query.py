@@ -23,6 +23,18 @@ def equality(attr, value):
 				'present' : AttributeDescription(attr.encode())
 			})
 
+	elif value.startswith('*') and value.endswith('*'):
+		return Filter({
+				'substrings' : SubstringFilter({
+					'type' : attr.encode(),
+					'substrings' : Substrings([
+							Substring({
+								'any' : value[1:-1].encode()
+							})
+						])
+				})
+			})
+
 	elif value.startswith('*') is True:
 		return Filter({
 				'substrings' : SubstringFilter({
