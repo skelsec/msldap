@@ -231,6 +231,12 @@ class MSLDAPURLDecoder:
 		elif schemes[0] == 'LDAP_UDP':
 			self.ldap_scheme = LDAPProtocol.UDP
 			self.ldap_port = 389
+		elif schemes[0] == 'GC':
+			self.ldap_scheme = LDAPProtocol.TCP
+			self.ldap_port = 3268
+		elif schemes[0] == 'GC_SSL':
+			self.ldap_scheme = LDAPProtocol.SSL
+			self.ldap_port = 3269
 		else:
 			raise Exception('Unknown protocol! %s' % schemes[0])
 		
