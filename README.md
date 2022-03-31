@@ -62,6 +62,8 @@ Detailed explanation with examples:
 	<protocol> sets the ldap protocol following values supported:
 		- ldap
 		- ldaps
+		- gc
+		- gc_ssl
 		
 	<auth> can be omitted if plaintext authentication is to be performed (in that case it default to ntlm-password), otherwise:
 		- ntlm-password
