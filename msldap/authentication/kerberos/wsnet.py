@@ -51,7 +51,7 @@ class MSLDAPWSNetKerberosAuth:
 		self.iterations = 0
 		self.settings = settings
 		self.mode = 'CLIENT'
-		self.sspi = WSNETAuth()
+		self.sspi = None
 		self.client = None
 		self.target = None
 		self.gssapi = None
@@ -96,6 +96,8 @@ class MSLDAPWSNetKerberosAuth:
 	
 	async def authenticate(self, authData = None, flags = None, seq_number = 0, cb_data=None):
 		try:
+			if self.sspi is None:
+				self.sspi = WSNETAuth()
 			status, ctxattr, apreq, err = await self.sspi.authenticate('KERBEROS', '', self.settings.target.to_target_string(), 3, self.flags.value, authdata = b'')
 			if err is not None:
 				raise err

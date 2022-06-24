@@ -32,7 +32,7 @@ class MSLDAPWSNetNTLMAuth:
 	def __init__(self, settings):
 		self.settings = settings
 		self.mode = None #'CLIENT'
-		self.sspi = WSNETAuth()
+		self.sspi = None
 		self.operator = None
 		self.client = None
 		self.target = None
@@ -87,6 +87,8 @@ class MSLDAPWSNetNTLMAuth:
 	
 	async def authenticate(self, authData = b'', flags = None, seq_number = 0, cb_data = None):
 		try:
+			if self.sspi is None:
+				self.sspi = WSNETAuth()
 			if flags is None:
 				flags = ISC_REQ.CONNECTION
 			

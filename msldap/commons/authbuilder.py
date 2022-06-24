@@ -2,7 +2,7 @@ import enum
 import platform
 
 import copy
-from msldap.commons.credential import MSLDAPCredential, LDAPAuthProtocol
+from msldap.commons.credential import MSLDAPCredential, LDAPAuthProtocol, MSLDAP_KERBEROS_PROTOCOLS
 from msldap.authentication.spnego.native import SPNEGO
 from msldap.authentication.ntlm.native import NTLMAUTHHandler, NTLMHandlerSettings
 from msldap.authentication.kerberos.native import MSLDAPKerberos
@@ -219,18 +219,7 @@ class AuthenticatorBuilder:
 			
 			return spneg
 
-		elif self.creds.auth_method in [
-				LDAPAuthProtocol.KERBEROS_RC4, 
-				LDAPAuthProtocol.KERBEROS_NT, 
-				LDAPAuthProtocol.KERBEROS_AES,
-				LDAPAuthProtocol.KERBEROS_PASSWORD, 
-				LDAPAuthProtocol.KERBEROS_CCACHE, 
-				LDAPAuthProtocol.KERBEROS_KEYTAB,
-				LDAPAuthProtocol.KERBEROS_KIRBI,
-				LDAPAuthProtocol.KERBEROS_PFX,
-				LDAPAuthProtocol.KERBEROS_PEM,
-				LDAPAuthProtocol.KERBEROS_CERTSTORE]:
-			
+		elif self.creds.auth_method in MSLDAP_KERBEROS_PROTOCOLS:
 			if self.target is None:
 				raise Exception('Target must be specified with Kerberos!')
 				
@@ -254,6 +243,11 @@ class AuthenticatorBuilder:
 				self.target.domain = kc.domain
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_PEM:
 				kc = KerberosCredential.from_pem_file(self.creds.username, self.creds.password, username = self.creds.altname, domain = self.creds.altdomain)
+				self.creds.username = kc.username
+				self.creds.domain = kc.domain
+				self.target.domain = kc.domain
+			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_PFXSTR:
+				kc = KerberosCredential.from_pfx_string(self.creds.username, self.creds.password, username = self.creds.altname, domain = self.creds.altdomain)
 				self.creds.username = kc.username
 				self.creds.domain = kc.domain
 				self.target.domain = kc.domain
@@ -299,7 +293,7 @@ class AuthenticatorBuilder:
 				kcred.enctypes = [23,17,18] # TODO: fix this
 			elif self.creds.auth_method == LDAPAuthProtocol.KERBEROS_KIRBI:
 				kcred.enctypes = [23,17,18] # TODO: fix this
-			elif self.creds.auth_method in [LDAPAuthProtocol.KERBEROS_PFX, LDAPAuthProtocol.KERBEROS_CERTSTORE, LDAPAuthProtocol.KERBEROS_PEM]:
+			elif self.creds.auth_method in [LDAPAuthProtocol.KERBEROS_PFX, LDAPAuthProtocol.KERBEROS_CERTSTORE, LDAPAuthProtocol.KERBEROS_PEM, LDAPAuthProtocol.KERBEROS_PFXSTR]:
 				kcred.enctypes = [17,18]
 			else:
 				raise Exception('No suitable secret type found to set up kerberos!')

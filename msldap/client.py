@@ -612,6 +612,8 @@ class MSLDAPClient:
 			if err is not None:
 				return None, err
 			return MSADGroup.from_ldap(entry), None
+		
+		return None, Exception('Search returned no results!')
 			
 	async def get_user_by_dn(self, user_dn):
 		"""
@@ -641,17 +643,18 @@ class MSLDAPClient:
 		:rtype: Iterator[(:class:`MSADUser`, :class:`Exception`)]
 		"""
 
-		group, err = self.get_group_by_dn(dn)
+		group, err = await self.get_group_by_dn(dn)
 		if err is not None:
 			yield None, err
 			return
 		for member in group.member:
-			async for result in self.get_object_by_dn(member):
+			async for result, err in self.get_object_by_dn(member):
 				if isinstance(result, MSADGroup) and recursive:
 					async for user, err in self.get_group_members(result.distinguishedName, recursive = True):
 						yield user, err
 				else:
 					yield result, err
+		
 						
 	async def get_dn_for_objectsid(self, objectsid):
 		"""
@@ -670,6 +673,8 @@ class MSLDAPClient:
 				return None, err
 			
 			return entry['attributes']['distinguishedName'], None
+		
+		return None, Exception('Search returned no results!')
 
 	async def get_objectsid_for_dn(self, dn):
 		"""
@@ -688,6 +693,8 @@ class MSLDAPClient:
 				return None, err
 			
 			return entry['attributes']['objectSid'], None
+		
+		return None, Exception('Search returned no results!')
 	
 	async def get_tokengroups_user(self, samaccountname):
 		ldap_filter = r'(sAMAccountName=%s)' % escape_filter_chars(samaccountname)
