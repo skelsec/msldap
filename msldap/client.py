@@ -228,7 +228,7 @@ class MSLDAPClient:
 				tree[entry['attributes']['distinguishedName']] = subtree
 		return {root_dn : tree}
 
-	async def get_all_users(self):
+	async def get_all_users(self, attrs = MSADUser_ATTRS):
 		"""
 		Fetches all user objects available in the LDAP tree and yields them as MSADUser object.
 		
@@ -238,7 +238,7 @@ class MSLDAPClient:
 		"""
 		logger.debug('Polling AD for all user objects')
 		ldap_filter = r'(sAMAccountType=805306368)'
-		async for entry, err in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
+		async for entry, err in self.pagedsearch(ldap_filter, attrs):
 			if err is not None:
 				yield None, err
 				return
@@ -265,7 +265,7 @@ class MSLDAPClient:
 			yield MSADMachine.from_ldap(entry, self._ldapinfo), None
 		logger.debug('Finished polling for entries!')
 	
-	async def get_all_gpos(self):
+	async def get_all_gpos(self, attrs = MSADGPO_ATTRS):
 		"""
 		Fetches all GPOs available in the LDAP tree and yields them as MSADGPO object.
 		
@@ -275,7 +275,7 @@ class MSLDAPClient:
 		"""
 
 		ldap_filter = r'(objectCategory=groupPolicyContainer)'
-		async for entry, err in self.pagedsearch(ldap_filter, MSADGPO_ATTRS):
+		async for entry, err in self.pagedsearch(ldap_filter, attrs):
 			if err is not None:
 				yield None, err
 				return
@@ -569,7 +569,7 @@ class MSLDAPClient:
 		}
 		return await self._con.modify(object_dn, changes, controls = controls)
 		
-	async def get_all_groups(self):
+	async def get_all_groups(self, attrs = MSADGroup_ATTRS):
 		"""
 		Yields all Groups present in the LDAP tree.  
 		
@@ -577,7 +577,7 @@ class MSLDAPClient:
 		:rtype: Iterator[(:class:`MSADGroup`, :class:`Exception`)]
 		"""
 		ldap_filter = r'(objectClass=group)'
-		async for entry, err in self.pagedsearch(ldap_filter, MSADGroup_ATTRS):
+		async for entry, err in self.pagedsearch(ldap_filter, attrs):
 			if err is not None:
 				yield None, err
 				return
