@@ -14,13 +14,14 @@ from msldap.protocol.typeconversion import convert_result, convert_attributes, e
 from msldap.protocol.query import escape_filter_chars, query_syntax_converter
 from msldap.commons.authbuilder import AuthenticatorBuilder
 from msldap.commons.credential import MSLDAP_GSS_METHODS
-from msldap.network.selector import MSLDAPNetworkSelector
+from msldap.network.packetizer import LDAPPacketizer
 from msldap.commons.credential import LDAPAuthProtocol
-from msldap.commons.target import LDAPProtocol
+from asysocks.unicomm.common.target import UniTarget, UniProto
 from msldap.commons.exceptions import LDAPServerException, LDAPBindException, LDAPAddException, LDAPModifyException, LDAPDeleteException
 from asn1crypto.x509 import Certificate
 from hashlib import sha256
 from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
+from asysocks.unicomm.client import UniClient
 
 class MSLDAPClientConnection:
 	def __init__(self, target, creds, auth=None):
@@ -54,15 +55,7 @@ class MSLDAPClientConnection:
 
 	async def __handle_incoming(self):
 		try:
-			while True:
-				message_data, err = await self.network.in_queue.get()
-				if message_data is None and err is None:
-					return
-
-				if err is not None:
-					logger.debug('Client terminating bc __handle_incoming got an error!')
-					raise err
-				
+			async for message_data in self.network.read():				
 				#print('Incoming message data: %s' % message_data)
 				if self.bind_ok is True:
 					if self.__encrypt_messages is True:
@@ -150,7 +143,7 @@ class MSLDAPClientConnection:
 				self.encryption_sequence_counter += 1
 		
 		self.message_table_notify[curr_msg_id] = asyncio.Event()
-		await self.network.out_queue.put(message_data)
+		await self.network.write(message_data)
 
 		return curr_msg_id
 
@@ -180,13 +173,17 @@ class MSLDAPClientConnection:
 		"""
 		try:
 			logger.debug('Connecting!')
-			self.network = await MSLDAPNetworkSelector.select(self.target)
-			res, err = await self.network.run()
-			if res is False:
-				return False, err
+			packetizer = LDAPPacketizer()
+			client = UniClient(self.target, packetizer)
+			self.network = await client.connect()
+
+			#self.network = await MSLDAPNetworkSelector.select(self.target)
+			#res, err = await self.network.run()
+			#if res is False:
+			#	return False, err
 			
 			# now processing channel binding options
-			if self.target.proto == LDAPProtocol.SSL:
+			if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 				certdata = self.network.get_peer_certificate()
 				#cert = Certificate.load(certdata).native
 				#print(cert)
@@ -211,12 +208,9 @@ class MSLDAPClientConnection:
 
 		logger.debug('Disconnecting!')
 		self.bind_ok = False
-		await self.network.in_queue.put((None,None))
-		await self.network.out_queue.put(None)
-		await asyncio.sleep(0)
-		
 		if self.network is not None:
-			await self.network.terminate()
+			await self.network.close()
+			await asyncio.sleep(0)
 		
 		if self.handle_incoming_task is not None:
 			self.handle_incoming_task.cancel()
@@ -233,7 +227,7 @@ class MSLDAPClientConnection:
 			self.__sign_messages = self.auth.signing_needed()
 			self.__encrypt_messages = self.auth.encryption_needed()
 			if self.__encrypt_messages or self.__sign_messages:
-				self.network.is_plain_msg = False
+				self.network.packetizer.is_plain_msg = False
 
 	async def bind(self):
 		"""

@@ -51,7 +51,7 @@ class MSLDAPSSPIProxyKerberosAuth:
 		self.iterations = 0
 		self.settings = settings
 		self.mode = 'CLIENT'
-		url = '%s://%s:%s' % (self.settings.proto, self.settings.host, self.settings.port)
+		url = '%s://%s:%s' % (self.settings.proto, self.settings.get_hostname_or_ip(), self.settings.port)
 		self.sspi = WSNETSSPIProxy(url, self.settings.agent_id)
 		self.client = None
 		self.target = None

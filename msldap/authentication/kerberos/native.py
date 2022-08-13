@@ -14,23 +14,11 @@ from minikerberos.common import *
 
 from minikerberos.protocol.asn1_structs import AP_REP, EncAPRepPart, EncryptedData, AP_REQ, Ticket
 from msldap.authentication.kerberos.gssapi import get_gssapi, KRB5_MECH_INDEP_TOKEN
-from msldap.commons.proxy import MSLDAPProxyType
 from minikerberos.protocol.structures import ChecksumFlags
 from minikerberos.protocol.encryption import Enctype, Key, _enctype_table
 from minikerberos.protocol.constants import MESSAGE_TYPE
 from minikerberos.aioclient import AIOKerberosClient
-from minikerberos.network.aioclientsockssocket import AIOKerberosClientSocksSocket
 from msldap import logger
-
-# SMBKerberosCredential
-
-MSLDAP_SOCKS_PROXY_TYPES = [
-	MSLDAPProxyType.SOCKS4, 
-	MSLDAPProxyType.SOCKS4_SSL, 
-	MSLDAPProxyType.SOCKS5, 
-	MSLDAPProxyType.SOCKS5_SSL,
-	MSLDAPProxyType.WSNET,
-]
 
 class MSLDAPKerberos:
 	def __init__(self, settings):
@@ -115,20 +103,7 @@ class MSLDAPKerberos:
 
 	async def setup_kc(self):
 		try:
-			# sockst/wsnet proxying is handled by the minikerberos&asysocks modules
-			if self.target.proxy is None or self.target.proxy.type in MSLDAP_SOCKS_PROXY_TYPES:
-				self.kc = AIOKerberosClient(self.ccred, self.target)
-
-			elif self.target.proxy.type in [MSLDAPProxyType.MULTIPLEXOR, MSLDAPProxyType.MULTIPLEXOR_SSL]:
-				from msldap.network.multiplexor import MultiplexorProxyConnection
-				mpc = MultiplexorProxyConnection(self.target)
-				socks_proxy = await mpc.connect(is_kerberos = True)
-
-				self.kc = AIOKerberosClient(self.ccred, socks_proxy)
-
-			else:
-				raise Exception('Unknown proxy type %s' % self.target.proxy.type)
-
+			self.kc = AIOKerberosClient(self.ccred, self.target)
 			return None, None
 		except Exception as e:
 			return None, e

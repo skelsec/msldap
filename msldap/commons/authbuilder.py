@@ -6,13 +6,9 @@ from msldap.commons.credential import MSLDAPCredential, LDAPAuthProtocol, MSLDAP
 from msldap.authentication.spnego.native import SPNEGO
 from msldap.authentication.ntlm.native import NTLMAUTHHandler, NTLMHandlerSettings
 from msldap.authentication.kerberos.native import MSLDAPKerberos
-from msldap.commons.proxy import MSLDAPProxyType
 from minikerberos.common.target import KerberosTarget
-from minikerberos.common.proxy import KerberosProxy
 from minikerberos.common.creds import KerberosCredential
 from minikerberos.common.spn import KerberosSPN
-
-from minikerberos.network.selector import KerberosClientSocketSelector
 
 
 if platform.system().upper() == 'WINDOWS':
@@ -223,7 +219,7 @@ class AuthenticatorBuilder:
 			if self.target is None:
 				raise Exception('Target must be specified with Kerberos!')
 				
-			if self.target.host is None:
+			if self.target.hostname is None:
 				raise Exception('target must have a domain name or hostname for kerberos!')
 				
 			if self.target.dc_ip is None:
@@ -303,16 +299,9 @@ class AuthenticatorBuilder:
 			
 			kcred.ccred = kc
 			kcred.spn = KerberosSPN.from_target_string(self.target.to_target_string())
-			kcred.target = KerberosTarget(self.target.dc_ip)
+			kcred.target = KerberosTarget(self.target.dc_ip, proxies = copy.deepcopy(self.target.proxies))
 			kcred.encrypt = self.creds.encrypt
 			
-			if self.target.proxy is not None:
-					kcred.target.proxy = KerberosProxy()
-					kcred.target.proxy.type = self.target.proxy.type
-					kcred.target.proxy.target = copy.deepcopy(self.target.proxy.target)
-					kcred.target.proxy.target[-1].endpoint_ip = self.target.dc_ip
-					kcred.target.proxy.target[-1].endpoint_port = 88
-
 			handler = MSLDAPKerberos(kcred)
 			
 			#setting up SPNEGO

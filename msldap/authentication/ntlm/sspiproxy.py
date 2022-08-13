@@ -32,7 +32,7 @@ class MSLDAPSSPIProxyNTLMAuth:
 	def __init__(self, settings):
 		self.settings = settings
 		self.mode = None #'CLIENT'
-		url = '%s://%s:%s' % (self.settings.proto, self.settings.host, self.settings.port)
+		url = '%s://%s:%s' % (self.settings.proto, self.settings.get_hostname_or_ip(), self.settings.port)
 		self.sspi = WSNETSSPIProxy(url, self.settings.agent_id)
 		self.operator = None
 		self.client = None

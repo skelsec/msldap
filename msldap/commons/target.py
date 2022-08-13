@@ -5,19 +5,9 @@
 #  Tamas Jos (@skelsec)
 #
 
-import enum
+from asysocks.unicomm.common.target import UniTarget, UniProto
 
-import platform
-import ssl
-
-
-class LDAPProtocol(enum.Enum):
-	TCP = 'TCP'
-	UDP = 'UDP'
-	SSL = 'SSL'
-
-
-class MSLDAPTarget:
+class MSLDAPTarget(UniTarget):
 	"""
 	Describes the connection to the server.
 	
@@ -40,37 +30,24 @@ class MSLDAPTarget:
 	:param dc_ip: Ip address of the kerberos server (if kerberos is used)
 	:type dc_ip: str
 	"""
-	def __init__(self, host, port = 389, proto = LDAPProtocol.TCP, tree = None, proxy = None, timeout = 10, ldap_query_page_size = 1000, ldap_query_ratelimit = 0, dc_ip:str = None):
-		self.proto = proto
-		self.host = host
+	def __init__(self, ip, port = 389, protocol = UniProto.CLIENT_TCP, tree = None, proxies = None, timeout = 10, ldap_query_page_size = 1000, ldap_query_ratelimit = 0, dc_ip:str = None, domain:str = None, hostname:str = None):
+		UniTarget.__init__(self, ip, port, protocol, timeout, hostname = hostname, proxies = proxies, domain = domain, dc_ip = dc_ip)
 		self.tree = tree
-		self.port = port
-		self.proxy = proxy
-		self.timeout = timeout
-		self.dc_ip = dc_ip
-		self.serverip = None
-		self.domain = None
-		self.sslctx = None
 		self.ldap_query_page_size = ldap_query_page_size
 		self.ldap_query_ratelimit = ldap_query_ratelimit
-
-	def get_ssl_context(self):
-		if self.proto == LDAPProtocol.SSL:
-			if self.sslctx is None:
-				# TODO ssl verification :)
-				self.sslctx = ssl._create_unverified_context()
-				#self.sslctx.verify = False
-			return self.sslctx
-		return None
-
+	
 	def to_target_string(self):
-		return 'ldap/%s@%s' % (self.host,self.domain)  #ldap/WIN2019AD.test.corp @ TEST.CORP
+		return 'ldap/%s@%s' % (self.get_hostname_or_ip(), self.domain)  #ldap/WIN2019AD.test.corp @ TEST.CORP
 
 	def get_host(self):
-		return '%s://%s:%s' % (self.proto, self.host, self.port)
+		if self.protocol == UniProto.CLIENT_SSL_TCP:
+			proto = 'ldaps'
+		elif self.protocol == UniProto.CLIENT_TCP:
+			proto = 'ldap'
+		return '%s://%s:%s' % (proto, self.get_hostname_or_ip(), self.port)
 
 	def is_ssl(self):
-		return self.proto == LDAPProtocol.SSL
+		return self.protocol == UniProto.CLIENT_SSL_TCP
 	
 	def __str__(self):
 		t = '==== MSLDAPTarget ====\r\n'

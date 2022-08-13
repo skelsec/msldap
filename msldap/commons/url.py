@@ -6,7 +6,6 @@
 #
 
 import platform
-import hashlib
 import getpass
 import base64
 import enum
@@ -14,10 +13,12 @@ import copy
 from urllib.parse import urlparse, parse_qs
 
 from msldap.commons.credential import MSLDAPCredential, LDAPAuthProtocol, MSLDAP_KERBEROS_PROTOCOLS
-from msldap.commons.target import MSLDAPTarget, LDAPProtocol
-from msldap.commons.proxy import MSLDAPProxy, MSLDAPProxyType
+from msldap.commons.target import MSLDAPTarget
 from msldap.client import MSLDAPClient
 from msldap.connection import MSLDAPClientConnection
+from asysocks.unicomm.common.target import UniProto
+from asysocks.unicomm.common.proxy import UniProxyTarget
+
 
 class PLAINTEXTSCHEME(enum.Enum):
 	"""
@@ -118,8 +119,8 @@ class MSLDAPURLDecoder:
 		self.target_pagesize = 1000
 		self.target_ratelimit = 0
 		self.dc_ip = None
-		self.serverip = None
-		self.proxy = None
+		self.ip = None
+		self.proxies = None
 
 		self.__pwpreprocess = None
 
@@ -127,7 +128,7 @@ class MSLDAPURLDecoder:
 			self.parse()
 
 
-	def get_credential(self):
+	def get_credential(self) -> MSLDAPCredential:
 		"""
 		Creates a credential object
 		
@@ -150,7 +151,7 @@ class MSLDAPURLDecoder:
 		
 		return t
 
-	def get_target(self):
+	def get_target(self) -> MSLDAPTarget:
 		"""
 		Creates a target object
 		
@@ -161,18 +162,18 @@ class MSLDAPURLDecoder:
 			return copy.deepcopy(self.target)
 
 		target = MSLDAPTarget(
-			self.ldap_host, 
+			self.ip, 
 			port = self.ldap_port, 
-			proto = self.ldap_scheme, 
+			protocol = self.ldap_scheme, 
 			tree=self.ldap_tree,
+			proxies = self.proxies,
 			timeout = self.target_timeout,
 			ldap_query_page_size = self.target_pagesize,
-			ldap_query_ratelimit = self.target_ratelimit
+			ldap_query_ratelimit = self.target_ratelimit,
+			hostname = self.ldap_host,
+			domain = self.domain,
+			dc_ip=self.dc_ip
 		)
-		target.domain = self.domain
-		target.dc_ip = self.dc_ip
-		target.proxy = self.proxy
-		target.serverip = self.serverip
 		return target
 	
 	def __str__(self):
@@ -189,7 +190,7 @@ class MSLDAPURLDecoder:
 		return t
 
 
-	def get_client(self):
+	def get_client(self) -> MSLDAPClient:
 		"""
 		Creates a client that can be used to interface with the server
 		
@@ -200,7 +201,7 @@ class MSLDAPURLDecoder:
 		target = self.get_target()
 		return MSLDAPClient(target, cred)
 	
-	def get_connection(self):
+	def get_connection(self) -> MSLDAPClientConnection:
 		"""
 		Creates a connection that can be used to interface with the server
 		
@@ -217,19 +218,19 @@ class MSLDAPURLDecoder:
 			schemes.append(item.replace('-','_'))
 
 		if schemes[0] == 'LDAP':
-			self.ldap_scheme = LDAPProtocol.TCP
+			self.ldap_scheme = UniProto.CLIENT_TCP
 			self.ldap_port = 389
 		elif schemes[0] == 'LDAPS':
-			self.ldap_scheme = LDAPProtocol.SSL
+			self.ldap_scheme = UniProto.CLIENT_SSL_TCP
 			self.ldap_port = 636
 		elif schemes[0] == 'LDAP_SSL':
-			self.ldap_scheme = LDAPProtocol.SSL
+			self.ldap_scheme = UniProto.CLIENT_SSL_TCP
 			self.ldap_port = 636
 		elif schemes[0] == 'LDAP_TCP':
-			self.ldap_scheme = LDAPProtocol.TCP
+			self.ldap_scheme = UniProto.CLIENT_TCP
 			self.ldap_port = 389
 		elif schemes[0] == 'LDAP_UDP':
-			self.ldap_scheme = LDAPProtocol.UDP
+			self.ldap_scheme = UniProto.CLIENT_UDP
 			self.ldap_port = 389
 		else:
 			raise Exception('Unknown protocol! %s' % schemes[0])
@@ -378,7 +379,7 @@ class MSLDAPURLDecoder:
 				#	self.auth_settings[k[len('same'):]] = query[k]
 
 		if proxy_present is True:
-			self.proxy = MSLDAPProxy.from_params(self.url)
+			self.proxies = UniProxyTarget.from_url_params(self.url, self.ldap_port)
 
 		if self.auth_scheme in [LDAPAuthProtocol.SSPI_NTLM, LDAPAuthProtocol.SSPI_KERBEROS]:
 			if platform.system().upper() != 'WINDOWS':
@@ -392,18 +393,6 @@ class MSLDAPURLDecoder:
 
 		if self.auth_scheme in MSLDAP_KERBEROS_PROTOCOLS and self.dc_ip is None:
 			raise Exception('The "dc" parameter MUST be used for kerberos authentication types!')
-
-
-#		if self.proxy_scheme in [LDAPProxyType.MULTIPLEXOR, LDAPProxyType.MULTIPLEXOR_SSL]:
-#			if self.proxy_port is None:
-#				self.proxy_port = 9999
-#		
-#		if self.proxy_scheme in [LDAPProxyType.MULTIPLEXOR, LDAPProxyType.MULTIPLEXOR_SSL]:
-#			if 'agentid' not in self.proxy_settings:
-#				raise Exception('multiplexor proxy reuires agentid to be set! Set it via proxyagentid parameter!')
-#
-
-
 
 		
 if __name__ == '__main__':

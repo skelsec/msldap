@@ -1,7 +1,7 @@
 
 import datetime
 
-def timestamp2datetime(dt):
+def timestamp2datetime(dt) -> datetime.datetime:
 	"""
 	Converting Windows timestamps to datetime.datetime format
 	:param dt: Windows timestamp as array of bytes
@@ -12,15 +12,15 @@ def timestamp2datetime(dt):
 	return datetime.datetime(1601, 1, 1) + datetime.timedelta(microseconds=us)
 	
 	
-def datetime2timestamp(dt):
+def datetime2timestamp(dt) -> int:
 	delta = dt - datetime.datetime(1601, 1, 1)
 	ns = int((delta / datetime.timedelta(microseconds=1)) * 10)
 	return ns.to_bytes(8, 'little', signed = False)
 
-def wrap(s, w):
+def wrap(s, w) -> str:
 	return [s[i:i + w] for i in range(0, len(s), w)]
 
-def print_cert(cert, offset=0):
+def print_cert(cert, offset=0) -> str:
 	cert = cert['tbs_certificate']
 	blanks = " " * offset
 	msg = [
