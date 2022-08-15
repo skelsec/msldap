@@ -5,37 +5,23 @@
 #  Tamas Jos (@skelsec)
 #
 
-import platform
 import getpass
 import base64
 import enum
 import copy
 from urllib.parse import urlparse, parse_qs
 
-from msldap.commons.credential import MSLDAPCredential, LDAPAuthProtocol, MSLDAP_KERBEROS_PROTOCOLS
 from msldap.commons.target import MSLDAPTarget
 from msldap.client import MSLDAPClient
 from msldap.connection import MSLDAPClientConnection
-from asysocks.unicomm.common.target import UniProto
+
+from asysocks.unicomm.common.target import UniProto, UniTarget
 from asysocks.unicomm.common.proxy import UniProxyTarget
 
-
-class PLAINTEXTSCHEME(enum.Enum):
-	"""
-	Additional conveinence functions.
-	"""
-	SIMPLE_PROMPT = 'SIMPLE_PROMPT'
-	SIMPLE_HEX = 'SIMPLE_HEX'
-	SIMPLE_B64 = 'SIMPLE_B64'
-	PLAIN_PROMPT = 'PLAIN_PROMPT'
-	PLAIN_HEX = 'PLAIN_HEX'
-	PLAIN_B64 = 'PLAIN_B64'
-	SICILY_PROMPT = 'SICILY_PROMPT'
-	SICILY_HEX = 'SICILY_HEX'
-	SICILY_B64 = 'SICILY_B64'
-	NTLM_PROMPT = 'NTLM_PROMPT'
-	NTLM_HEX = 'NTLM_HEX'
-	NTLM_B64 = 'NTLM_B64'
+from uniauth.common.credentials import UniCredential
+from uniauth.common.credentials.ntlm import NTLMCredential
+from uniauth.common.credentials.kerberos import KerberosCredential
+from uniauth.common.constants import UniAuthProtocol, UniAuthSecret, UniAuthSubProtocol
 
 class MSLDAPURLDecoder:
 	"""
@@ -95,19 +81,20 @@ class MSLDAPURLDecoder:
 	ldap://TEST\\victim:password@10.10.10.2/DC=test,DC=corp/?timeout=99&proxytype=socks5&proxyhost=127.0.0.1&proxyport=1080&proxytimeout=44
 	"""
 	
-	def __init__(self, url, credential:MSLDAPCredential = None, target:MSLDAPTarget = None ):
+	def __init__(self, url, credential:UniCredential = None, target:MSLDAPTarget = None ):
 		self.credential = credential
 		self.target = target
 		self.url = url
 		self.ldap_scheme = None
-		self.auth_scheme = None
+		self.auth_protocol = None
+		self.auth_stype = None
 
 		self.domain = None
 		self.username = None
 		self.password = None
 		self.encrypt = False
 		self.auth_settings = {}
-		self.etypes = None
+		self.etypes = [23,17,18]
 		self.altname = None
 		self.altdomain = None
 
@@ -128,27 +115,53 @@ class MSLDAPURLDecoder:
 			self.parse()
 
 
-	def get_credential(self) -> MSLDAPCredential:
+	def get_credential(self) -> UniCredential:
 		"""
 		Creates a credential object
 		
 		:return: Credential object
-		:rtype: :class:`MSLDAPCredential`
+		:rtype: :class:`UniCredential`
 		"""
 		if self.credential is not None:
 			return copy.deepcopy(self.credential)
-		t = MSLDAPCredential(
-			domain=self.domain, 
-			username=self.username, 
-			password = self.password, 
-			auth_method=self.auth_scheme, 
-			settings = self.auth_settings,
-			altname=self.altname,
-			altdomain=self.altdomain
-		)
-		t.encrypt = self.encrypt
-		t.etypes = self.etypes
 		
+		if self.auth_protocol == UniAuthProtocol.NTLM:
+			t = NTLMCredential(
+				self.password, 
+				self.username, 
+				self.domain, 
+				self.auth_stype,
+				subprotocol = UniAuthSubProtocol.NATIVE
+			)
+		elif self.auth_protocol == UniAuthProtocol.KERBEROS:
+			t = KerberosCredential(
+				self.password,
+				self.username,
+				self.domain,
+				self.auth_stype,
+				altname = self.altname,
+				altdomain = self.altdomain,
+				etypes = self.etypes,
+				subprotocol = UniAuthSubProtocol.NATIVE,
+				target = UniTarget(self.dc_ip, port=88, protocol=UniProto.CLIENT_TCP, proxies=self.proxies)
+			)
+		elif self.auth_protocol == UniAuthProtocol.SICILY:
+			t = NTLMCredential(
+				self.password,
+				self.username,
+				self.domain,
+				self.auth_stype,
+				subprotocol = UniAuthSubProtocol.NATIVE
+			)
+			t.protocol = UniAuthProtocol.SICILY
+		
+		elif self.auth_protocol in [UniAuthProtocol.SIMPLE, UniAuthProtocol.PLAIN]:
+			return UniCredential(
+				self.password,
+				self.username,
+				self.domain,
+				protocol = self.auth_protocol
+			)		
 		return t
 
 	def get_target(self) -> MSLDAPTarget:
@@ -239,59 +252,11 @@ class MSLDAPURLDecoder:
 			return
 		
 		try:
-			x = PLAINTEXTSCHEME(schemes[1])
-			if x == PLAINTEXTSCHEME.SIMPLE_PROMPT:
-				self.auth_scheme = LDAPAuthProtocol.SIMPLE
-				self.__pwpreprocess = 'PROMPT'
-
-			if x == PLAINTEXTSCHEME.SIMPLE_HEX:
-				self.auth_scheme = LDAPAuthProtocol.SIMPLE
-				self.__pwpreprocess = 'HEX'
-
-			if x == PLAINTEXTSCHEME.SIMPLE_B64:
-				self.auth_scheme = LDAPAuthProtocol.SIMPLE
-				self.__pwpreprocess = 'B64'
-
-			if x == PLAINTEXTSCHEME.PLAIN_PROMPT:
-				self.auth_scheme = LDAPAuthProtocol.PLAIN
-				self.__pwpreprocess = 'PROMPT'
-
-			if x == PLAINTEXTSCHEME.PLAIN_HEX:
-				self.auth_scheme = LDAPAuthProtocol.PLAIN
-				self.__pwpreprocess = 'HEX'
-
-			if x == PLAINTEXTSCHEME.PLAIN_B64:
-				self.auth_scheme = LDAPAuthProtocol.PLAIN
-				self.__pwpreprocess = 'B64'
-
-			if x == PLAINTEXTSCHEME.SICILY_PROMPT:
-				self.auth_scheme = LDAPAuthProtocol.SICILY
-				self.__pwpreprocess = 'PROMPT'
-
-			if x == PLAINTEXTSCHEME.SICILY_HEX:
-				self.auth_scheme = LDAPAuthProtocol.SICILY
-				self.__pwpreprocess = 'HEX'
-
-			if x == PLAINTEXTSCHEME.SICILY_B64:
-				self.auth_scheme = LDAPAuthProtocol.SICILY
-				self.__pwpreprocess = 'B64'
-
-			if x == PLAINTEXTSCHEME.NTLM_PROMPT:
-				self.auth_scheme = LDAPAuthProtocol.NTLM_PASSWORD
-				self.__pwpreprocess = 'PROMPT'
-
-			if x == PLAINTEXTSCHEME.NTLM_HEX:
-				self.auth_scheme = LDAPAuthProtocol.NTLM_PASSWORD
-				self.__pwpreprocess = 'HEX'
-
-			if x == PLAINTEXTSCHEME.NTLM_B64:
-				self.auth_scheme = LDAPAuthProtocol.NTLM_PASSWORD
-				self.__pwpreprocess = 'B64'			
+			authproto, authstype = schemes[1].split('_')
+			self.auth_protocol = UniAuthProtocol(authproto)
+			self.auth_stype = UniAuthSecret(authstype)
 		except:
-			try:
-				self.auth_scheme = LDAPAuthProtocol(schemes[1])
-			except:
-				raise Exception('Uknown scheme!')
+			raise Exception('Uknown scheme!')
 		
 		return
 
@@ -320,21 +285,6 @@ class MSLDAPURLDecoder:
 			else:
 				self.domain = None
 				self.username = url_e.username
-
-		#defaulting schemes...
-		if self.auth_scheme is None:
-			if self.username is not None and self.domain is not None and self.password is not None:
-				#tricky parsing to make user feel confortable...
-				if len(self.password) == 32:
-					try:
-						bytes.fromhex(self.password)
-						self.auth_scheme = LDAPAuthProtocol.NTLM_NT
-					except:
-						self.auth_scheme = LDAPAuthProtocol.NTLM_PASSWORD
-				else:
-					self.auth_scheme = LDAPAuthProtocol.NTLM_PASSWORD
-			else:
-				self.auth_scheme = LDAPAuthProtocol.SIMPLE
 
 		self.ldap_host = url_e.hostname
 		if url_e.port is not None:
@@ -380,19 +330,6 @@ class MSLDAPURLDecoder:
 
 		if proxy_present is True:
 			self.proxies = UniProxyTarget.from_url_params(self.url, self.ldap_port)
-
-		if self.auth_scheme in [LDAPAuthProtocol.SSPI_NTLM, LDAPAuthProtocol.SSPI_KERBEROS]:
-			if platform.system().upper() != 'WINDOWS':
-				raise Exception('SSPI auth only works on Windows!')
-			if self.username is None:
-				self.username = '<CURRENT>'
-			if self.password is None:
-				self.password = '<CURRENT>'
-			if self.domain is None:
-				self.domain = '<CURRENT>'
-
-		if self.auth_scheme in MSLDAP_KERBEROS_PROTOCOLS and self.dc_ip is None:
-			raise Exception('The "dc" parameter MUST be used for kerberos authentication types!')
 
 		
 if __name__ == '__main__':
