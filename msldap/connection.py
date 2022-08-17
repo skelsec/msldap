@@ -15,9 +15,8 @@ from msldap.protocol.typeconversion import convert_result, convert_attributes, e
 from msldap.protocol.query import escape_filter_chars, query_syntax_converter
 from msldap.commons.authbuilder import get_auth_context
 from msldap.network.packetizer import LDAPPacketizer
-from asysocks.unicomm.common.target import UniTarget, UniProto
-from msldap.commons.exceptions import LDAPServerException, LDAPBindException, LDAPAddException, LDAPModifyException, LDAPDeleteException
-from asn1crypto.x509 import Certificate
+from asysocks.unicomm.common.target import UniProto
+from msldap.commons.exceptions import LDAPBindException, LDAPAddException, LDAPModifyException, LDAPDeleteException
 from hashlib import sha256
 from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
 from asysocks.unicomm.client import UniClient
@@ -178,17 +177,10 @@ class MSLDAPClientConnection:
 			packetizer = LDAPPacketizer()
 			client = UniClient(self.target, packetizer)
 			self.network = await client.connect()
-
-			#self.network = await MSLDAPNetworkSelector.select(self.target)
-			#res, err = await self.network.run()
-			#if res is False:
-			#	return False, err
 			
 			# now processing channel binding options
 			if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 				certdata = self.network.get_peer_certificate()
-				#cert = Certificate.load(certdata).native
-				#print(cert)
 				cb_struct = ChannelBindingsStruct()
 				cb_struct.application_data = b'tls-server-end-point:' + sha256(certdata).digest()
 
@@ -243,7 +235,7 @@ class MSLDAPClientConnection:
 		try:
 			if self.credential.protocol == UniAuthProtocol.SICILY:
 				
-				data, to_continue, err = await self.auth.authenticate(None)
+				data, to_continue, err = await self.auth.authenticate(None, spn=self.target.to_target_string())
 				if err is not None:
 					return None, err
 
@@ -297,7 +289,7 @@ class MSLDAPClientConnection:
 							res['protocolOp']['diagnosticMessage']
 						)
 
-				data, to_continue, err = await self.auth.authenticate(res['protocolOp']['matchedDN'])
+				data, to_continue, err = await self.auth.authenticate(res['protocolOp']['matchedDN'], spn=self.target.to_target_string())
 				if err is not None:
 					return None, err
 
@@ -372,8 +364,7 @@ class MSLDAPClientConnection:
 				challenge = None
 				while True:
 					try:
-						spn = 'ldap/%s@%s' % (self.target.get_hostname(), self.target.domain)
-						data, to_continue, err = await self.auth.authenticate(challenge, cb_data = self.cb_data, spn=spn)
+						data, to_continue, err = await self.auth.authenticate(challenge, cb_data = self.cb_data, spn=self.target.to_target_string())
 						if err is not None:
 							raise err
 					except Exception as e:
@@ -404,7 +395,7 @@ class MSLDAPClientConnection:
 					res = res.native
 					if res['protocolOp']['resultCode'] == 'success':
 						if 'serverSaslCreds' in res['protocolOp']:
-							data, _, err = await self.auth.authenticate(res['protocolOp']['serverSaslCreds'], cb_data = self.cb_data)
+							data, _, err = await self.auth.authenticate(res['protocolOp']['serverSaslCreds'], cb_data = self.cb_data, spn=self.target.to_target_string())
 							if err is not None:
 								return False, err
 

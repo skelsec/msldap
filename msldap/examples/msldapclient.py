@@ -21,7 +21,7 @@ from tqdm import tqdm
 from msldap import logger
 from asysocks import logger as sockslogger
 from msldap.client import MSLDAPClient
-from msldap.commons.url import MSLDAPURLDecoder
+from msldap.commons.factory import LDAPConnectionFactory
 from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
 
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
@@ -38,7 +38,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		aiocmd.PromptToolkitCmd.__init__(self, ignore_sigint=False) #Setting this to false, since True doesnt work on windows...
 		self.conn_url = None
 		if url is not None:
-			self.conn_url = MSLDAPURLDecoder(url)
+			self.conn_url = LDAPConnectionFactory.from_url(url)
 		self.connection = None
 		self.adinfo = None
 		self.ldapinfo = None
@@ -50,7 +50,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if self.conn_url is None and url is None:
 				print('Not url was set, cant do logon')
 			if url is not None:
-				self.conn_url = MSLDAPURLDecoder(url)
+				self.conn_url = LDAPConnectionFactory.from_url(url)
 
 			logger.debug(self.conn_url.get_credential())
 			logger.debug(self.conn_url.get_target())
@@ -60,6 +60,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			_, err = await self.connection.connect()
 			if err is not None:
 				raise err
+			print('BIND OK!')
 			
 			return True
 		except:

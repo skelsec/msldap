@@ -40,7 +40,6 @@ OR
 `pip install msldap`
 
 # Prerequisites
- - `winsspi` module. For windows only. This supports SSPI based authentication.  
  - `asn1crypto` module. Some LDAP queries incorporate ASN1 strucutres to be sent on top of the ASN1 transport XD
  - `asysocks` module. To support socks proxying.
  - `aiocmd` For the interactive client
