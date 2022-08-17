@@ -50,7 +50,7 @@ setup(
 		'asn1crypto>=1.3.0',
 		'unicrypto>=0.0.5',
 		'uniauth>=0.0.1',
-		'aysocks>=0.2.0',
+		'asysocks>=0.2.0',
 		'minikerberos>=0.3.0',
 		'winacl>=0.1.2',
 		'prompt-toolkit>=3.0.2',
