@@ -1,16 +1,16 @@
-from uniauth.common.credentials.spnego import SPNEGOCredential
-from uniauth.common.constants import  UniAuthProtocol
-from uniauth.common.credentials import UniCredential
+from asyauth.common.credentials.spnego import SPNEGOCredential
+from asyauth.common.constants import  asyauthProtocol
+from asyauth.common.credentials import UniCredential
 
 def get_auth_context(credential:UniCredential):
-	if credential.protocol in [UniAuthProtocol.NTLM, UniAuthProtocol.KERBEROS]:
+	if credential.protocol in [asyauthProtocol.NTLM, asyauthProtocol.KERBEROS]:
 		spnego = SPNEGOCredential([credential])
 		return spnego.build_context()
 		
-	elif credential.protocol == UniAuthProtocol.SICILY:
+	elif credential.protocol == asyauthProtocol.SICILY:
 		return credential.build_context()
 
-	elif credential.protocol in [UniAuthProtocol.SIMPLE, UniAuthProtocol.PLAIN]:
+	elif credential.protocol in [asyauthProtocol.SIMPLE, asyauthProtocol.PLAIN]:
 		return credential
 
 	else:

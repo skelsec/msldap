@@ -20,8 +20,8 @@ from msldap.commons.exceptions import LDAPBindException, LDAPAddException, LDAPM
 from hashlib import sha256
 from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
 from asysocks.unicomm.client import UniClient
-from uniauth.common.constants import UniAuthProtocol
-from uniauth.common.credentials import UniCredential
+from asyauth.common.constants import asyauthProtocol
+from asyauth.common.credentials import UniCredential
 
 class MSLDAPClientConnection:
 	def __init__(self, target:MSLDAPTarget, credential:UniCredential, auth=None):
@@ -217,7 +217,7 @@ class MSLDAPClientConnection:
 		"""
 		logger.debug('BIND Success!')
 		self.bind_ok = True
-		if self.credential.protocol in [UniAuthProtocol.NTLM, UniAuthProtocol.KERBEROS, UniAuthProtocol.SICILY]:
+		if self.credential.protocol in [asyauthProtocol.NTLM, asyauthProtocol.KERBEROS, asyauthProtocol.SICILY]:
 			self.__sign_messages = self.auth.signing_needed()
 			self.__encrypt_messages = self.auth.encryption_needed()
 			if self.__encrypt_messages or self.__sign_messages:
@@ -233,7 +233,7 @@ class MSLDAPClientConnection:
 		"""
 		logger.debug('BIND in progress...')
 		try:
-			if self.credential.protocol == UniAuthProtocol.SICILY:
+			if self.credential.protocol == asyauthProtocol.SICILY:
 				
 				data, to_continue, err = await self.auth.authenticate(None, spn=self.target.to_target_string())
 				if err is not None:
@@ -322,7 +322,7 @@ class MSLDAPClientConnection:
 				self.__bind_success()
 				return True, None
 
-			elif self.credential.protocol == UniAuthProtocol.SIMPLE:
+			elif self.credential.protocol == asyauthProtocol.SIMPLE:
 				pw = b''
 				if self.auth.secret != None:
 					pw = self.auth.secret.encode()
@@ -360,7 +360,7 @@ class MSLDAPClientConnection:
 							res['protocolOp']['diagnosticMessage']
 						)
 
-			elif self.credential.protocol in [UniAuthProtocol.NTLM, UniAuthProtocol.KERBEROS]:
+			elif self.credential.protocol in [asyauthProtocol.NTLM, asyauthProtocol.KERBEROS]:
 				challenge = None
 				while True:
 					try:

@@ -10,7 +10,7 @@ import copy
 from msldap.commons.target import MSLDAPTarget
 from msldap.client import MSLDAPClient
 from msldap.connection import MSLDAPClientConnection
-from uniauth.common.credentials import UniCredential
+from asyauth.common.credentials import UniCredential
 
 class LDAPConnectionFactory:
 	"""
