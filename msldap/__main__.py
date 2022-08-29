@@ -6,8 +6,8 @@
 
 import logging
 import csv
-from msldap.connection import MSLDAPConnection
-from msldap.commons.url import MSLDAPURLDecoder
+from msldap.connection import MSLDAPClientConnection
+from msldap.commons.factory import LDAPConnectionFactory
 from msldap.ldap_objects import MSADUser, MSADMachine
 
 
@@ -39,12 +39,12 @@ def run():
 	else:
 		logging.basicConfig(level=logging.DEBUG)
 
-	url_dec = MSLDAPURLDecoder(args.connection)
+	url_dec = LDAPConnectionFactory.from_url(args.connection)
 	creds = url_dec.get_credential()
 	target = url_dec.get_target()
 	print(str(creds))
 	print(str(target))
-	connection = MSLDAPConnection(creds, target)
+	connection = MSLDAPClientConnection(creds, target)
 
 	if args.command == 'dsa':
 		print(connection.get_server_info())

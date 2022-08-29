@@ -5,19 +5,19 @@
 #  Tamas Jos (@skelsec)
 #
 
-import enum
+from os import stat
+from sqlite3 import connect
+from asysocks.unicomm.common.target import UniTarget, UniProto
+from urllib.parse import urlparse, parse_qs
+from asysocks.unicomm.utils.paramprocessor import str_one, int_one, bool_one
 
-import platform
-import ssl
+msldaptarget_url_params = {
+	'pagesize' : int_one,
+	'rate' : int_one,
+}
 
 
-class LDAPProtocol(enum.Enum):
-	TCP = 'TCP'
-	UDP = 'UDP'
-	SSL = 'SSL'
-
-
-class MSLDAPTarget:
+class MSLDAPTarget(UniTarget):
 	"""
 	Describes the connection to the server.
 	
@@ -26,11 +26,11 @@ class MSLDAPTarget:
 	:param port: port of the LDAP service running on the server
 	:type port: int
 	:param proto: Connection protocol to be used
-	:type proto: :class:`LDAPProtocol`
+	:type proto: :class:`UniProto`
 	:param tree: The tree to connect to
 	:type tree: str
-	:param proxy: specifies what kind of proxy to be used
-	:type proxy: :class:`MSLDAPProxy`
+	:param proxies: specifies what kind of proxy to be used
+	:type proxies: :class:`List[UniProxyTarget]`
 	:param timeout: connection timeout in seconds
 	:type timeout: int
 	:param ldap_query_page_size: Maximum number of elements to fetch in each paged_query call.
@@ -40,37 +40,79 @@ class MSLDAPTarget:
 	:param dc_ip: Ip address of the kerberos server (if kerberos is used)
 	:type dc_ip: str
 	"""
-	def __init__(self, host, port = 389, proto = LDAPProtocol.TCP, tree = None, proxy = None, timeout = 10, ldap_query_page_size = 1000, ldap_query_ratelimit = 0, dc_ip:str = None):
-		self.proto = proto
-		self.host = host
+	def __init__(self, ip, port = 389, protocol = UniProto.CLIENT_TCP, tree = None, proxies = None, timeout = 10, ldap_query_page_size = 1000, ldap_query_ratelimit = 0, dns:str=None, dc_ip:str = None, domain:str = None, hostname:str = None):
+		UniTarget.__init__(self, ip, port, protocol, timeout, hostname = hostname, proxies = proxies, domain = domain, dc_ip = dc_ip, dns=dns)
 		self.tree = tree
-		self.port = port
-		self.proxy = proxy
-		self.timeout = timeout
-		self.dc_ip = dc_ip
-		self.serverip = None
-		self.domain = None
-		self.sslctx = None
 		self.ldap_query_page_size = ldap_query_page_size
 		self.ldap_query_ratelimit = ldap_query_ratelimit
-
-	def get_ssl_context(self):
-		if self.proto == LDAPProtocol.SSL:
-			if self.sslctx is None:
-				# TODO ssl verification :)
-				self.sslctx = ssl._create_unverified_context()
-				#self.sslctx.verify = False
-			return self.sslctx
-		return None
-
+	
 	def to_target_string(self):
-		return 'ldap/%s@%s' % (self.host,self.domain)  #ldap/WIN2019AD.test.corp @ TEST.CORP
+		return 'ldap/%s@%s' % (self.get_hostname_or_ip(), self.domain)  #ldap/WIN2019AD.test.corp @ TEST.CORP
 
 	def get_host(self):
-		return '%s://%s:%s' % (self.proto, self.host, self.port)
+		if self.protocol == UniProto.CLIENT_SSL_TCP:
+			proto = 'ldaps'
+		elif self.protocol == UniProto.CLIENT_TCP:
+			proto = 'ldap'
+		return '%s://%s:%s' % (proto, self.get_hostname_or_ip(), self.port)
 
 	def is_ssl(self):
-		return self.proto == LDAPProtocol.SSL
+		return self.protocol == UniProto.CLIENT_SSL_TCP
+	
+	@staticmethod
+	def from_url(connection_url):
+		url_e = urlparse(connection_url)
+		schemes = []
+		for item in url_e.scheme.upper().split('+'):
+			schemes.append(item.replace('-','_'))
+		if schemes[0] == 'LDAP':
+			protocol = UniProto.CLIENT_TCP
+			port = 389
+		elif schemes[0] == 'LDAPS':
+			protocol = UniProto.CLIENT_SSL_TCP
+			port = 636
+		elif schemes[0] == 'LDAP_SSL':
+			protocol = UniProto.CLIENT_SSL_TCP
+			port = 636
+		elif schemes[0] == 'LDAP_TCP':
+			protocol = UniProto.CLIENT_TCP
+			port= 389
+		elif schemes[0] == 'LDAP_UDP':
+			raise NotImplementedError()
+			protocol = UniProto.CLIENT_UDP
+			port = 389
+		else:
+			raise Exception('Unknown protocol! %s' % schemes[0])
+		
+		if url_e.port:
+			port = url_e.port
+		if port is None:
+			raise Exception('Port must be provided!')
+		
+		path = None
+		if url_e.path not in ['/', '', None]:
+			path = url_e.path
+		
+		unitarget, extraparams = UniTarget.from_url(connection_url, protocol, port, msldaptarget_url_params)
+		pagesize = extraparams['pagesize'] if extraparams['pagesize'] is not None else 1000
+		rate = extraparams['rate'] if extraparams['rate'] is not None else 0
+
+		target = MSLDAPTarget(
+			unitarget.ip, 
+			port = unitarget.port, 
+			protocol = unitarget.protocol, 
+			tree = path, 
+			proxies = unitarget.proxies, 
+			timeout = unitarget.timeout, 
+			ldap_query_page_size = pagesize, 
+			ldap_query_ratelimit = rate,
+			dns = unitarget.dns, 
+			dc_ip = unitarget.dc_ip, 
+			domain = unitarget.domain, 
+			hostname = unitarget.hostname
+		)
+		return target
+
 	
 	def __str__(self):
 		t = '==== MSLDAPTarget ====\r\n'

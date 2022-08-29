@@ -1,10 +1,10 @@
 import asyncio
-from msldap.commons.url import MSLDAPURLDecoder
+from msldap.commons.factory import LDAPConnectionFactory
 
 url = 'ldap+simple://TEST\\victim:Passw0rd!1@10.10.10.2'
 
 async def client(url):
-	conn_url = MSLDAPURLDecoder(url)
+	conn_url = LDAPConnectionFactory.from_url(url)
 	ldap_client = conn_url.get_client()
 	_, err = await ldap_client.connect()
 	if err is not None:

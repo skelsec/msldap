@@ -3,6 +3,7 @@ import asyncio
 
 from msldap import logger
 from msldap.commons.common import MSLDAPClientStatus
+from .commons.target import MSLDAPTarget
 from msldap.protocol.messages import LDAPMessage, BindRequest, \
 	protocolOp, AuthenticationChoice, SaslCredentials, \
 	SearchRequest, AttributeDescription, Filter, Filters, \
@@ -12,24 +13,25 @@ from msldap.protocol.messages import LDAPMessage, BindRequest, \
 from msldap.protocol.utils import calcualte_length
 from msldap.protocol.typeconversion import convert_result, convert_attributes, encode_attributes, encode_changes
 from msldap.protocol.query import escape_filter_chars, query_syntax_converter
-from msldap.commons.authbuilder import AuthenticatorBuilder
-from msldap.commons.credential import MSLDAP_GSS_METHODS
-from msldap.network.selector import MSLDAPNetworkSelector
-from msldap.commons.credential import LDAPAuthProtocol
-from msldap.commons.target import LDAPProtocol
-from msldap.commons.exceptions import LDAPServerException, LDAPBindException, LDAPAddException, LDAPModifyException, LDAPDeleteException
-from asn1crypto.x509 import Certificate
+from msldap.commons.authbuilder import get_auth_context
+from msldap.network.packetizer import LDAPPacketizer
+from asysocks.unicomm.common.target import UniProto
+from msldap.commons.exceptions import LDAPBindException, LDAPAddException, LDAPModifyException, LDAPDeleteException
 from hashlib import sha256
 from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
+from asysocks.unicomm.client import UniClient
+from asyauth.common.constants import asyauthProtocol
+from asyauth.common.credentials import UniCredential
 
 class MSLDAPClientConnection:
-	def __init__(self, target, creds, auth=None):
+	def __init__(self, target:MSLDAPTarget, credential:UniCredential, auth=None):
 		self.target = target
-		self.creds = creds
+		self.credential = credential
 		if auth is not None:
 			self.auth = auth
 		else:
-			self.auth = AuthenticatorBuilder(self.creds, self.target).build()
+			self.auth = get_auth_context(self.credential)
+
 		self.connected = False
 		self.bind_ok = False
 		self.__sign_messages = False
@@ -54,15 +56,7 @@ class MSLDAPClientConnection:
 
 	async def __handle_incoming(self):
 		try:
-			while True:
-				message_data, err = await self.network.in_queue.get()
-				if message_data is None and err is None:
-					return
-
-				if err is not None:
-					logger.debug('Client terminating bc __handle_incoming got an error!')
-					raise err
-				
+			async for message_data in self.network.read():				
 				#print('Incoming message data: %s' % message_data)
 				if self.bind_ok is True:
 					if self.__encrypt_messages is True:
@@ -150,7 +144,7 @@ class MSLDAPClientConnection:
 				self.encryption_sequence_counter += 1
 		
 		self.message_table_notify[curr_msg_id] = asyncio.Event()
-		await self.network.out_queue.put(message_data)
+		await self.network.write(message_data)
 
 		return curr_msg_id
 
@@ -180,16 +174,13 @@ class MSLDAPClientConnection:
 		"""
 		try:
 			logger.debug('Connecting!')
-			self.network = await MSLDAPNetworkSelector.select(self.target)
-			res, err = await self.network.run()
-			if res is False:
-				return False, err
+			packetizer = LDAPPacketizer()
+			client = UniClient(self.target, packetizer)
+			self.network = await client.connect()
 			
 			# now processing channel binding options
-			if self.target.proto == LDAPProtocol.SSL:
+			if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 				certdata = self.network.get_peer_certificate()
-				#cert = Certificate.load(certdata).native
-				#print(cert)
 				cb_struct = ChannelBindingsStruct()
 				cb_struct.application_data = b'tls-server-end-point:' + sha256(certdata).digest()
 
@@ -211,12 +202,9 @@ class MSLDAPClientConnection:
 
 		logger.debug('Disconnecting!')
 		self.bind_ok = False
-		await self.network.in_queue.put((None,None))
-		await self.network.out_queue.put(None)
-		await asyncio.sleep(0)
-		
 		if self.network is not None:
-			await self.network.terminate()
+			await self.network.close()
+			await asyncio.sleep(0)
 		
 		if self.handle_incoming_task is not None:
 			self.handle_incoming_task.cancel()
@@ -229,11 +217,11 @@ class MSLDAPClientConnection:
 		"""
 		logger.debug('BIND Success!')
 		self.bind_ok = True
-		if self.creds.auth_method in MSLDAP_GSS_METHODS or self.creds.auth_method == LDAPAuthProtocol.SICILY:
+		if self.credential.protocol in [asyauthProtocol.NTLM, asyauthProtocol.KERBEROS, asyauthProtocol.SICILY]:
 			self.__sign_messages = self.auth.signing_needed()
 			self.__encrypt_messages = self.auth.encryption_needed()
 			if self.__encrypt_messages or self.__sign_messages:
-				self.network.is_plain_msg = False
+				self.network.packetizer.is_plain_msg = False
 
 	async def bind(self):
 		"""
@@ -245,9 +233,9 @@ class MSLDAPClientConnection:
 		"""
 		logger.debug('BIND in progress...')
 		try:
-			if self.creds.auth_method == LDAPAuthProtocol.SICILY:
+			if self.credential.protocol == asyauthProtocol.SICILY:
 				
-				data, to_continue, err = await self.auth.authenticate(None)
+				data, to_continue, err = await self.auth.authenticate(None, spn=self.target.to_target_string())
 				if err is not None:
 					return None, err
 
@@ -301,7 +289,7 @@ class MSLDAPClientConnection:
 							res['protocolOp']['diagnosticMessage']
 						)
 
-				data, to_continue, err = await self.auth.authenticate(res['protocolOp']['matchedDN'])
+				data, to_continue, err = await self.auth.authenticate(res['protocolOp']['matchedDN'], spn=self.target.to_target_string())
 				if err is not None:
 					return None, err
 
@@ -334,10 +322,10 @@ class MSLDAPClientConnection:
 				self.__bind_success()
 				return True, None
 
-			elif self.creds.auth_method == LDAPAuthProtocol.SIMPLE:
+			elif self.credential.protocol == asyauthProtocol.SIMPLE:
 				pw = b''
-				if self.auth.password != None:
-					pw = self.auth.password.encode()
+				if self.auth.secret != None:
+					pw = self.auth.secret.encode()
 
 				user = b''
 				if self.auth.username != None:
@@ -372,11 +360,11 @@ class MSLDAPClientConnection:
 							res['protocolOp']['diagnosticMessage']
 						)
 
-			elif self.creds.auth_method in MSLDAP_GSS_METHODS:
+			elif self.credential.protocol in [asyauthProtocol.NTLM, asyauthProtocol.KERBEROS]:
 				challenge = None
 				while True:
 					try:
-						data, to_continue, err = await self.auth.authenticate(challenge, cb_data = self.cb_data)
+						data, to_continue, err = await self.auth.authenticate(challenge, cb_data = self.cb_data, spn=self.target.to_target_string())
 						if err is not None:
 							raise err
 					except Exception as e:
@@ -407,7 +395,7 @@ class MSLDAPClientConnection:
 					res = res.native
 					if res['protocolOp']['resultCode'] == 'success':
 						if 'serverSaslCreds' in res['protocolOp']:
-							data, _, err = await self.auth.authenticate(res['protocolOp']['serverSaslCreds'], cb_data = self.cb_data)
+							data, _, err = await self.auth.authenticate(res['protocolOp']['serverSaslCreds'], cb_data = self.cb_data, spn=self.target.to_target_string())
 							if err is not None:
 								return False, err
 
@@ -427,7 +415,7 @@ class MSLDAPClientConnection:
 							)
 					
 			else:
-				raise Exception('Not implemented authentication method: %s' % self.creds.auth_method.name)
+				raise Exception('Not implemented authentication method: %s' % self.credential.protocol.name)
 		except Exception as e:
 			await self.disconnect()
 			return False, e
@@ -787,76 +775,6 @@ class MSLDAPClientConnection:
 		return convert_attributes(res.native['protocolOp']['attributes']), None
 
 
-async def amain():
-	import traceback
-	from msldap.commons.url import MSLDAPURLDecoder
-
-	base = 'DC=TEST,DC=CORP'
-
-	#ip = 'WIN2019AD'
-	#domain = 'TEST'
-	#username = 'victim'
-	#password = 'Passw0rd!1'
-	##auth_method = LDAPAuthProtocol.SICILY
-	#auth_method = LDAPAuthProtocol.SIMPLE
-
-	#cred = MSLDAPCredential(domain, username, password , auth_method)
-	#target = MSLDAPTarget(ip)
-	#target.dc_ip = '10.10.10.2'
-	#target.domain = 'TEST'
-
-	url = 'ldaps+ntlm-password://test\\Administrator:QLFbT8zkiFGlJuf0B3Qq@WIN2019AD/?dc=10.10.10.2'
-
-	dec = MSLDAPURLDecoder(url)
-	cred = dec.get_credential()
-	target = dec.get_target()
-
-	print(cred)
-	print(target)
-
-	input()
-
-	client = MSLDAPClientConnection(target, cred)
-	await client.connect()
-	res, err = await client.bind()
-	if err is not None:
-		raise err
-	
-	user = "CN=ldaptest_2,CN=Users,DC=test,DC=corp"
-	#attributes = {'objectClass':  ['inetOrgPerson', 'posixGroup', 'top'], 'sn': 'user_sn', 'gidNumber': 0}
-	#res, err = await client.add(user, attributes)
-	#if err is not None:
-	#	print(err)
-
-	#changes = {
-	#	'unicodePwd': [('replace', ['"TESTPassw0rd!1"'])],
-	#	#'lockoutTime': [('replace', [0])]
-	#}
-
-	#res, err = await client.modify(user, changes)
-	#if err is not None:
-	#	print('ERR! %s' % err)
-	#else:
-	#	print('OK!')
-	
-	res, err = await client.delete(user)
-	if err is not None:
-		print('ERR! %s' % err)
-	
-	await client.disconnect()
-
-
-
-if __name__ == '__main__':
-	from msldap import logger
-	from msldap.commons.credential import MSLDAPCredential, LDAPAuthProtocol
-	from msldap.commons.target import MSLDAPTarget
-	from msldap.protocol.query import query_syntax_converter
-
-	logger.setLevel(2)
-
-
-	asyncio.run(amain())
 
 	
 

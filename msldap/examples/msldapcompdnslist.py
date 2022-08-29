@@ -7,22 +7,10 @@
 import asyncio
 import traceback
 import logging
-import csv
-import shlex
-import datetime
-
-from msldap.external.aiocmd.aiocmd import aiocmd
-from msldap.external.asciitree.asciitree import LeftAligned
-from tqdm import tqdm
 
 from msldap import logger
 from asysocks import logger as sockslogger
-from msldap.client import MSLDAPClient
-from msldap.commons.url import MSLDAPURLDecoder
-from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
-
-from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
-
+from msldap.commons.factory import LDAPConnectionFactory
 
 class MSLDAPCompDomainList:
 	def __init__(self, ldap_url):
@@ -69,7 +57,6 @@ class MSLDAPCompDomainList:
 			_, err = await self.do_adinfo(False)
 			if err is not None:
 				raise err
-			#machine_filename = '%s_computers_%s.txt' % (self.domain_name, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
 		
 			async for machine, err in self.connection.get_all_machines(attrs=['sAMAccountName', 'dNSHostName']):
 				if err is not None:
@@ -102,7 +89,7 @@ def main():
 		logger.setLevel(logging.DEBUG)
 		logging.basicConfig(level=logging.DEBUG)
 
-	ldap_url = MSLDAPURLDecoder(args.url)
+	ldap_url = LDAPConnectionFactory.from_url(args.url)
 	compdomlist = MSLDAPCompDomainList(ldap_url)
 
 
