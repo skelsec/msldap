@@ -51,7 +51,7 @@ setup(
 		'asyauth>=0.0.1',
 		'asysocks>=0.2.0',
 		'asn1crypto>=1.3.0',
-		'minikerberos>=0.3.0',
+		'minikerberos>=0.3.1',
 		'winacl>=0.1.2',
 		'prompt-toolkit>=3.0.2',
 		'tqdm',
