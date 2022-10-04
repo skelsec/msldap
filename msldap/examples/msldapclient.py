@@ -578,6 +578,18 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 			return False
 
+	async def do_delspn(self, user_dn, spn):
+		"""Removes an SPN entry to the users account"""
+		try:
+			_, err = await self.connection.del_user_spn(user_dn, spn)
+			if err is not None:
+				raise err
+			print('SPN removed!')
+			return True
+		except:
+			traceback.print_exc()
+			return False
+
 	async def do_addhostname(self, user_dn, hostname):
 		"""Adds additional hostname to computer account"""
 		try:

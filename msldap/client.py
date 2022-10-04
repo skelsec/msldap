@@ -4,7 +4,6 @@
 #  Tamas Jos (@skelsec)
 #
 
-from codecs import lookup
 import copy
 import asyncio
 
@@ -933,6 +932,23 @@ class MSLDAPClient:
 		"""
 		changes = {
 			'servicePrincipalName': [('add', [spn])]
+		}
+		return await self._con.modify(user_dn, changes)
+	
+	async def del_user_spn(self, user_dn, spn):
+		"""
+		Adds an SPN record to the user object.
+		
+		:param user_dn: The user's DN
+		:type user_dn: str
+		:param spn: The SPN to be added. It must follow the SPN string format specifications.
+		:type spn: str
+		:return: A tuple of (True, None) on success or (False, Exception) on error. 
+		:rtype: (:class:`bool`, :class:`Exception`)
+
+		"""
+		changes = {
+			'servicePrincipalName': [('delete', [spn])]
 		}
 		return await self._con.modify(user_dn, changes)
 
