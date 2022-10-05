@@ -232,7 +232,7 @@ class MSLDAPClientConnection:
 		logger.debug('BIND in progress...')
 		try:
 			if self.credential.protocol == asyauthProtocol.SICILY:
-				flags = ISC_REQ.CONNECTION|ISC_REQ.CONFIDENTIALITY
+				flags = ISC_REQ.CONNECTION|ISC_REQ.CONFIDENTIALITY|ISC_REQ.INTEGRITY
 				if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 					flags = ISC_REQ.CONNECTION
 				data, to_continue, err = await self.auth.authenticate(None, spn=self.target.to_target_string(), flags=flags, cb_data = self.cb_data)
@@ -366,7 +366,7 @@ class MSLDAPClientConnection:
 				challenge = None
 				while True:
 					try:
-						flags = ISC_REQ.CONNECTION|ISC_REQ.CONFIDENTIALITY
+						flags = ISC_REQ.CONNECTION|ISC_REQ.CONFIDENTIALITY|ISC_REQ.INTEGRITY
 						if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 							flags = ISC_REQ.CONNECTION
 						
