@@ -18,7 +18,6 @@ from msldap.network.packetizer import LDAPPacketizer
 from asysocks.unicomm.common.target import UniProto
 from msldap.commons.exceptions import LDAPBindException, LDAPAddException, LDAPModifyException, LDAPDeleteException
 from hashlib import sha256
-from minikerberos.gssapi.channelbindings import ChannelBindingsStruct
 from asysocks.unicomm.client import UniClient
 from asyauth.common.constants import asyauthProtocol
 from asyauth.common.credentials import UniCredential
@@ -181,10 +180,7 @@ class MSLDAPClientConnection:
 			# now processing channel binding options
 			if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 				certdata = self.network.get_peer_certificate()
-				cb_struct = ChannelBindingsStruct()
-				cb_struct.application_data = b'tls-server-end-point:' + sha256(certdata).digest()
-
-				self.cb_data = cb_struct.to_bytes()
+				self.cb_data = b'tls-server-end-point:' + sha256(certdata).digest()
 
 			self.handle_incoming_task = asyncio.create_task(self.__handle_incoming())
 			logger.debug('Connection succsessful!')
