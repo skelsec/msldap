@@ -232,10 +232,10 @@ class MSLDAPClientConnection:
 		logger.debug('BIND in progress...')
 		try:
 			if self.credential.protocol == asyauthProtocol.SICILY:
-				flags = ISC_REQ.CONFIDENTIALITY|ISC_REQ.INTEGRITY|ISC_REQ.USE_SESSION_KEY|ISC_REQ.CONNECTION
+				flags = ISC_REQ.CONNECTION|ISC_REQ.CONFIDENTIALITY
 				if self.target.protocol == UniProto.CLIENT_SSL_TCP:
-					flags = ISC_REQ.USE_SESSION_KEY|ISC_REQ.CONNECTION
-				data, to_continue, err = await self.auth.authenticate(None, spn=self.target.to_target_string(), flags=flags)
+					flags = ISC_REQ.CONNECTION
+				data, to_continue, err = await self.auth.authenticate(None, spn=self.target.to_target_string(), flags=flags, cb_data = self.cb_data)
 				if err is not None:
 					return None, err
 
@@ -289,7 +289,7 @@ class MSLDAPClientConnection:
 							res['protocolOp']['diagnosticMessage']
 						)
 
-				data, to_continue, err = await self.auth.authenticate(res['protocolOp']['matchedDN'], spn=self.target.to_target_string())
+				data, to_continue, err = await self.auth.authenticate(res['protocolOp']['matchedDN'], spn=self.target.to_target_string(), cb_data = self.cb_data)
 				if err is not None:
 					return None, err
 
@@ -332,7 +332,7 @@ class MSLDAPClientConnection:
 					user = self.auth.username.encode()
 				if user == b'':
 					self.is_anon = True
-
+				
 				auth = {
 					'simple' : pw
 				}
@@ -366,9 +366,10 @@ class MSLDAPClientConnection:
 				challenge = None
 				while True:
 					try:
-						flags = ISC_REQ.CONFIDENTIALITY|ISC_REQ.INTEGRITY|ISC_REQ.USE_SESSION_KEY|ISC_REQ.CONNECTION
+						flags = ISC_REQ.CONNECTION|ISC_REQ.CONFIDENTIALITY
 						if self.target.protocol == UniProto.CLIENT_SSL_TCP:
-							flags = ISC_REQ.USE_SESSION_KEY|ISC_REQ.CONNECTION
+							flags = ISC_REQ.CONNECTION
+						
 						data, to_continue, err = await self.auth.authenticate(challenge, cb_data = self.cb_data, spn=self.target.to_target_string(), flags=flags)
 						if err is not None:
 							raise err
@@ -400,11 +401,12 @@ class MSLDAPClientConnection:
 					res = res.native
 					if res['protocolOp']['resultCode'] == 'success':
 						if 'serverSaslCreds' in res['protocolOp']:
-							data, _, err = await self.auth.authenticate(res['protocolOp']['serverSaslCreds'], cb_data = self.cb_data, spn=self.target.to_target_string())
+							data, _, err = await self.auth.authenticate(res['protocolOp']['serverSaslCreds'], cb_data = self.cb_data, spn=self.target.to_target_string(), flags=flags)
 							if err is not None:
 								return False, err
 
-						self.encryption_sequence_counter = self.auth.get_seq_number()
+						if self.auth.encryption_needed() is True or self.auth.signing_needed() is True:
+							self.encryption_sequence_counter = self.auth.get_seq_number()
 						self.__bind_success()
 
 						return True, None
@@ -778,12 +780,3 @@ class MSLDAPClientConnection:
 		#print('res')
 		#print(res)
 		return convert_attributes(res.native['protocolOp']['attributes']), None
-
-
-
-	
-
-			
-			
-
-		
