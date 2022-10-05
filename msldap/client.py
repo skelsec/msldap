@@ -113,11 +113,13 @@ class MSLDAPClient:
 			self._serverinfo = res
 			self._tree = res['defaultNamingContext']
 			self._ldapinfo, err = await self.get_ad_info()
-			self._domainsid_cache[self._ldapinfo.objectSid] = self._ldapinfo.name
+			if self._con.is_anon is False:
+				if err is not None:
+					raise err
+				self._domainsid_cache[self._ldapinfo.objectSid] = self._ldapinfo.name
+			
 			if self.keepalive is True:
 				self.__keepalive_task = asyncio.create_task(self.__keepalive())
-			if err is not None:
-				raise err
 			return True, None
 		except Exception as e:
 			return False, e

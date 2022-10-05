@@ -21,6 +21,7 @@ from hashlib import sha256
 from asysocks.unicomm.client import UniClient
 from asyauth.common.constants import asyauthProtocol
 from asyauth.common.credentials import UniCredential
+from asyauth.common.winapi.constants import ISC_REQ
 
 class MSLDAPClientConnection:
 	def __init__(self, target:MSLDAPTarget, credential:UniCredential, auth=None):
@@ -33,6 +34,7 @@ class MSLDAPClientConnection:
 
 		self.connected = False
 		self.bind_ok = False
+		self.is_anon = False
 		self.__sign_messages = False
 		self.__encrypt_messages = False
 		self.network = None
@@ -230,8 +232,10 @@ class MSLDAPClientConnection:
 		logger.debug('BIND in progress...')
 		try:
 			if self.credential.protocol == asyauthProtocol.SICILY:
-				
-				data, to_continue, err = await self.auth.authenticate(None, spn=self.target.to_target_string())
+				flags = ISC_REQ.CONFIDENTIALITY|ISC_REQ.INTEGRITY|ISC_REQ.USE_SESSION_KEY|ISC_REQ.CONNECTION
+				if self.target.protocol == UniProto.CLIENT_SSL_TCP:
+					flags = ISC_REQ.USE_SESSION_KEY|ISC_REQ.CONNECTION
+				data, to_continue, err = await self.auth.authenticate(None, spn=self.target.to_target_string(), flags=flags)
 				if err is not None:
 					return None, err
 
@@ -326,6 +330,8 @@ class MSLDAPClientConnection:
 				user = b''
 				if self.auth.username != None:
 					user = self.auth.username.encode()
+				else:
+					self.is_anon = True
 
 				auth = {
 					'simple' : pw
@@ -360,7 +366,10 @@ class MSLDAPClientConnection:
 				challenge = None
 				while True:
 					try:
-						data, to_continue, err = await self.auth.authenticate(challenge, cb_data = self.cb_data, spn=self.target.to_target_string())
+						flags = ISC_REQ.CONFIDENTIALITY|ISC_REQ.INTEGRITY|ISC_REQ.USE_SESSION_KEY|ISC_REQ.CONNECTION
+						if self.target.protocol == UniProto.CLIENT_SSL_TCP:
+							flags = ISC_REQ.USE_SESSION_KEY|ISC_REQ.CONNECTION
+						data, to_continue, err = await self.auth.authenticate(challenge, cb_data = self.cb_data, spn=self.target.to_target_string(), flags=flags)
 						if err is not None:
 							raise err
 					except Exception as e:
