@@ -1314,6 +1314,20 @@ class MSLDAPClient:
 			yield None, e
 			return
 
+	async def list_gsma(self):
+		try:
+			ldap_filter = r'(objectClass=msDS-GroupManagedServiceAccount)'
+			async for entry, err in self.pagedsearch(ldap_filter, attributes = ['sAMAccountName','msDS-GroupMSAMembership', 'msDS-ManagedPassword']):
+				if err is not None:
+					yield None, err
+					return
+				yield entry['attributes'].get('sAMAccountName'), entry['attributes'].get('msDS-GroupMSAMembership'), entry['attributes'].get('msDS-ManagedPassword'), None
+
+		except Exception as e:
+			yield None, None, None, e
+			return
+
+
 	async def resolv_sd(self, sd):
 		"Resolves all SIDs found in security descriptor, returns lookup table"
 		try:

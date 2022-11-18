@@ -5,7 +5,6 @@
 #
 
 import asyncio
-from os import terminal_size
 import traceback
 import logging
 import csv
@@ -23,6 +22,7 @@ from asysocks import logger as sockslogger
 from msldap.client import MSLDAPClient
 from msldap.commons.factory import LDAPConnectionFactory
 from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
+from msldap.wintypes.managedpassword import MSDS_MANAGEDPASSWORD_BLOB
 
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
 from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK, AceFlags, ACE_OBJECT_PRESENCE
@@ -864,6 +864,28 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 			return False, None
+
+	async def do_gsma(self):
+		try:
+			print('---------------------------------------------')
+			async for samaccountname, memberships, pwblob, err in self.connection.list_gsma():
+				if err is not None:
+					raise err
+				print('Username: %s' % samaccountname)
+				#print(memberships)
+				if pwblob is not None:
+					#print(pwblob)
+					pw = MSDS_MANAGEDPASSWORD_BLOB.from_bytes(pwblob[0])
+					#print(str(pw))
+					print('Password: %s' % pw.CurrentPassword[:-2].hex())
+					print('Password -NT-: %s' % pw.nt_hash)
+				else:
+					print('Password: <EMPTY>')
+				print('---------------------------------------------')
+
+		except:
+			traceback.print_exc()
+			return False
 
 	async def do_test(self):
 		"""testing, dontuse"""
