@@ -6,6 +6,7 @@ from winacl.dtyp.guid import GUID
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
 from msldap import logger
 from msldap.protocol.messages import Attribute, Change, PartialAttribute
+from msldap.wintypes.managedpassword import MSDS_MANAGEDPASSWORD_BLOB
 
 MSLDAP_DT_WIN_EPOCH = datetime.datetime(1601, 1, 1)
 
@@ -44,6 +45,9 @@ def x2sd(x):
 
 def x2sid(x):
 	return str(SID.from_bytes(x[0]))
+
+def x2gmsa(x):
+	return MSDS_MANAGEDPASSWORD_BLOB.from_bytes(x[0])
 
 def list_x2sid(x):
 	t = []
@@ -302,6 +306,8 @@ LDAP_ATTRIBUTE_TYPES = {
 	'msPKI-Cert-Template-OID' : list_str_one,
 	'msPKI-Certificate-Application-Policy' : list_str,
 	'msPKI-RA-Application-Policies' : list_str, #I'm guessing here
+	'msDS-ManagedPassword' : x2gmsa,
+	'msDS-GroupMSAMembership' : x2sd,
 }
 
 LDAP_ATTRIBUTE_TYPES_ENC = {

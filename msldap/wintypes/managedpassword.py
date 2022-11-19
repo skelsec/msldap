@@ -17,8 +17,6 @@ class MSDS_MANAGEDPASSWORD_BLOB:
 		self.UnchangedPasswordInterval = None
 
 		self.nt_hash = None
-		self.aes_128 = None
-		self.aes_256 = None
 
 	@staticmethod
 	def from_bytes(data:bytes):
@@ -52,10 +50,7 @@ class MSDS_MANAGEDPASSWORD_BLOB:
 			blob.UnchangedPasswordInterval = buff.read()
 
 
-		blob.nt_hash = md4(blob.CurrentPassword[:-2]).hexdigest()
-		blob.aes_128 = None
-		blob.aes_256 = None
-		
+		blob.nt_hash = md4(blob.CurrentPassword[:-2]).hexdigest()		
 		return blob
 	
 	def __str__(self):

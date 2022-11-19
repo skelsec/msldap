@@ -1314,7 +1314,7 @@ class MSLDAPClient:
 			yield None, e
 			return
 
-	async def list_gsma(self):
+	async def list_gmsa(self):
 		try:
 			ldap_filter = r'(objectClass=msDS-GroupManagedServiceAccount)'
 			async for entry, err in self.pagedsearch(ldap_filter, attributes = ['sAMAccountName','msDS-GroupMSAMembership', 'msDS-ManagedPassword']):

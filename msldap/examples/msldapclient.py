@@ -22,14 +22,15 @@ from asysocks import logger as sockslogger
 from msldap.client import MSLDAPClient
 from msldap.commons.factory import LDAPConnectionFactory
 from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
-from msldap.wintypes.managedpassword import MSDS_MANAGEDPASSWORD_BLOB
 
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
-from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK, AceFlags, ACE_OBJECT_PRESENCE
+from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK, AceFlags,\
+	ACE_OBJECT_PRESENCE, ACEType
 from winacl.dtyp.sid import SID
 from winacl.dtyp.guid import GUID
 
-from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate, EX_RIGHT_CERTIFICATE_ENROLLMENT, CertificateNameFlag
+from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate,\
+	EX_RIGHT_CERTIFICATE_ENROLLMENT, CertificateNameFlag
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest
 
 
@@ -865,20 +866,28 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 			return False, None
 
-	async def do_gsma(self):
+	async def do_gmsa(self):
+		"""Lists all managed service accounts (MSA). If user has permissions it retrieves the password as well"""
 		try:
 			print('---------------------------------------------')
-			async for samaccountname, memberships, pwblob, err in self.connection.list_gsma():
+			async for samaccountname, memberships, pwblob, err in self.connection.list_gmsa():
 				if err is not None:
 					raise err
 				print('Username: %s' % samaccountname)
-				#print(memberships)
+				allowed_machines = []
+				if memberships is not None:
+					for entry in memberships.Dacl.aces:
+						if entry.AceType == ACEType.ACCESS_ALLOWED_ACE_TYPE:
+							try:
+								user = await self.do_sidresolv(entry.Sid, to_print=False)
+								allowed_machines.append(user)
+							except:
+								allowed_machines.append(entry.Sid)
+					for mname in allowed_machines:
+						print('Allowed machine: %s' % mname)
 				if pwblob is not None:
-					#print(pwblob)
-					pw = MSDS_MANAGEDPASSWORD_BLOB.from_bytes(pwblob[0])
-					#print(str(pw))
-					print('Password: %s' % pw.CurrentPassword[:-2].hex())
-					print('Password -NT-: %s' % pw.nt_hash)
+					print('Password: %s' % pwblob.CurrentPassword[:-2].hex())
+					print('Password -NT-: %s' % pwblob.nt_hash)
 				else:
 					print('Password: <EMPTY>')
 				print('---------------------------------------------')
