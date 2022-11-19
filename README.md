@@ -61,6 +61,8 @@ Detailed explanation with examples:
 	<protocol> sets the ldap protocol following values supported:
 		- ldap
 		- ldaps
+		- gc
+		- gc_ssl
 		
 	<auth> can be omitted if plaintext authentication is to be performed (in that case it default to ntlm-password), otherwise:
 		- ntlm-password
@@ -110,3 +112,4 @@ Detailed explanation with examples:
 
 # Kudos
 Certificate services functionality was based on [certi](https://github.com/zer1t0/certi) created by @zer1t0
+AC-RN

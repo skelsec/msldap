@@ -81,6 +81,12 @@ class MSLDAPTarget(UniTarget):
 			raise NotImplementedError()
 			protocol = UniProto.CLIENT_UDP
 			port = 389
+		elif schemes[0] == 'GC':
+			protocol = UniProto.CLIENT_TCP
+			port = 3268
+		elif schemes[0] == 'GC_SSL':
+			protocol = UniProto.CLIENT_SSL_TCP
+			port = 3269
 		else:
 			raise Exception('Unknown protocol! %s' % schemes[0])
 		
