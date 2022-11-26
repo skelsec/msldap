@@ -48,10 +48,10 @@ setup(
 	),
 	install_requires=[
 		'unicrypto>=0.0.9',
-		'asyauth>=0.0.7',
+		'asyauth>=0.0.8',
 		'asysocks>=0.2.1',
 		'asn1crypto>=1.3.0',
-		'minikerberos>=0.3.1',
+		'minikerberos>=0.3.5',
 		'winacl>=0.1.4',
 		'prompt-toolkit>=3.0.2',
 		'tqdm',
