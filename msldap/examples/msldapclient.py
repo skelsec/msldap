@@ -25,13 +25,15 @@ from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
 
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
 from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK, AceFlags,\
-	ACE_OBJECT_PRESENCE, ACEType
+	ACE_OBJECT_PRESENCE, ACEType, ACCESS_ALLOWED_ACE, ACCESS_DENIED_ACE
 from winacl.dtyp.sid import SID
 from winacl.dtyp.guid import GUID
 
 from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate,\
 	EX_RIGHT_CERTIFICATE_ENROLLMENT, CertificateNameFlag
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest
+from tabulate import tabulate
+import json
 
 
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
@@ -184,7 +186,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			async for entry, err in self.connection.pagedsearch(query, attributes):
 				if err is not None:
 					raise err
-				print(entry)
+				print(json.dumps(entry))
 			return True
 		except:
 			traceback.print_exc()
@@ -406,7 +408,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 			return False
 			
-	async def do_getsd(self, dn):
+	async def do_getsd(self, dn, opts=' '):
 		"""Feteches security info for a given DN"""
 		try:
 			await self.do_ldapinfo(False)
@@ -415,7 +417,34 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			sd = SECURITY_DESCRIPTOR.from_bytes(sec_info)
-			print(sd.to_sddl())
+			domain, username, err = await self.connection.resolv_sid(sd.Owner.to_sddl())
+			print("OWNER: %s\\%s" % (domain, username))
+			domain, username, err = await self.connection.resolv_sid(sd.Group.to_sddl())
+			print("GROUP: %s\\%s" % (domain, username))
+			out = []
+			for ace in sd.Dacl.aces:
+				if SID.wellknown_sid_lookup(ace.Sid.to_sddl()):
+					canonical = SID.wellknown_sid_lookup(ace.Sid.to_sddl())
+				else:
+					domain, username, err = await self.connection.resolv_sid(ace.Sid.to_sddl())
+					if username != '???':
+						canonical = '%s\\%s' % (domain, username)
+					else:
+						canonical = ace.Sid.to_sddl()
+				if opts[0] == 'g':
+					row = []
+					for line in str(ace).split("\n"):
+						row.append(line.split(":")[-1])
+					out.append([canonical] + row)
+				elif opts[0] == 'p':
+					for line in str(ace).split("\n"):
+						out.append([canonical, line])
+			if opts[0] == 'g':
+				print(tabulate(out, headers=["Who","Type","Flags","SID","Mask","ObjectType","InheritedObjectType","ObjectFlags","ACType",""]))
+			elif opts[0] == 'p':
+				print(tabulate(out, headers=["Who","ACE"]))
+			else:
+				print(sd.to_sddl())
 			return True
 		except:
 			traceback.print_exc()

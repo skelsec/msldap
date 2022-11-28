@@ -56,6 +56,7 @@ setup(
 		'prompt-toolkit>=3.0.2',
 		'tqdm',
 		'wcwidth',
+		'tabulate'
 	],
 	entry_points={
 		'console_scripts': [
