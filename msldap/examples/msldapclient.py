@@ -33,7 +33,6 @@ from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate,\
 	EX_RIGHT_CERTIFICATE_ENROLLMENT, CertificateNameFlag
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest
 from tabulate import tabulate
-import json
 
 
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
@@ -186,7 +185,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			async for entry, err in self.connection.pagedsearch(query, attributes):
 				if err is not None:
 					raise err
-				print(json.dumps(entry))
+				print(entry)
 			return True
 		except:
 			traceback.print_exc()
