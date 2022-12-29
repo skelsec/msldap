@@ -56,12 +56,12 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			logger.debug(self.conn_url.get_credential())
 			logger.debug(self.conn_url.get_target())
 			
-			
 			self.connection = self.conn_url.get_client()
 			_, err = await self.connection.connect()
 			if err is not None:
 				raise err
 			print('BIND OK!')
+			self.prompt = self.connection._tree + ' > '
 			
 			return True
 		except:
@@ -171,7 +171,49 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 			return False
 
-	async def do_query(self, query, attributes = None):
+	async def do_cd(self, path):
+		"""Change current work directory"""
+		self.connection._tree = path
+		self.prompt = self.connection._tree + ' > '
+		return True
+
+	async def do_ls(self):
+		"""Print objects in current work directory"""
+		tree_data = await self.connection.get_tree_plot(self.connection._tree, level=1)
+		root = list(tree_data.keys())[0]
+		for dn in tree_data[root].keys():
+			print(dn)
+		return True
+
+	async def do_cat(self, dn, attributes="*"):
+		"""Print attributes of object"""
+		attributes = attributes.split(",")
+		async for entry, err in self.connection.pagedsearch(query="(distinguishedName=%s)"%dn, attributes=attributes):
+			if err is not None:
+				raise err
+			for attr in entry["attributes"]:
+				if type(entry["attributes"][attr]) == list:
+					for val in entry["attributes"][attr]:
+						print("%s: %s" % (attr, val))
+				else:
+					val = entry["attributes"][attr]
+					print("%s: %s" % (attr, val))
+		return True
+
+	async def do_modify(self, dn, attribute, value):
+		"""Modify an attribute of object"""
+		changes = {
+			attribute : [('replace', [value.encode()])]
+		}
+
+		_, err = await self.connection.modify(dn, changes)
+		if err is not None:
+			raise err
+		
+		print('Modify OK!')
+		return True
+
+	async def do_query(self, query, attributes = "-"):
 		"""Performs a raw LDAP query against the server. Secondary parameter is the requested attributes SEPARATED WITH COMMA (,)"""
 		try:
 			await self.do_ldapinfo(False)
