@@ -6,6 +6,7 @@
 
 import copy
 import asyncio
+from typing import List, Dict, Tuple
 
 from msldap import logger
 from msldap.commons.common import MSLDAPClientStatus
@@ -17,6 +18,8 @@ from msldap.connection import MSLDAPClientConnection
 from msldap.protocol.messages import Control
 from msldap.ldap_objects import *
 from msldap.commons.utils import KNOWN_SIDS
+from msldap.commons.target import MSLDAPTarget
+from asyauth.common.credentials import UniCredential
 
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
 from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK
@@ -39,7 +42,7 @@ class MSLDAPClient:
 	:rtype: dict
 
 	"""
-	def __init__(self, target, creds, connection = None, keepalive = False):
+	def __init__(self, target:MSLDAPTarget, creds:UniCredential, connection = None, keepalive = False):
 		self.creds = creds
 		self.target = target
 		self.keepalive = keepalive
@@ -59,6 +62,7 @@ class MSLDAPClient:
 		self.disconnected_evt = None
 		self._sid_cache = {} #SID -> (domain, user)
 		self._domainsid_cache = {} # SID -> domain
+		
 	
 	async def __aenter__(self):
 		return self
@@ -66,11 +70,11 @@ class MSLDAPClient:
 	async def __aexit__(self, exc_type, exc, traceback):
 		await asyncio.wait_for(self.disconnect(), timeout = 1)
 	
-	async def __keepalive(self):
+	async def __keepalive(self, temptree):
 		try:
 			while not self.disconnected_evt.is_set():
 				if self._con is not None:
-					ldap_filter = r'(distinguishedName=%s)' % self._tree
+					ldap_filter = r'(distinguishedName=%s)' % temptree
 					async for entry, err in self.pagedsearch(ldap_filter, MSADInfo_ATTRS):
 						if err is not None:
 							return None, err
@@ -104,9 +108,12 @@ class MSLDAPClient:
 				_, err = await self._con.connect()
 				if err is not None:
 					raise err
-				res, err = await self._con.bind()
-				if err is not None:
-					return False, err
+				if self._con.is_anon is False:
+					res, err = await self._con.bind()
+					if err is not None:
+						return False, err
+				else:
+					logger.debug('Skipping bind for no auth!')
 			res, err = await self._con.get_serverinfo()
 			if err is not None:
 				raise err
@@ -119,7 +126,7 @@ class MSLDAPClient:
 				self._domainsid_cache[self._ldapinfo.objectSid] = self._ldapinfo.name
 			
 			if self.keepalive is True:
-				self.__keepalive_task = asyncio.create_task(self.__keepalive())
+				self.__keepalive_task = asyncio.create_task(self.__keepalive(res['defaultNamingContext']))
 			return True, None
 		except Exception as e:
 			return False, e
@@ -127,7 +134,7 @@ class MSLDAPClient:
 	def get_server_info(self):
 		return self._serverinfo
 
-	async def pagedsearch(self, query, attributes, controls = None, tree = None):
+	async def pagedsearch(self, query:str, attributes:List[str], controls:List[Tuple[str, str, str]] = None, tree:str = None):
 		"""
 		Performs a paged search on the AD, using the filter and attributes as a normal query does.
 			!The LDAP connection MUST be active before invoking this function!
@@ -138,8 +145,8 @@ class MSLDAPClient:
 		:type attributes: List[str]
 		:param controls: additional controls to be passed in the query
 		:type controls: dict
-		:param level: Recursion level
-		:type level: int
+		:param tree: Base tree to perform the search on
+		:type tree: str
 
 		:return: Async generator which yields (`dict`, None) tuple on success or (None, `Exception`) on error
 		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
@@ -149,9 +156,6 @@ class MSLDAPClient:
 		if self._con.status != MSLDAPClientStatus.RUNNING:
 			if self._con.status == MSLDAPClientStatus.ERROR:
 				print('There was an error in the connection!')
-				return
-			elif self._con.status == MSLDAPClientStatus.ERROR:
-				print('Theconnection is in stopped state!')
 				return
 
 		if tree is None:
@@ -192,7 +196,7 @@ class MSLDAPClient:
 				#print('et %s ' % entry)
 				yield entry, None
 
-	async def get_tree_plot(self, root_dn, level = 2):
+	async def get_tree_plot(self, root_dn:str, level:int = 2):
 		"""
 		Returns a dictionary representing a tree starting from 'dn' containing all subtrees.
 
@@ -229,7 +233,7 @@ class MSLDAPClient:
 				tree[entry['attributes']['distinguishedName']] = subtree
 		return {root_dn : tree}
 
-	async def get_all_users(self, attrs = MSADUser_ATTRS):
+	async def get_all_users(self, attrs:List[str] = MSADUser_ATTRS):
 		"""
 		Fetches all user objects available in the LDAP tree and yields them as MSADUser object.
 		
@@ -246,7 +250,7 @@ class MSLDAPClient:
 			yield MSADUser.from_ldap(entry, self._ldapinfo), None
 		logger.debug('Finished polling for entries!')
 
-	async def get_all_machines(self, attrs = MSADMachine_ATTRS):
+	async def get_all_machines(self, attrs:List[str] = MSADMachine_ATTRS):
 		"""
 		Fetches all machine objects available in the LDAP tree and yields them as MSADMachine object.
 
@@ -266,7 +270,7 @@ class MSLDAPClient:
 			yield MSADMachine.from_ldap(entry, self._ldapinfo), None
 		logger.debug('Finished polling for entries!')
 	
-	async def get_all_gpos(self, attrs = MSADGPO_ATTRS):
+	async def get_all_gpos(self, attrs:List[str] = MSADGPO_ATTRS):
 		"""
 		Fetches all GPOs available in the LDAP tree and yields them as MSADGPO object.
 		
@@ -295,7 +299,7 @@ class MSLDAPClient:
 		async for entry, err in self.pagedsearch(ldap_filter, attributes):
 			yield entry, err
 
-	async def get_schemaentry(self, dn):
+	async def get_schemaentry(self, dn:str):
 		"""
 		Fetches one Schema entriy identified by dn
 
@@ -350,7 +354,7 @@ class MSLDAPClient:
 					
 		logger.debug('Finished polling for entries!')
 
-	async def get_laps(self, sAMAccountName):
+	async def get_laps(self, sAMAccountName:str):
 		"""
 		Fetches the LAPS password for a machine. This functionality is only available to specific high-privileged users.
 		
@@ -365,7 +369,7 @@ class MSLDAPClient:
 		async for entry, err in self.pagedsearch(ldap_filter, attributes):
 			return entry, err
 
-	async def get_user(self, sAMAccountName):
+	async def get_user(self, sAMAccountName:str):
 		"""
 		Fetches one user object from the AD, based on the sAMAccountName attribute (read: username) 
 		
@@ -384,7 +388,7 @@ class MSLDAPClient:
 			return None, None
 		logger.debug('Finished polling for entries!')
 
-	async def get_machine(self, sAMAccountName):
+	async def get_machine(self, sAMAccountName:str):
 		"""
 		Fetches one machine object from the AD, based on the sAMAccountName attribute (read: username) 
 		
@@ -439,7 +443,7 @@ class MSLDAPClient:
 		async for entry, err in self.pagedsearch(ldap_filter, attributes):
 			yield entry, err
 
-	async def get_all_service_users(self, include_machine = False):
+	async def get_all_service_users(self, include_machine:bool = False):
 		"""
 		Fetches all service user objects from the AD, and returns MSADUser object.
 		Service user refers to an user with SPN (servicePrincipalName) attribute set
@@ -464,7 +468,7 @@ class MSLDAPClient:
 			yield MSADUser.from_ldap(entry, self._ldapinfo), None
 		logger.debug('Finished polling for entries!')
 
-	async def get_all_knoreq_users(self, include_machine = False):
+	async def get_all_knoreq_users(self, include_machine:bool = False):
 		"""
 		Fetches all user objects with useraccountcontrol DONT_REQ_PREAUTH flag set from the AD, and returns MSADUser object.
 		
@@ -487,7 +491,7 @@ class MSLDAPClient:
 			yield MSADUser.from_ldap(entry, self._ldapinfo), None
 		logger.debug('Finished polling for entries!')
 			
-	async def get_objectacl_by_dn_p(self, dn, flags = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION):
+	async def get_objectacl_by_dn_p(self, dn:str, flags:SDFlagsRequest = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION):
 		"""
 		Returns the full or partial Security Descriptor of the object specified by it's DN.
 		The flags indicate which part of the security Descriptor to be returned.
@@ -514,7 +518,7 @@ class MSLDAPClient:
 				return
 			yield MSADSecurityInfo.from_ldap(entry), None
 
-	async def get_objectacl_by_dn(self, dn, flags = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION):
+	async def get_objectacl_by_dn(self, dn:str, flags:SDFlagsRequest = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION):
 		"""
 		Returns the full or partial Security Descriptor of the object specified by it's DN.
 		The flags indicate which part of the security Descriptor to be returned.
@@ -541,7 +545,7 @@ class MSLDAPClient:
 			return entry['attributes'].get('nTSecurityDescriptor'), None
 		return None, None
 
-	async def set_objectacl_by_dn(self, object_dn, data, flags = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION):
+	async def set_objectacl_by_dn(self, object_dn:str, data:bytes, flags:SDFlagsRequest = SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION):
 		"""
 		Updates the security descriptor of the LDAP object
 		
@@ -566,11 +570,11 @@ class MSLDAPClient:
 				]
 
 		changes = {
-			'nTSecurityDescriptor': [('replace', [data])]
+			'nTSecurityDescriptor': [('replace', data)]
 		}
 		return await self._con.modify(object_dn, changes, controls = controls)
 		
-	async def get_all_groups(self, attrs = MSADGroup_ATTRS):
+	async def get_all_groups(self, attrs:List[str] = MSADGroup_ATTRS):
 		"""
 		Yields all Groups present in the LDAP tree.  
 		
@@ -598,7 +602,7 @@ class MSLDAPClient:
 				return
 			yield MSADOU.from_ldap(entry), None
 			
-	async def get_group_by_dn(self, group_dn):
+	async def get_group_by_dn(self, group_dn:str):
 		"""
 		Returns an `MSADGroup` object for the group specified by group_dn
 
@@ -616,7 +620,7 @@ class MSLDAPClient:
 		
 		return None, Exception('Search returned no results!')
 			
-	async def get_user_by_dn(self, user_dn):
+	async def get_user_by_dn(self, user_dn:str):
 		"""
 		Fetches the DN for an object specified by `user_dn`
 
@@ -632,7 +636,7 @@ class MSLDAPClient:
 				return None, err
 			return MSADUser.from_ldap(entry), None
 			
-	async def get_group_members(self, dn, recursive = False):
+	async def get_group_members(self, dn:str, recursive:bool = False):
 		"""
 		Fetches the DN for an object specified by `objectsid`
 
@@ -657,7 +661,7 @@ class MSLDAPClient:
 					yield result, err
 		
 						
-	async def get_dn_for_objectsid(self, objectsid):
+	async def get_dn_for_objectsid(self, objectsid:str):
 		"""
 		Fetches the DN for an object specified by `objectsid`
 
@@ -677,7 +681,7 @@ class MSLDAPClient:
 		
 		return None, Exception('Search returned no results!')
 
-	async def get_objectsid_for_dn(self, dn):
+	async def get_objectsid_for_dn(self, dn:str):
 		"""
 		Fetches the objectsid for an object specified by `dn`
 
@@ -697,7 +701,7 @@ class MSLDAPClient:
 		
 		return None, Exception('Search returned no results!')
 	
-	async def get_tokengroups_user(self, samaccountname):
+	async def get_tokengroups_user(self, samaccountname:str):
 		ldap_filter = r'(sAMAccountName=%s)' % escape_filter_chars(samaccountname)
 		user_dn = None
 		async for entry, err in self.pagedsearch(ldap_filter, ['distinguishedName']):
@@ -717,7 +721,7 @@ class MSLDAPClient:
 		
 		return tokengroup, None
 		
-	async def get_tokengroups(self, dn):
+	async def get_tokengroups(self, dn:str):
 		"""
 		Yields SIDs of groups that the given DN is a member of.
 
@@ -835,7 +839,7 @@ class MSLDAPClient:
 				return
 			yield MSADDomainTrust.from_ldap(entry), None
 		
-	async def create_user_dn(self, user_dn, password):
+	async def create_user_dn(self, user_dn:str, password:str):
 		"""
 		Creates a new user object with a password and enables the user so it can be used immediately.
 		
@@ -875,7 +879,7 @@ class MSLDAPClient:
 			return False, e
 
 
-	async def unlock_user(self, user_dn):
+	async def unlock_user(self, user_dn:str):
 		"""
 		Unlocks the user by clearing the lockoutTime attribute.
 		
@@ -886,11 +890,11 @@ class MSLDAPClient:
 
 		"""
 		changes = {
-			'lockoutTime': [('replace', [0])]
+			'lockoutTime': [('replace', 0)]
 		}
 		return await self._con.modify(user_dn, changes)
 
-	async def enable_user(self, user_dn):
+	async def enable_user(self, user_dn:str):
 		"""
 		Sets the user object to enabled by modifying the UserAccountControl attribute.
 		
@@ -901,11 +905,11 @@ class MSLDAPClient:
 
 		"""
 		changes = {
-			'userAccountControl': [('replace', [512])]
+			'userAccountControl': [('replace', 512)]
 		}
 		return await self._con.modify(user_dn, changes)
 	
-	async def disable_user(self, user_dn):
+	async def disable_user(self, user_dn:str):
 		"""
 		Sets the user object to disabled by modifying the UserAccountControl attribute.
 		
@@ -916,11 +920,11 @@ class MSLDAPClient:
 
 		"""
 		changes = {
-			'userAccountControl': [('replace', [2])]
+			'userAccountControl': [('replace', 2)]
 		}
 		return await self._con.modify(user_dn, changes)
 
-	async def add_user_spn(self, user_dn, spn):
+	async def add_user_spn(self, user_dn:str, spn:str):
 		"""
 		Adds an SPN record to the user object.
 		
@@ -933,11 +937,11 @@ class MSLDAPClient:
 
 		"""
 		changes = {
-			'servicePrincipalName': [('add', [spn])]
+			'servicePrincipalName': [('add', spn)]
 		}
 		return await self._con.modify(user_dn, changes)
 	
-	async def del_user_spn(self, user_dn, spn):
+	async def del_user_spn(self, user_dn:str, spn:str):
 		"""
 		Adds an SPN record to the user object.
 		
@@ -950,11 +954,11 @@ class MSLDAPClient:
 
 		"""
 		changes = {
-			'servicePrincipalName': [('delete', [spn])]
+			'servicePrincipalName': [('delete', spn)]
 		}
 		return await self._con.modify(user_dn, changes)
 
-	async def add_additional_hostname(self, user_dn, hostname):
+	async def add_additional_hostname(self, user_dn:str, hostname:str):
 		"""
 		Adds additional hostname to the user object.
 		
@@ -965,12 +969,12 @@ class MSLDAPClient:
 
 		"""
 		changes = {
-			'msds-additionaldnshostname': [('add', [hostname])]
+			'msds-additionaldnshostname': [('add', hostname)]
 		}
 		return await self._con.modify(user_dn, changes)
 		
 	
-	async def delete_user(self, user_dn):
+	async def delete_user(self, user_dn:str):
 		"""
 		Deletes the user.
 		This action is destructive!
@@ -983,7 +987,7 @@ class MSLDAPClient:
 		"""
 		return await self._con.delete(user_dn)
 
-	async def change_password(self, user_dn: str, newpass: str, oldpass = None):
+	async def change_password(self, user_dn: str, newpass: str, oldpass:str = None):
 		"""
 		Changes the password of a user.  
 		If used with a high-privileged account (eg. Domain admin, Account operator...), the old password can be `None` 
@@ -1002,11 +1006,11 @@ class MSLDAPClient:
 			'unicodePwd': []
 		}
 		if oldpass is not None:
-			changes['unicodePwd'].append(('delete', ['"%s"' % oldpass]))
-			changes['unicodePwd'].append(('add', ['"%s"' % newpass]))
+			changes['unicodePwd'].append(('delete', '"%s"' % oldpass))
+			changes['unicodePwd'].append(('add', '"%s"' % newpass))
 		else:
 			#if you are admin...
-			changes['unicodePwd'].append(('replace', ['"%s"' % newpass]))
+			changes['unicodePwd'].append(('replace', '"%s"' % newpass))
 
 		return await self._con.modify(user_dn, changes)
 
@@ -1025,7 +1029,7 @@ class MSLDAPClient:
 
 		"""
 		changes = {
-			'member': [('add', [user_dn])]
+			'member': [('add', user_dn)]
 		}
 		return await self._con.modify(group_dn, changes)
 
@@ -1043,12 +1047,12 @@ class MSLDAPClient:
 
 		"""
 		changes = {
-			'member': [('delete', [user_dn])]
+			'member': [('delete', user_dn)]
 		}
 		return await self._con.modify(group_dn, changes)
 		
 
-	async def get_object_by_dn(self, dn, expected_class = None):
+	async def get_object_by_dn(self, dn:str, expected_class = None):
 		ldap_filter = r'(distinguishedName=%s)' % dn
 		async for entry, err in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
 			if err is not None:
@@ -1065,7 +1069,7 @@ class MSLDAPClient:
 			elif 'group' in temp:
 				yield MSADGroup.from_ldap(entry), None
 
-	async def modify(self, dn, changes, controls = None):
+	async def modify(self, dn:str, changes:Dict[str, object], controls:Dict[str, object] = None):
 		"""
 		Performs the modify operation.
 		
@@ -1081,12 +1085,12 @@ class MSLDAPClient:
 		if controls is None:
 			controls = []
 		controls_conv = []
-		for control in controls:		
+		for control in controls:	
 			controls_conv.append(Control(control))
 		return await self._con.modify(dn, changes, controls=controls_conv)
 
 
-	async def add(self, dn, attributes):
+	async def add(self, dn:str, attributes:Dict[str, object]):
 		"""
 		Performs the add operation.
 		
@@ -1100,7 +1104,7 @@ class MSLDAPClient:
 		
 		return await self._con.add(dn, attributes)
 
-	async def delete(self, dn):
+	async def delete(self, dn:str):
 		"""
 		Performs the delete operation.
 		
@@ -1112,7 +1116,7 @@ class MSLDAPClient:
 
 		return await self._con.delete(dn)
 
-	async def add_priv_addmember(self, user_dn, group_dn):
+	async def add_priv_addmember(self, user_dn:str, group_dn:str):
 		"""Adds AddMember rights to the user on the group specified by group_dn"""
 		try:
 			#getting SID of target dn
@@ -1138,7 +1142,7 @@ class MSLDAPClient:
 			new_sd.Dacl.aces.append(ace_1)
 
 			changes = {
-				'nTSecurityDescriptor' : [('replace', [new_sd.to_bytes()])]
+				'nTSecurityDescriptor' : [('replace', new_sd.to_bytes())]
 			}
 			_, err = await self.modify(group_dn, changes)
 			if err is not None:
@@ -1148,7 +1152,7 @@ class MSLDAPClient:
 		except Exception as e:
 			return False, e
 
-	async def add_priv_dcsync(self, user_dn, forest_dn = None):
+	async def add_priv_dcsync(self, user_dn:str, forest_dn:str = None):
 		"""Adds DCSync rights to the given user by modifying the forest's Security Descriptor to add GetChanges and GetChangesAll ACE"""
 		try:
 			#getting SID of target dn
@@ -1187,7 +1191,7 @@ class MSLDAPClient:
 			new_sd.Dacl.aces.append(ace_2)
 
 			changes = {
-				'nTSecurityDescriptor' : [('replace', [new_sd.to_bytes()])]
+				'nTSecurityDescriptor' : [('replace', new_sd.to_bytes())]
 			}
 			_, err = await self.modify(forest_dn, changes)
 			if err is not None:
@@ -1197,7 +1201,7 @@ class MSLDAPClient:
 		except Exception as e:
 			return False, e
 
-	async def change_priv_owner(self, new_owner_sid, target_dn, target_attribute = None):
+	async def change_priv_owner(self, new_owner_sid:str, target_dn:str, target_attribute = None):
 		"""Changes the owner in a Security Descriptor to the new_owner_sid on an LDAP object or on an LDAP object's attribute identified by target_dn and target_attribute. target_attribute can be omitted to change the target_dn's SD's owner"""
 		try:
 			try:
@@ -1227,7 +1231,7 @@ class MSLDAPClient:
 			new_sd.Owner = new_owner_sid
 
 			changes = {
-				target_attribute : [('replace', [new_sd.to_bytes()])]
+				target_attribute : [('replace', new_sd.to_bytes())]
 			}
 			_, err = await self.modify(target_dn, changes)
 			if err is not None:
@@ -1294,7 +1298,7 @@ class MSLDAPClient:
 			yield None, e
 			return
 
-	async def list_certificate_templates(self, name = None):
+	async def list_certificate_templates(self, name:str = None):
 		try:
 			req_flags = SDFlagsRequestValue({'Flags' : SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION})
 			controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
@@ -1319,7 +1323,7 @@ class MSLDAPClient:
 			ldap_filter = r'(objectClass=msDS-GroupManagedServiceAccount)'
 			async for entry, err in self.pagedsearch(ldap_filter, attributes = ['sAMAccountName','msDS-GroupMSAMembership', 'msDS-ManagedPassword']):
 				if err is not None:
-					yield None, err
+					yield None, None, None, err
 					return
 				yield entry['attributes'].get('sAMAccountName'), entry['attributes'].get('msDS-GroupMSAMembership'), entry['attributes'].get('msDS-ManagedPassword'), None
 
@@ -1328,7 +1332,7 @@ class MSLDAPClient:
 			return
 
 
-	async def resolv_sd(self, sd):
+	async def resolv_sd(self, sd:SECURITY_DESCRIPTOR|bytes):
 		"Resolves all SIDs found in security descriptor, returns lookup table"
 		try:
 			if isinstance(sd, bytes):
@@ -1356,7 +1360,7 @@ class MSLDAPClient:
 		except Exception as e:
 			return None, e
 	
-	async def resolv_sid(self, sid, use_cache = True):
+	async def resolv_sid(self, sid:SID|str, use_cache:bool = True):
 		"""Performs a SID lookup for object and returns the domain name and the samaccountname"""
 		try:
 			sid = str(sid).upper()

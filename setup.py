@@ -52,7 +52,7 @@ setup(
 		'asysocks>=0.2.1',
 		'asn1crypto>=1.3.0',
 		'minikerberos>=0.3.5',
-		'winacl>=0.1.4',
+		'winacl>=0.1.5',
 		'prompt-toolkit>=3.0.2',
 		'tqdm',
 		'wcwidth',

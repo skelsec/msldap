@@ -1,5 +1,5 @@
 import asyncio
-
+from typing import List, Dict
 
 from msldap import logger
 from msldap.commons.common import MSLDAPClientStatus
@@ -48,6 +48,9 @@ class MSLDAPClientConnection:
 		self.message_table_notify = {}
 		self.encryption_sequence_counter = 0 # this will be set by the inderlying auth algo
 		self.cb_data = None #for channel binding
+
+		if self.credential.protocol == asyauthProtocol.NONE:
+			self.is_anon = True
 	
 	async def __aenter__(self):
 		return self
@@ -125,7 +128,7 @@ class MSLDAPClientConnection:
 		self.status = MSLDAPClientStatus.STOPPED
 
 
-	async def send_message(self, message):
+	async def send_message(self, message:Dict[str, object]):
 		curr_msg_id = self.message_id
 		self.message_id += 1
 
@@ -149,7 +152,7 @@ class MSLDAPClientConnection:
 
 		return curr_msg_id
 
-	async def recv_message(self, message_id):
+	async def recv_message(self, message_id:int):
 		if message_id not in self.message_table_notify:
 			logger.debug('Requested message id %s which is not in the message notify table!' % message_id)
 			return None
@@ -185,6 +188,7 @@ class MSLDAPClientConnection:
 				self.cb_data = b'tls-server-end-point:' + sha256(certdata).digest()
 
 			self.handle_incoming_task = asyncio.create_task(self.__handle_incoming())
+			self.status = MSLDAPClientStatus.CONNECTED
 			logger.debug('Connection succsessful!')
 			return True, None
 		except Exception as e:
@@ -215,6 +219,7 @@ class MSLDAPClientConnection:
 		"""
 		logger.debug('BIND Success!')
 		self.bind_ok = True
+		self.status = MSLDAPClientStatus.RUNNING
 		if self.credential.protocol in [asyauthProtocol.NTLM, asyauthProtocol.KERBEROS, asyauthProtocol.SICILY]:
 			self.__sign_messages = self.auth.signing_needed()
 			self.__encrypt_messages = self.auth.encryption_needed()
@@ -423,11 +428,12 @@ class MSLDAPClientConnection:
 					
 			else:
 				raise Exception('Not implemented authentication method: %s' % self.credential.protocol.name)
+			
 		except Exception as e:
 			await self.disconnect()
 			return False, e
 
-	async def add(self, entry, attributes):
+	async def add(self, entry:str, attributes:Dict[str, object]):
 		"""
 		Performs the add operation.
 		
@@ -443,6 +449,7 @@ class MSLDAPClientConnection:
 				'entry' : entry.encode(),
 				'attributes' : encode_attributes(attributes)
 			}
+			logger.debug(req)
 			br = { 'addRequest' : AddRequest(req)}
 			msg = { 'protocolOp' : protocolOp(br)}
 			
@@ -466,7 +473,7 @@ class MSLDAPClientConnection:
 		except Exception as e:
 			return False, e
 
-	async def modify(self, entry, changes, controls = None):
+	async def modify(self, entry:str, changes:Dict[str, object], controls:List[Control] = None):
 		"""
 		Performs the modify operation.
 		
@@ -509,7 +516,7 @@ class MSLDAPClientConnection:
 		except Exception as e:
 			return False, e
 
-	async def delete(self, entry):
+	async def delete(self, entry:str):
 		"""
 		Performs the delete operation.
 		
@@ -542,7 +549,7 @@ class MSLDAPClientConnection:
 		except Exception as e:
 			return False, e
 	
-	async def search(self, base, query, attributes, search_scope = 2, size_limit = 1000, types_only = False, derefAliases = 0, timeLimit = None, controls = None, return_done = False):
+	async def search(self, base:str, query:str, attributes:List[str], search_scope:int = 2, size_limit:int = 1000, types_only:bool = False, derefAliases:int = 0, timeLimit:int = None, controls:List[Control] = None, return_done:bool = False):
 		"""
 		Performs the search operation.
 		
@@ -570,7 +577,7 @@ class MSLDAPClientConnection:
 		:return: Async generator which yields (`LDAPMessage`, None) tuple on success or (None, `Exception`) on error
 		:rtype: Iterator[(:class:`LDAPMessage`, :class:`Exception`)]
 		"""
-		if self.status != MSLDAPClientStatus.RUNNING:
+		if self.status not in [MSLDAPClientStatus.CONNECTED, MSLDAPClientStatus.RUNNING]:
 			yield None, Exception('Connection not running! Probably encountered an error')
 			return
 		try:
@@ -623,7 +630,7 @@ class MSLDAPClientConnection:
 		except Exception as e:
 			yield (None, e)
 
-	async def pagedsearch(self, base, query, attributes, search_scope = 2, size_limit = 1000, typesOnly = False, derefAliases = 0, timeLimit = None, controls = None, rate_limit = 0):
+	async def pagedsearch(self, base:str, query:str, attributes:List[str], search_scope:int = 2, size_limit:int = 1000, typesOnly:bool = False, derefAliases:bool = 0, timeLimit:int = None, controls:List[Control] = None, rate_limit:int = 0):
 		"""
 		Paged search is the same as the search operation and uses it under the hood. Adds automatic control to read all results in a paged manner.
 		
@@ -735,7 +742,7 @@ class MSLDAPClientConnection:
 
 
 	async def get_serverinfo(self):
-		if self.status != MSLDAPClientStatus.RUNNING:
+		if self.status not in [MSLDAPClientStatus.CONNECTED, MSLDAPClientStatus.RUNNING]:
 			return None, Exception('Connection not running! Probably encountered an error')
 
 		attributes = [
@@ -777,6 +784,4 @@ class MSLDAPClientConnection:
 		if isinstance(res, Exception):
 			return None, res
 		
-		#print('res')
-		#print(res)
 		return convert_attributes(res.native['protocolOp']['attributes']), None
