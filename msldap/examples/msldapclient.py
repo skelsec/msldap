@@ -38,7 +38,7 @@ from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 	def __init__(self, url = None):
 		aiocmd.PromptToolkitCmd.__init__(self, ignore_sigint=False) #Setting this to false, since True doesnt work on windows...
-		self.conn_url = None
+		self.conn_url = url
 		if url is not None and isinstance(url, LDAPConnectionFactory) is False:
 			self.conn_url = LDAPConnectionFactory.from_url(url)
 		self.connection = None
@@ -53,7 +53,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		"""Performs connection and login"""
 		try:			
 			if self.conn_url is None and url is None:
-				print('Not url was set, cant do logon')
+				print('No URL was set, cant do logon')
 			if url is not None and isinstance(url, LDAPConnectionFactory) is False:
 				self.conn_url = LDAPConnectionFactory.from_url(url)
 
@@ -1040,15 +1040,44 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 
 async def amain(args):
 	import platform
-	from asyauth.common.credentials import UniCredential
+	
 	if args.url is not None:
 		client = MSLDAPClientConsole(args.url)
 	else:
 		if platform.system() != 'Windows':
 			raise Exception('This function only works on Windows systems!')
+		from asyauth.common.credentials import UniCredential
+		from msldap.commons.target import MSLDAPTarget, UniProto
+		from winacl.functions.highlevel import get_logon_info
 		cred = UniCredential.get_sspi(args.authtype)
-		if args.target is None:
-			pass
+		userinfo = get_logon_info()
+		if args.target is not None:
+			ip = args.target
+			if args.target.find(':') is not None:
+				ip, port = args.target.split(':')
+			target = MSLDAPTarget(ip=ip, port=port)
+		else:
+			if userinfo['logonserver'] is not None and len(userinfo['logonserver']) > 0:
+				target = MSLDAPTarget(
+					ip=userinfo['logonserver'], 
+					hostname = userinfo['logonserver'], 
+					dc_ip=userinfo['logonserver'],
+					domain=userinfo['dnsdomainname'],
+				)
+				if args.ldaps is True:
+					target = MSLDAPTarget(
+						ip=userinfo['logonserver'], 
+						hostname = userinfo['logonserver'],
+						protocol = UniProto.CLIENT_SSL_TCP,
+						port = 636,
+						dc_ip=userinfo['logonserver'],
+						domain=userinfo['dnsdomainname'],
+					)
+				
+			else:
+				raise Exception('Couldnt find logonserver! Are you connected to a domain?')
+		factory = LDAPConnectionFactory(cred, target)
+		client = MSLDAPClientConsole(factory)
 
 	if len(args.commands) == 0:
 		if args.no_interactive is True:
@@ -1075,11 +1104,12 @@ def main():
 	parser.add_argument('-v', '--verbose', action='count', default=0, help='Verbosity, can be stacked')
 	parser.add_argument('-n', '--no-interactive', action='store_true')
 	if platform.system() == 'Windows':
-		group = parser.add_mutually_exclusive_group()
+		group = parser.add_argument_group(title='URL')
 		group.add_argument('--url', help='Connection string in URL format.')
-		authip = group.add_argument_group()
-		authip.add_argument('--authtype', default='ntlm', help='Connection string in URL format.')
-		authip.add_argument('--target', help='Address of LDAP server.')
+		group2 = parser.add_argument_group(title='Without URL')
+		group2.add_argument('--authtype', default='ntlm', help='Connection string in URL format.')
+		group2.add_argument('--target', help='Address of LDAP server.')
+		group2.add_argument('--ldaps', action='store_true', help='Use LDAPS')
 
 	else:
 		parser.add_argument('url', help='Connection string in URL format.')
