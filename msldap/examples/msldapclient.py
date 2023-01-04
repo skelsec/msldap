@@ -1013,6 +1013,21 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 			return False
+	
+	async def do_compdns(self):
+		try:		
+			async for machine, err in self.connection.get_all_machines(attrs=['sAMAccountName', 'dNSHostName']):
+				if err is not None:
+					raise err
+					
+				dns = machine.dNSHostName
+				if dns is None:
+					dns = '%s.%s' % (machine.sAMAccountName[:-1], self.domain_name)
+
+				print(str(dns))
+		except:
+			traceback.print_exc()
+			return False
 
 	async def do_test(self):
 		"""testing, dontuse"""

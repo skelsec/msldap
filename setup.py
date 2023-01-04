@@ -48,7 +48,7 @@ setup(
 	),
 	install_requires=[
 		'unicrypto>=0.0.9',
-		'asyauth>=0.0.8',
+		'asyauth>=0.0.10',
 		'asysocks>=0.2.1',
 		'asn1crypto>=1.3.0',
 		'minikerberos>=0.3.5',
@@ -60,7 +60,6 @@ setup(
 	entry_points={
 		'console_scripts': [
 			'msldap = msldap.examples.msldapclient:main',
-			'msldapcompdns = msldap.examples.msldapcompdnslist:main',
 		],
 	}
 )
