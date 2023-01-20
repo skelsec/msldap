@@ -10,7 +10,7 @@ def get_auth_context(credential:UniCredential):
 	elif credential.protocol == asyauthProtocol.SICILY:
 		return credential.build_context()
 
-	elif credential.protocol in [asyauthProtocol.SIMPLE, asyauthProtocol.PLAIN, asyauthProtocol.NONE]:
+	elif credential.protocol in [asyauthProtocol.SIMPLE, asyauthProtocol.PLAIN, asyauthProtocol.NONE, asyauthProtocol.SSL]:
 		return credential
 
 	else:

@@ -40,8 +40,8 @@ class MSLDAPTarget(UniTarget):
 	:param dc_ip: Ip address of the kerberos server (if kerberos is used)
 	:type dc_ip: str
 	"""
-	def __init__(self, ip, port = 389, protocol = UniProto.CLIENT_TCP, tree = None, proxies = None, timeout = 10, ldap_query_page_size = 1000, ldap_query_ratelimit = 0, dns:str=None, dc_ip:str = None, domain:str = None, hostname:str = None):
-		UniTarget.__init__(self, ip, port, protocol, timeout, hostname = hostname, proxies = proxies, domain = domain, dc_ip = dc_ip, dns=dns)
+	def __init__(self, ip, port = 389, protocol = UniProto.CLIENT_TCP, tree = None, proxies = None, timeout = 10, ldap_query_page_size = 1000, ldap_query_ratelimit = 0, dns:str=None, dc_ip:str = None, domain:str = None, hostname:str = None, ssl_ctx = None):
+		UniTarget.__init__(self, ip, port, protocol, timeout, hostname = hostname, ssl_ctx= ssl_ctx, proxies = proxies, domain = domain, dc_ip = dc_ip, dns=dns)
 		self.tree = tree
 		self.ldap_query_page_size = ldap_query_page_size
 		self.ldap_query_ratelimit = ldap_query_ratelimit
@@ -115,7 +115,8 @@ class MSLDAPTarget(UniTarget):
 			dns = unitarget.dns, 
 			dc_ip = unitarget.dc_ip, 
 			domain = unitarget.domain, 
-			hostname = unitarget.hostname
+			hostname = unitarget.hostname,
+			ssl_ctx = unitarget.ssl_ctx,
 		)
 		return target
 

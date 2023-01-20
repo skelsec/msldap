@@ -7,12 +7,13 @@
 import asyncio
 import traceback
 import logging
-import csv
 import shlex
 import datetime
 import copy
 import typing
 
+from asysocks.unicomm.common.target import UniTarget
+from asyauth.common.credentials import UniCredential
 from msldap.external.aiocmd.aiocmd import aiocmd
 from msldap.external.asciitree.asciitree import LeftAligned
 from tqdm import tqdm
@@ -85,7 +86,11 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				self.ldapinfo = self.connection.get_server_info()
 			if show is True:
 				for k in self.ldapinfo:
-					print('%s : %s' % (k, self.ldapinfo[k]))
+					if isinstance(self.ldapinfo[k], list):
+						for item in self.ldapinfo[k]:
+							print('%s : %s' % (k, item))
+					else:
+						print('%s : %s' % (k, self.ldapinfo[k]))
 			return True
 		except:
 			traceback.print_exc()
@@ -566,9 +571,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			return False
 
 	async def do_bindtree(self, newtree):
-		"""Changes the LDAP TREE for future queries. 
-				 MUST be DN format eg. 'DC=test,DC=corp'
-				 !DANGER! Switching tree to a tree outside of the domain will trigger a connection to that domain, leaking credentials!"""
+		"""Changes the LDAP TREE for future queries. MUST be DN format eg. 'DC=test,DC=corp'"""
 		self.connection._tree = newtree
 	
 	async def do_trusts(self):
@@ -1013,21 +1016,6 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 			return False
-	
-	async def do_compdns(self):
-		try:		
-			async for machine, err in self.connection.get_all_machines(attrs=['sAMAccountName', 'dNSHostName']):
-				if err is not None:
-					raise err
-					
-				dns = machine.dNSHostName
-				if dns is None:
-					dns = '%s.%s' % (machine.sAMAccountName[:-1], self.domain_name)
-
-				print(str(dns))
-		except:
-			traceback.print_exc()
-			return False
 
 	async def do_test(self):
 		"""testing, dontuse"""
@@ -1115,7 +1103,57 @@ async def amain(args):
 def main():
 	import argparse
 	import platform
-	parser = argparse.ArgumentParser(description='MS LDAP library')
+	protocols = """LDAP : basic LDAP protocol
+	LDAPS: LDAP over SSL
+	GC   : Global Catalog
+	GCS  : Global Catalog over SSL"""
+	authprotos = """ntlm     : SASL NTLM authentication
+	kerberos : SASL Kerberos authentication
+	sspi-ntlm: SSPI authentication using NTLM (Windows only, uses SASL)
+	sspi-kerberos: SSPI authentication using Kerberos (Windows only, uses SASL)
+	simple   : LDAP SIMPLE authentication
+	plain    : PLAIN authentication
+	sicily   : SICILY authentication
+	ssl      : Authenticate with SSL certificate
+	none     : No authentication, anonymous bind
+	"""
+	usage = UniCredential.get_help(protocols, authprotos, '')
+	usage += UniTarget.get_help()
+	usage += """
+Examples:
+All of the following examples show LDAP auth to the DC of TEST.corp domain at Win2019AD.test.corp(10.10.10.2)
+Kerberos authentication needs the FQDN of the DC, so we use the 'dc' parameter to specify the DC.
+
+Anonymous BIND:
+	ldap://10.10.10.2
+Username and password authentication using NTLM over plaintext LDAP:
+	ldap+ntlm-password://TEST\\victim:password@10.10.10.2
+Username and password authentication using NTLM over SSL/TLS:
+	ldaps+ntlm-password://TEST\\victim:password@10.10.10.2
+Username and password authentication using Kerberos over plaintext LDAP:
+	ldap+kerberos-password://TEST\\victim:password@10.10.10.2/?dc=10.10.10.2
+Username and password authentication using Kerberos over SSL/TLS:
+	ldaps+kerberos-password://TEST\\victim:password@10.10.10.2/?dc=10.10.10.2
+NTLM authentication using the NT hash over plaintext LDAP:
+	ldap+ntlm-nt://TEST\\victim:<NThash>@10.10.10.2
+Kerberos authentication using the RC4 key over plaintext LDAP:
+	ldap+kerberos-rc4://TEST\\victim:<RC4key>@10.10.10.2/?dc=10.10.10.2
+SICILY authentication using the NT hash over plaintext LDAP:
+	ldap+sicily-nt://TEST\\victim:<NThash>@10.10.10.2
+Kerberos authentication using AES key over plaintext LDAP:
+	ldap+kerberos-aes://TEST\\victim:<AESkey>@10.10.10.2/?dc=10.10.10.2
+Kerberos authentication using CCACHE file over plaintext LDAP:
+	ldap+kerberos-ccache://TEST\\victim:<CCACHEfile>@10.10.10.2/?dc=10.10.10.2
+Kerberos authentication using keytab file over plaintext LDAP:
+	ldap+kerberos-keytab://TEST\\victim:<KEYTABfile>@10.10.10.2/?dc=10.10.10.2
+Kerberos authentication using P12 or PFX file over plaintext LDAP (notice that keyfile password is at the 'password' filed):
+	ldap+kerberos-pfx://TEST\\victim:admin@10.10.10.2/?dc=10.10.10.2&keydata=<P12file>
+SSL authentication using P12 or PFX file over plaintext LDAP, automatically performs STARTTLS:
+	ldap+ssl://10.10.10.2/?sslcert=<P12file>&sslpassword=<P12password>'
+SSL authentication using P12 or PFX file over SSL/TLS LDAP:
+	ldaps+ssl://10.10.10.2/?sslcert=<P12file>&sslpassword=<P12password>'
+"""
+	parser = argparse.ArgumentParser(description='MS LDAP library', usage = usage)
 	parser.add_argument('-v', '--verbose', action='count', default=0, help='Verbosity, can be stacked')
 	parser.add_argument('-n', '--no-interactive', action='store_true')
 	if platform.system() == 'Windows':

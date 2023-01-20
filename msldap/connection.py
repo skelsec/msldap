@@ -60,6 +60,7 @@ class MSLDAPClientConnection:
 
 	async def __handle_incoming(self):
 		try:
+			
 			async for message_data in self.network.read():				
 				#print('Incoming message data: %s' % message_data)
 				if self.bind_ok is True:
@@ -425,12 +426,82 @@ class MSLDAPClientConnection:
 								res['protocolOp']['resultCode'], 
 								res['protocolOp']['diagnosticMessage']
 							)
+			elif self.credential.protocol == asyauthProtocol.SSL:
+				if self.target.protocol == UniProto.CLIENT_SSL_TCP:
+					self.__bind_success()
+					return True, None
+				elif self.target.protocol == UniProto.CLIENT_TCP:
+					_, err = await self.starttls()
+					if err is not None:
+						return False, err
+					
+					sasl = {
+						'mechanism' : 'EXTERNAL'.encode(),
+					}
+					auth = {
+						'sasl' : SaslCredentials(sasl)
+					}
+
+					bindreq = {
+						'version' : 3,
+						'name': b'',
+						'authentication': AuthenticationChoice(auth), 
+					}
+
+					br = { 'bindRequest' : BindRequest( bindreq	)}
+					msg = { 'protocolOp' : protocolOp(br)}
+
+					msg_id = await self.send_message(msg)
+					res = await self.recv_message(msg_id)
+					if isinstance(res[0], Exception):
+						return False, res[0]
+					resp = res[0].native['protocolOp']
+					if resp['resultCode'] != 'success':
+						#startls refused :(
+						return False, LDAPBindException(
+								resp['resultCode'], 
+								resp['diagnosticMessage']
+							)
+					self.__bind_success()
+					return True, None
+				
+				return False, Exception('Not implemented: %s' % self.credential.protocol.name)
 					
 			else:
 				raise Exception('Not implemented authentication method: %s' % self.credential.protocol.name)
 			
 		except Exception as e:
 			await self.disconnect()
+			return False, e
+
+	async def starttls(self):
+		try:
+			# https://www.ietf.org/rfc/rfc2830.txt
+			ext = {
+				'requestName': b'1.3.6.1.4.1.1466.20037', 
+			}
+			br = { 'extendedReq' : ExtendedRequest(ext)}
+			msg = { 'protocolOp' : protocolOp(br)}
+			msg_id = await self.send_message(msg)
+			res = await self.recv_message(msg_id)
+			if isinstance(res[0], Exception):
+				return False, res[0]
+			resp = res[0].native['protocolOp']
+			if resp['resultCode'] != 'success':
+				#startls refused :(
+				return False, LDAPBindException(
+						resp['resultCode'], 
+						resp['diagnosticMessage']
+					)
+			self.handle_incoming_task.cancel()
+			await asyncio.sleep(0)
+			await self.network.wrap_ssl(self.target.get_ssl_context())
+			self.handle_incoming_task = asyncio.create_task(self.__handle_incoming())
+			self.status = MSLDAPClientStatus.CONNECTED
+			await asyncio.sleep(0)
+			return True, None
+		except Exception as e:
+			print(e)
 			return False, e
 
 	async def add(self, entry:str, attributes:Dict[str, object]):
