@@ -466,7 +466,7 @@ def encode_changes(x):
 					'attributes' : lookup_table[k](value, True)
 				})
 			}))
-			print(lookup_table[k](value, True))
+			#print(lookup_table[k](value, True))
 	return res
 
 LDAP_WELL_KNOWN_ATTRS = {

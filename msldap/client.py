@@ -6,6 +6,8 @@
 
 import copy
 import asyncio
+import string
+import random
 from typing import List, Dict, Tuple
 
 from msldap import logger
@@ -1344,6 +1346,66 @@ class MSLDAPClient:
 		except Exception as e:
 			yield None, e
 			return
+		
+	async def add_computer(self, computername:str = None, password:str = None):
+		try:
+			if computername is None:
+				computername = 'COMP%s$' % ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(4))
+			if computername.endswith('$') is False:
+				computername += '$'
+			if password is None:
+				password = ''.join(random.choice(string.ascii_uppercase + string.digits + '!@#$%+') for _ in range(16))
+			
+			
+			# Create computer object
+			domain = self._ldapinfo.distinguishedName.replace('DC','').replace('=','').replace(',','.')
+			attributes = {
+				'objectClass':  ['top', 'person', 'organizationalPerson', 'user', 'computer'], 
+				#'cn': computername[:-1], 
+				'sAMAccountName': computername,
+				'name': computername[:-1],
+				'servicePrincipalName' : "HOST/{}.{}".format(computername[:-1], domain),
+			}
+			dn = 'CN=%s,CN=Computers,%s' % (computername[:-1], self._ldapinfo.distinguishedName)
+			_, err = await self.add(dn, attributes)
+			if err is not None:
+				raise err
+			
+			# enabling computer account
+			changes = {
+				'userAccountControl': [('replace', 4096)]
+			}
+			_, err = await self._con.modify(dn, changes)
+			if err is not None:
+				raise err
+			
+			# Change password
+			_, err = await self.change_password(dn, password)
+			if err is not None:
+				raise err
+			
+			# Get computer object
+			computer, err = await self.get_machine(computername)
+			if err is not None:
+				raise err
+			
+
+			return computer, password, None
+		except Exception as e:
+			return None, None, e
+		
+	async def change_samaccountname(self, dn:str, samaccountname:str):
+		try:
+			changes = {
+				'sAMAccountName': [('replace', samaccountname)]
+			}
+			_, err = await self._con.modify(dn, changes)
+			if err is not None:
+				raise err
+			return None
+		except Exception as e:
+			return e
+		
 
 	async def resolv_sd(self, sd:SECURITY_DESCRIPTOR|bytes):
 		"Resolves all SIDs found in security descriptor, returns lookup table"

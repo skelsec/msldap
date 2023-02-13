@@ -1016,6 +1016,30 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 			return False
+		
+	async def do_addcomputer(self, computername=None, password=None):
+		"""Adds a new computer account"""
+		try:
+			computer, password, err = await self.connection.add_computer(computername, password)
+			if err is not None:
+				raise err
+			print(computer)
+			print('sAMAccountName: %s' % computer.sAMAccountName)
+			print('Password: %s' % password)
+		except:
+			traceback.print_exc()
+			return False
+		
+	async def do_changesamaccountname(self, dn, newname):
+		"""Changes the sAMAccountName of a given DN"""
+		try:
+			err = await self.connection.change_samaccountname(dn, newname)
+			if err is not None:
+				raise err
+			print('OK')
+		except:
+			traceback.print_exc()
+			return False
 
 	async def do_test(self):
 		"""testing, dontuse"""
