@@ -1407,7 +1407,7 @@ class MSLDAPClient:
 			return e
 		
 
-	async def resolv_sd(self, sd:SECURITY_DESCRIPTOR|bytes):
+	async def resolv_sd(self, sd:SECURITY_DESCRIPTOR or bytes):
 		"Resolves all SIDs found in security descriptor, returns lookup table"
 		try:
 			if isinstance(sd, bytes):
@@ -1435,7 +1435,7 @@ class MSLDAPClient:
 		except Exception as e:
 			return None, e
 	
-	async def resolv_sid(self, sid:SID|str, use_cache:bool = True):
+	async def resolv_sid(self, sid:SID or str, use_cache:bool = True):
 		"""Performs a SID lookup for object and returns the domain name and the samaccountname"""
 		try:
 			sid = str(sid).upper()
