@@ -154,7 +154,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 					if err is not None:
 						raise err
 					pbar.update()
-					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS)))
+					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS))+'\n')
 			print('Users dump was written to %s' % users_filename)
 			
 			users_filename = 'computers_%s.tsv' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -164,7 +164,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 					if err is not None:
 						raise err
 					pbar.update()
-					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS)))
+					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS))+'\n')
 			print('Computer dump was written to %s' % users_filename)
 			return True
 		except:
