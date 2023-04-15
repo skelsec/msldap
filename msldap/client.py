@@ -300,6 +300,40 @@ class MSLDAPClient:
 		attributes = ['cn','ms-mcs-AdmPwd']
 		async for entry, err in self.pagedsearch(ldap_filter, attributes):
 			yield entry, err
+	
+	async def get_all_laps_windows(self):
+		"""
+		Fetches all LAPS passwords for all machines. This functionality is only available to specific high-privileged users.
+
+		:return: Async generator which yields (`dict`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
+		"""
+
+		ldap_filter = r'(sAMAccountType=805306369)'
+		# first try to get the plaintext password (the new windows laps doesn't necessary encrypt the PWs)
+		attributes = ['cn','ms-LAPS-Password']
+		async for entry, err in self.pagedsearch(ldap_filter, attributes):
+			yield entry, err
+
+		# now try to get the encrypted password
+		attributes = ['cn','ms-LAPS-EncryptedPassword']
+		async for entry, err in self.pagedsearch(ldap_filter, attributes):
+			yield entry, err
+		
+		# now try to get the encrypted password history
+		attributes = ['cn','ms-LAPS-EncryptedPasswordHistory']
+		async for entry, err in self.pagedsearch(ldap_filter, attributes):
+			yield entry, err
+		
+		# now try to get the encrypted DSRM password
+		attributes = ['cn','ms-LAPS-EncryptedDSRMPassword']
+		async for entry, err in self.pagedsearch(ldap_filter, attributes):
+			yield entry, err
+		
+		# now try to get the encrypted DSRM password history
+		attributes = ['cn','ms-LAPS-EncryptedDSRMPasswordHistory']
+		async for entry, err in self.pagedsearch(ldap_filter, attributes):
+			yield entry, err
 
 	async def get_schemaentry(self, dn:str):
 		"""

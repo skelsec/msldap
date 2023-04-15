@@ -353,9 +353,19 @@ class MSADCertificateTemplate:
 			t += "Vulnerabilities: %s\r\n" % ", ".join(self.vulns)
 		
 		if self.Certificate_Name_Flag is not None:
-			t += "msPKI-Certificate-Name-Flag: %s\r\n" % str(CertificateNameFlag(self.Certificate_Name_Flag)).split('.',1)[1].replace('|',', ')
+			x = str(CertificateNameFlag(self.Certificate_Name_Flag)).split('.',1)
+			if len(x) >= 2:
+				x = x[1].replace('|',', ')
+			else:
+				x = str(self.Certificate_Name_Flag).replace('|',', ')
+			t += "msPKI-Certificate-Name-Flag: %s\r\n" % x
 		if self.Enrollment_Flag is not None:
-			t += "msPKI-Enrollment-Flag: %s\r\n" % str(EnrollmentFlag(self.Enrollment_Flag)).split('.',1)[1].replace('|',', ')
+			x = str(EnrollmentFlag(self.Enrollment_Flag)).split('.',1)
+			if len(x) >= 2:
+				x = x[1].replace('|',', ')
+			else:
+				x = str(self.Enrollment_Flag).replace('|',', ')
+			t += "msPKI-Enrollment-Flag: %s\r\n" % x
 		if self.RA_Signature is not None:
 			t += "msPKI-RA-Signature: %s\r\n" % self.RA_Signature
 		if self.pKIExtendedKeyUsage is not None:

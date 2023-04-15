@@ -534,13 +534,38 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 	async def do_laps(self):
 		"""Feteches all laps passwords"""
 		try:
+			# trying to get the old version LAPS
 			async for entry, err in self.connection.get_all_laps():
 				if err is not None:
 					raise err
-				pwd = '<MISSING>'
 				if 'ms-Mcs-AdmPwd' in entry['attributes']:
 					pwd = entry['attributes']['ms-Mcs-AdmPwd']
-				print('%s : %s' % (entry['attributes']['cn'], pwd))
+					print('%s : %s' % (entry['attributes']['cn'], pwd))
+			
+			# now trying to get the new version LAPS
+			async for entry, err in self.connection.get_all_laps_windows():
+				if err is not None:
+					raise err
+				
+				if 'ms-LAPS-Password' in entry['attributes']:
+					pwd = entry['attributes']['ms-LAPS-Password']
+					print('%s : %s' % (entry['attributes']['cn'], pwd))
+					
+				if 'ms-LAPS-EncryptedPassword' in entry['attributes']:
+					pwd = entry['attributes']['ms-LAPS-EncryptedPassword']
+					print('%s : %s' % (entry['attributes']['cn'], pwd))
+				
+				if 'ms-LAPS-EncryptedPasswordHistory' in entry['attributes']:
+					pwd = entry['attributes']['ms-LAPS-EncryptedPasswordHistory']
+					print('%s : %s' % (entry['attributes']['cn'], pwd))
+				
+				if 'ms-LAPS-EncryptedDSRMPassword' in entry['attributes']:
+					pwd = entry['attributes']['ms-LAPS-EncryptedDSRMPassword']
+					print('%s : %s' % (entry['attributes']['cn'], pwd))
+				
+				if 'ms-LAPS-EncryptedDSRMPasswordHistory' in entry['attributes']:
+					pwd = entry['attributes']['ms-LAPS-EncryptedDSRMPasswordHistory']
+					print('%s : %s' % (entry['attributes']['cn'], pwd))
 			
 			return True
 		except:
