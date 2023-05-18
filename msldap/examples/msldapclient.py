@@ -547,24 +547,32 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				if err is not None:
 					raise err
 				
-				if 'ms-LAPS-Password' in entry['attributes']:
-					pwd = entry['attributes']['ms-LAPS-Password']
+				if 'msLAPS-Password' in entry['attributes']:
+					pwd = entry['attributes']['msLAPS-Password']
 					print('%s : %s' % (entry['attributes']['cn'], pwd))
 					
-				if 'ms-LAPS-EncryptedPassword' in entry['attributes']:
-					pwd = entry['attributes']['ms-LAPS-EncryptedPassword']
+					
+				if 'msLAPS-EncryptedPassword' in entry['attributes']:
+					from msldap.wintypes.encryptedlaps import EncryptedLAPSBlob
+					pwd = entry['attributes']['msLAPS-EncryptedPassword']
+					print('%s : %s' % (entry['attributes']['cn'], pwd.hex()))
+					blob = EncryptedLAPSBlob.from_bytes(pwd)
+					#print(str(blob))
+					#print(blob.asn1blob.native)
+					#print(blob.asn1blob.native['content']['recipient_infos'])
+					#print(blob.asn1blob.native['content']['recipient_infos'][0]['kekid']['key_identifier'])
+					print(blob.get_keyidentifier())
+
+				if 'msLAPS-EncryptedPasswordHistory' in entry['attributes']:
+					pwd = entry['attributes']['msLAPS-EncryptedPasswordHistory']
 					print('%s : %s' % (entry['attributes']['cn'], pwd))
 				
-				if 'ms-LAPS-EncryptedPasswordHistory' in entry['attributes']:
-					pwd = entry['attributes']['ms-LAPS-EncryptedPasswordHistory']
+				if 'msLAPS-EncryptedDSRMPassword' in entry['attributes']:
+					pwd = entry['attributes']['msLAPS-EncryptedDSRMPassword']
 					print('%s : %s' % (entry['attributes']['cn'], pwd))
 				
-				if 'ms-LAPS-EncryptedDSRMPassword' in entry['attributes']:
-					pwd = entry['attributes']['ms-LAPS-EncryptedDSRMPassword']
-					print('%s : %s' % (entry['attributes']['cn'], pwd))
-				
-				if 'ms-LAPS-EncryptedDSRMPasswordHistory' in entry['attributes']:
-					pwd = entry['attributes']['ms-LAPS-EncryptedDSRMPasswordHistory']
+				if 'msLAPS-EncryptedDSRMPasswordHistory' in entry['attributes']:
+					pwd = entry['attributes']['msLAPS-EncryptedDSRMPasswordHistory']
 					print('%s : %s' % (entry['attributes']['cn'], pwd))
 			
 			return True

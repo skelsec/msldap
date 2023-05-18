@@ -311,27 +311,27 @@ class MSLDAPClient:
 
 		ldap_filter = r'(sAMAccountType=805306369)'
 		# first try to get the plaintext password (the new windows laps doesn't necessary encrypt the PWs)
-		attributes = ['cn','ms-LAPS-Password']
+		attributes = ['cn','msLAPS-Password']
 		async for entry, err in self.pagedsearch(ldap_filter, attributes):
 			yield entry, err
 
 		# now try to get the encrypted password
-		attributes = ['cn','ms-LAPS-EncryptedPassword']
+		attributes = ['cn','msLAPS-EncryptedPassword']
 		async for entry, err in self.pagedsearch(ldap_filter, attributes):
 			yield entry, err
 		
 		# now try to get the encrypted password history
-		attributes = ['cn','ms-LAPS-EncryptedPasswordHistory']
+		attributes = ['cn','msLAPS-EncryptedPasswordHistory']
 		async for entry, err in self.pagedsearch(ldap_filter, attributes):
 			yield entry, err
 		
 		# now try to get the encrypted DSRM password
-		attributes = ['cn','ms-LAPS-EncryptedDSRMPassword']
+		attributes = ['cn','msLAPS-EncryptedDSRMPassword']
 		async for entry, err in self.pagedsearch(ldap_filter, attributes):
 			yield entry, err
 		
 		# now try to get the encrypted DSRM password history
-		attributes = ['cn','ms-LAPS-EncryptedDSRMPasswordHistory']
+		attributes = ['cn','msLAPS-EncryptedDSRMPasswordHistory']
 		async for entry, err in self.pagedsearch(ldap_filter, attributes):
 			yield entry, err
 
