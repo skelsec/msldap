@@ -7,12 +7,13 @@
 import asyncio
 import traceback
 import logging
-import csv
 import shlex
 import datetime
 import copy
 import typing
 
+from asysocks.unicomm.common.target import UniTarget
+from asyauth.common.credentials import UniCredential
 from msldap.external.aiocmd.aiocmd import aiocmd
 from msldap.external.asciitree.asciitree import LeftAligned
 from tqdm import tqdm
@@ -22,6 +23,7 @@ from asysocks import logger as sockslogger
 from msldap.client import MSLDAPClient
 from msldap.commons.factory import LDAPConnectionFactory
 from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
+from msldap.examples.utils.completers import PathCompleter
 
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
 from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK, AceFlags,\
@@ -37,31 +39,40 @@ from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 	def __init__(self, url = None):
 		aiocmd.PromptToolkitCmd.__init__(self, ignore_sigint=False) #Setting this to false, since True doesnt work on windows...
-		self.conn_url = None
-		if url is not None:
+		self.conn_url = url
+		if url is not None and isinstance(url, LDAPConnectionFactory) is False:
 			self.conn_url = LDAPConnectionFactory.from_url(url)
 		self.connection = None
 		self.adinfo = None
 		self.ldapinfo = None
 		self.domain_name = None
+		self.__current_dirs = {}
+		self._current_dn = None
+		
 
 	async def do_login(self, url = None):
 		"""Performs connection and login"""
 		try:			
 			if self.conn_url is None and url is None:
-				print('Not url was set, cant do logon')
-			if url is not None:
+				print('No URL was set, cant do logon')
+			if url is not None and isinstance(url, LDAPConnectionFactory) is False:
 				self.conn_url = LDAPConnectionFactory.from_url(url)
 
 			logger.debug(self.conn_url.get_credential())
 			logger.debug(self.conn_url.get_target())
 			
 			self.connection = self.conn_url.get_client()
+			self.connection.keepalive = True
 			_, err = await self.connection.connect()
 			if err is not None:
 				raise err
-			print('BIND OK!')
-			self.prompt = self.connection._tree + ' > '
+			logger.debug('BIND OK!')
+			self.prompt = '[%s]> ' % (self.connection._tree,)
+			self._current_dn = self.connection._tree
+			if self.connection._con.is_anon is False:
+				await self.do_cd(self._current_dn)
+			else:
+				print('Anonymous connection. Most functionalities will not work!')
 			
 			return True
 		except:
@@ -75,7 +86,11 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				self.ldapinfo = self.connection.get_server_info()
 			if show is True:
 				for k in self.ldapinfo:
-					print('%s : %s' % (k, self.ldapinfo[k]))
+					if isinstance(self.ldapinfo[k], list):
+						for item in self.ldapinfo[k]:
+							print('%s : %s' % (k, item))
+					else:
+						print('%s : %s' % (k, self.ldapinfo[k]))
 			return True
 		except:
 			traceback.print_exc()
@@ -154,7 +169,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 					if err is not None:
 						raise err
 					pbar.update()
-					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS)))
+					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS))+'\r\n')
 			print('Users dump was written to %s' % users_filename)
 			
 			users_filename = 'computers_%s.tsv' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -164,46 +179,84 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 					if err is not None:
 						raise err
 					pbar.update()
-					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS)))
+					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS))+'\r\n')
 			print('Computer dump was written to %s' % users_filename)
 			return True
 		except:
 			traceback.print_exc()
 			return False
 
+	def get_current_dirs(self):
+		if self.__current_dirs is None:
+			return []
+		curdirs = []
+		for dirname in self.__current_dirs:
+			if dirname.find(' ') != -1:
+				dirname = "'%s'" % dirname
+			curdirs.append(dirname)
+		return curdirs
+
+	def _cd_completions(self):
+		return PathCompleter(get_current_dirs = self.get_current_dirs)
+	
 	async def do_cd(self, path):
 		"""Change current work directory"""
-		self.connection._tree = path
-		self.prompt = self.connection._tree + ' > '
-		return True
+		original_path = self._current_dn
+		try:
+			if path == '.':
+				self._current_dn = original_path
+			elif path == '..':
+				#this is not a good solution but I don't have to to write a proper DN parser...
+				#TODO: implement DN parsing
+				self._current_dn = original_path[original_path.find(',')+1:]
+			else:
+				self._current_dn = path
+			if path in self.__current_dirs:
+				self._current_dn = self.__current_dirs[path]
+			tree_data = await self.connection.get_tree_plot(self._current_dn, level=1)
+			root = list(tree_data.keys())[0]
+			self.__current_dirs = {}
+			for dn in tree_data[root].keys():
+				lookup_dn = dn[:-(len(self._current_dn)+1)]
+				self.__current_dirs[lookup_dn] = dn
+			self.prompt = '[%s]> ' % (self._current_dn,)
+			return True
+		except Exception as e:
+			print('Change directory error! %s' % e)
+			self._current_dn = original_path
+			self.prompt = '[%s]> ' % (self._current_dn,)
+			return False
 
-	async def do_ls(self):
+	async def do_ls(self, fullpath = False):
 		"""Print objects in current work directory"""
-		tree_data = await self.connection.get_tree_plot(self.connection._tree, level=1)
-		root = list(tree_data.keys())[0]
-		for dn in tree_data[root].keys():
-			print(dn)
+		for dn in self.__current_dirs:
+			entry = dn
+			if fullpath is not False:
+				entry = self.__current_dirs[dn]
+			print(entry)
 		return True
 
-	async def do_cat(self, dn, attributes="*"):
-		"""Print attributes of object"""
+	async def do_cat(self, attributes="*", dn=''):
+		"""Print attributes of object. Without arguments it will cat the current DN"""
 		attributes = attributes.split(",")
-		async for entry, err in self.connection.pagedsearch(query="(distinguishedName=%s)"%dn, attributes=attributes):
+		if dn == '':
+			dn = self._current_dn
+		async for entry, err in self.connection.pagedsearch(query="(distinguishedName=%s)"%dn, attributes=attributes, tree=dn):
 			if err is not None:
 				raise err
 			for attr in entry["attributes"]:
 				if type(entry["attributes"][attr]) == list:
-					for val in entry["attributes"][attr]:
-						print("%s: %s" % (attr, val))
+					for i, val in enumerate(entry["attributes"][attr]):
+						print("%s [%s]: %s" % (attr, i, val))
 				else:
 					val = entry["attributes"][attr]
 					print("%s: %s" % (attr, val))
 		return True
 
 	async def do_modify(self, dn, attribute, value):
-		"""Modify an attribute of object"""
+		"""Modify an attribute of object. Only works with string data types!"""
 		changes = {
-			attribute : [('replace', [value.encode()])]
+			attribute : [('replace', value)]
 		}
 
 		_, err = await self.connection.modify(dn, changes)
@@ -481,13 +534,46 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 	async def do_laps(self):
 		"""Feteches all laps passwords"""
 		try:
+			# trying to get the old version LAPS
 			async for entry, err in self.connection.get_all_laps():
 				if err is not None:
 					raise err
-				pwd = '<MISSING>'
 				if 'ms-Mcs-AdmPwd' in entry['attributes']:
 					pwd = entry['attributes']['ms-Mcs-AdmPwd']
-				print('%s : %s' % (entry['attributes']['cn'], pwd))
+					print('%s : %s' % (entry['attributes']['cn'], pwd))
+			
+			# now trying to get the new version LAPS
+			async for entry, err in self.connection.get_all_laps_windows():
+				if err is not None:
+					raise err
+				
+				if 'msLAPS-Password' in entry['attributes']:
+					pwd = entry['attributes']['msLAPS-Password']
+					print('%s : %s' % (entry['attributes']['cn'], pwd))
+					
+					
+				if 'msLAPS-EncryptedPassword' in entry['attributes']:
+					from msldap.wintypes.encryptedlaps import EncryptedLAPSBlob
+					pwd = entry['attributes']['msLAPS-EncryptedPassword']
+					print('%s : %s' % (entry['attributes']['cn'], pwd.hex()))
+					blob = EncryptedLAPSBlob.from_bytes(pwd)
+					#print(str(blob))
+					#print(blob.asn1blob.native)
+					#print(blob.asn1blob.native['content']['recipient_infos'])
+					#print(blob.asn1blob.native['content']['recipient_infos'][0]['kekid']['key_identifier'])
+					print(blob.get_keyidentifier())
+
+				if 'msLAPS-EncryptedPasswordHistory' in entry['attributes']:
+					pwd = entry['attributes']['msLAPS-EncryptedPasswordHistory']
+					print('%s : %s' % (entry['attributes']['cn'], pwd))
+				
+				if 'msLAPS-EncryptedDSRMPassword' in entry['attributes']:
+					pwd = entry['attributes']['msLAPS-EncryptedDSRMPassword']
+					print('%s : %s' % (entry['attributes']['cn'], pwd))
+				
+				if 'msLAPS-EncryptedDSRMPasswordHistory' in entry['attributes']:
+					pwd = entry['attributes']['msLAPS-EncryptedDSRMPasswordHistory']
+					print('%s : %s' % (entry['attributes']['cn'], pwd))
 			
 			return True
 		except:
@@ -518,9 +604,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			return False
 
 	async def do_bindtree(self, newtree):
-		"""Changes the LDAP TREE for future queries. 
-				 MUST be DN format eg. 'DC=test,DC=corp'
-				 !DANGER! Switching tree to a tree outside of the domain will trigger a connection to that domain, leaking credentials!"""
+		"""Changes the LDAP TREE for future queries. MUST be DN format eg. 'DC=test,DC=corp'"""
 		self.connection._tree = newtree
 	
 	async def do_trusts(self):
@@ -748,7 +832,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 				flags = int(CertificateNameFlag(template.Certificate_Name_Flag) | CertificateNameFlag.ENROLLEE_SUPPLIES_SUBJECT_ALT_NAME)
 
 			changes = {
-				'msPKI-Certificate-Name-Flag' : [('replace', [flags])]
+				'msPKI-Certificate-Name-Flag' : [('replace', flags)]
 			}
 	
 			_, err = await self.connection.modify(template.distinguishedName, changes)
@@ -937,6 +1021,58 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 			return False
+	
+	async def do_genschema(self):
+		"""Generates schema data. This will take a long time."""
+		try:
+			import json
+			attributes = {}
+			testattr = {}
+			async for attribute, err in self.connection.get_all_schemaentry():
+				if err is not None:
+					raise err
+				attributes[attribute.lDAPDisplayName] = attribute.to_dict()
+				try:
+					if attribute.isSingleValued is not None:
+						testattr[attribute.lDAPDisplayName] = attribute.get_type()
+				except:
+					print(print(attribute.to_dict()))
+			with open('adschema.json','w') as f:
+				json.dump(attributes,f)
+			with open('adschema.py', 'w', newline = '') as f:
+				f.write('LDAP_WELL_KNOWN_ATTRS = {\r\n')
+				line = ''
+				for attrname in testattr:
+					line += '\t"%s" : %s,\r\n' % (attrname, testattr[attrname])
+				f.write(line)
+				f.write('}')
+		except:
+			traceback.print_exc()
+			return False
+		
+	async def do_addcomputer(self, computername=None, password=None):
+		"""Adds a new computer account"""
+		try:
+			computer, password, err = await self.connection.add_computer(computername, password)
+			if err is not None:
+				raise err
+			print(computer)
+			print('sAMAccountName: %s' % computer.sAMAccountName)
+			print('Password: %s' % password)
+		except:
+			traceback.print_exc()
+			return False
+		
+	async def do_changesamaccountname(self, dn, newname):
+		"""Changes the sAMAccountName of a given DN"""
+		try:
+			err = await self.connection.change_samaccountname(dn, newname)
+			if err is not None:
+				raise err
+			print('OK')
+		except:
+			traceback.print_exc()
+			return False
 
 	async def do_test(self):
 		"""testing, dontuse"""
@@ -963,11 +1099,52 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 
 
 async def amain(args):
-	client = MSLDAPClientConsole(args.url)
+	import platform
+	
+	if args.url is not None:
+		client = MSLDAPClientConsole(args.url)
+	else:
+		if platform.system() != 'Windows':
+			raise Exception('This function only works on Windows systems!')
+		from asyauth.common.credentials import UniCredential
+		from msldap.commons.target import MSLDAPTarget, UniProto
+		from winacl.functions.highlevel import get_logon_info
+		cred = UniCredential.get_sspi(args.authtype)
+		userinfo = get_logon_info()
+		if args.target is not None:
+			ip = args.target
+			if args.target.find(':') is not None:
+				ip, port = args.target.split(':')
+			target = MSLDAPTarget(ip=ip, port=port)
+		else:
+			if userinfo['logonserver'] is not None and len(userinfo['logonserver']) > 0:
+				target = MSLDAPTarget(
+					ip=userinfo['logonserver'], 
+					hostname = userinfo['logonserver'], 
+					dc_ip=userinfo['logonserver'],
+					domain=userinfo['dnsdomainname'],
+				)
+				if args.ldaps is True:
+					target = MSLDAPTarget(
+						ip=userinfo['logonserver'], 
+						hostname = userinfo['logonserver'],
+						protocol = UniProto.CLIENT_SSL_TCP,
+						port = 636,
+						dc_ip=userinfo['logonserver'],
+						domain=userinfo['dnsdomainname'],
+					)
+				
+			else:
+				raise Exception('Couldnt find logonserver! Are you connected to a domain?')
+		factory = LDAPConnectionFactory(cred, target)
+		client = MSLDAPClientConsole(factory)
 
 	if len(args.commands) == 0:
 		if args.no_interactive is True:
 			print('Not starting interactive!')
+			return
+		res = await client._run_single_command('login', [])
+		if res is False:
 			return
 		await client.run()
 	else:
@@ -982,10 +1159,70 @@ async def amain(args):
 
 def main():
 	import argparse
-	parser = argparse.ArgumentParser(description='MS LDAP library')
+	import platform
+	protocols = """LDAP : basic LDAP protocol
+	LDAPS: LDAP over SSL
+	GC   : Global Catalog
+	GCS  : Global Catalog over SSL"""
+	authprotos = """ntlm     : SASL NTLM authentication
+	kerberos : SASL Kerberos authentication
+	sspi-ntlm: SSPI authentication using NTLM (Windows only, uses SASL)
+	sspi-kerberos: SSPI authentication using Kerberos (Windows only, uses SASL)
+	simple   : LDAP SIMPLE authentication
+	plain    : PLAIN authentication
+	sicily   : SICILY authentication
+	ssl      : Authenticate with SSL certificate
+	none     : No authentication, anonymous bind
+	"""
+	usage = UniCredential.get_help(protocols, authprotos, '')
+	usage += UniTarget.get_help()
+	usage += """
+Examples:
+All of the following examples show LDAP auth to the DC of TEST.corp domain at Win2019AD.test.corp(10.10.10.2)
+Kerberos authentication needs the FQDN of the DC, so we use the 'dc' parameter to specify the DC.
+
+Anonymous BIND:
+	ldap://10.10.10.2
+Username and password authentication using NTLM over plaintext LDAP:
+	ldap+ntlm-password://TEST\\victim:password@10.10.10.2
+Username and password authentication using NTLM over SSL/TLS:
+	ldaps+ntlm-password://TEST\\victim:password@10.10.10.2
+Username and password authentication using Kerberos over plaintext LDAP:
+	ldap+kerberos-password://TEST\\victim:password@10.10.10.2/?dc=10.10.10.2
+Username and password authentication using Kerberos over SSL/TLS:
+	ldaps+kerberos-password://TEST\\victim:password@10.10.10.2/?dc=10.10.10.2
+NTLM authentication using the NT hash over plaintext LDAP:
+	ldap+ntlm-nt://TEST\\victim:<NThash>@10.10.10.2
+Kerberos authentication using the RC4 key over plaintext LDAP:
+	ldap+kerberos-rc4://TEST\\victim:<RC4key>@10.10.10.2/?dc=10.10.10.2
+SICILY authentication using the NT hash over plaintext LDAP:
+	ldap+sicily-nt://TEST\\victim:<NThash>@10.10.10.2
+Kerberos authentication using AES key over plaintext LDAP:
+	ldap+kerberos-aes://TEST\\victim:<AESkey>@10.10.10.2/?dc=10.10.10.2
+Kerberos authentication using CCACHE file over plaintext LDAP:
+	ldap+kerberos-ccache://TEST\\victim:<CCACHEfile>@10.10.10.2/?dc=10.10.10.2
+Kerberos authentication using keytab file over plaintext LDAP:
+	ldap+kerberos-keytab://TEST\\victim:<KEYTABfile>@10.10.10.2/?dc=10.10.10.2
+Kerberos authentication using P12 or PFX file over plaintext LDAP (notice that keyfile password is at the 'password' filed):
+	ldap+kerberos-pfx://TEST\\victim:admin@10.10.10.2/?dc=10.10.10.2&keydata=<P12file>
+SSL authentication using P12 or PFX file over plaintext LDAP, automatically performs STARTTLS:
+	ldap+ssl://10.10.10.2/?sslcert=<P12file>&sslpassword=<P12password>'
+SSL authentication using P12 or PFX file over SSL/TLS LDAP:
+	ldaps+ssl://10.10.10.2/?sslcert=<P12file>&sslpassword=<P12password>'
+"""
+	parser = argparse.ArgumentParser(description='MS LDAP library', usage = usage)
 	parser.add_argument('-v', '--verbose', action='count', default=0, help='Verbosity, can be stacked')
 	parser.add_argument('-n', '--no-interactive', action='store_true')
-	parser.add_argument('url', help='Connection string in URL format.')
+	if platform.system() == 'Windows':
+		group = parser.add_argument_group(title='URL')
+		group.add_argument('--url', help='Connection string in URL format.')
+		group2 = parser.add_argument_group(title='Without URL')
+		group2.add_argument('--authtype', default='ntlm', help='Connection string in URL format.')
+		group2.add_argument('--target', help='Address of LDAP server.')
+		group2.add_argument('--ldaps', action='store_true', help='Use LDAPS')
+
+	else:
+		parser.add_argument('url', help='Connection string in URL format.')
 	parser.add_argument('commands', nargs='*', help="Takes a series of commands which will be executed until error encountered. If the command is 'i' is encountered during execution it drops back to interactive shell.")
 
 	args = parser.parse_args()
