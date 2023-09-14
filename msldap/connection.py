@@ -38,6 +38,7 @@ class MSLDAPClientConnection:
 		self.__sign_messages = False
 		self.__encrypt_messages = False
 		self.network = None
+		self.connection_closed_evt = None
 
 		self.handle_incoming_task = None
 		self.status = MSLDAPClientStatus.RUNNING
@@ -126,7 +127,11 @@ class MSLDAPClientConnection:
 				self.message_table[msgid] = [e]
 				self.message_table_notify[msgid].set()
 		
-		self.status = MSLDAPClientStatus.STOPPED
+		finally:
+			if self.connection_closed_evt is not None:
+				self.connection_closed_evt.set()
+			self.status = MSLDAPClientStatus.STOPPED
+
 
 
 	async def send_message(self, message:Dict[str, object]):
@@ -179,6 +184,7 @@ class MSLDAPClientConnection:
 		"""
 		try:
 			logger.debug('Connecting!')
+			self.connection_closed_evt = asyncio.Event()
 			packetizer = LDAPPacketizer()
 			client = UniClient(self.target, packetizer)
 			self.network = await client.connect()
@@ -205,6 +211,9 @@ class MSLDAPClientConnection:
 
 		logger.debug('Disconnecting!')
 		self.bind_ok = False
+		if self.connection_closed_evt is not None:
+			self.connection_closed_evt.set()
+		
 		if self.network is not None:
 			await self.network.close()
 			await asyncio.sleep(0)

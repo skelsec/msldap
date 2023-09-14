@@ -20,6 +20,7 @@ from tqdm import tqdm
 
 from msldap import logger
 from asysocks import logger as sockslogger
+from asyauth import logger as authlogger
 from msldap.client import MSLDAPClient
 from msldap.commons.factory import LDAPConnectionFactory
 from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
@@ -544,6 +545,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			
 			# now trying to get the new version LAPS
 			async for entry, err in self.connection.get_all_laps_windows():
+				#print(entry)
 				if err is not None:
 					raise err
 				
@@ -1073,6 +1075,53 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 			return False
+	
+	async def do_unconstrained(self):
+		"""Lists all unconstrained delegation objects"""
+		try:
+			print('Objects with Unconstrained Delegation set:')
+			async for entry, err in self.connection.get_unconstrained_machines():
+				if err is not None:
+					raise err
+				print(entry)
+			
+			async for entry, err in self.connection.get_unconstrained_users():
+				if err is not None:
+					raise err
+				print(entry)
+			
+
+		except:
+			traceback.print_exc()
+			return False
+	
+	async def do_constrained(self):
+		"""Lists all constrained delegation objects"""
+		try:
+			print('Objects with Constrained Delegation set:')
+			async for entry, err in self.connection.get_all_constrained():
+				if err is not None:
+					raise err
+				sname = entry.get('sAMAccountName', '')
+				for x in entry.get('msDS-AllowedToDelegateTo', []):
+					print('%s -> %s' % (sname, x))
+			
+		except:
+			traceback.print_exc()
+			return False
+		
+	async def do_s4u2proxy(self):
+		"""Lists all S4U2Proxy objects"""
+		try:
+			print('S4U2Proxy set:')
+			async for entry, err in self.connection.get_all_s4u2proxy():
+				if err is not None:
+					raise err
+				print(entry)
+			
+		except:
+			traceback.print_exc()
+			return False
 
 	async def do_test(self):
 		"""testing, dontuse"""
@@ -1234,7 +1283,9 @@ SSL authentication using P12 or PFX file over SSL/TLS LDAP:
 	else:
 		sockslogger.setLevel(logging.DEBUG)
 		logger.setLevel(logging.DEBUG)
+		authlogger.setLevel(logging.DEBUG)
 		logging.basicConfig(level=logging.DEBUG)
+
 
 	asyncio.run(amain(args))
 

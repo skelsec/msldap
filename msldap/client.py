@@ -1537,6 +1537,42 @@ class MSLDAPClient:
 		except:
 			return result, None
 
+	async def get_unconstrained_machines(self):
+		ldap_filter = r'(&(sAMAccountType=805306369)(!(userAccountControl:1.2.840.113556.1.4.803:=8192))(userAccountControl:1.2.840.113556.1.4.803:=524288))'
+		async for entry, err in self.pagedsearch(ldap_filter, ['sAMAccountName']):
+			if err is not None:
+				yield None, err
+				return
+			yield entry.get('attributes', {}).get('sAMAccountName'), None
+		logger.debug('Finished polling for entries!')
+	
+	async def get_unconstrained_users(self):
+		ldap_filter = r'(&(sAMAccountType=805306368)(userAccountControl:1.2.840.113556.1.4.803:=524288))'
+		async for entry, err in self.pagedsearch(ldap_filter, ['sAMAccountName']):
+			if err is not None:
+				yield None, err
+				return
+			yield entry.get('attributes', {}).get('sAMAccountName'), None
+		logger.debug('Finished polling for entries!')
+
+	async def get_all_constrained(self):
+		ldap_filter = r'(&(|(sAMAccountType=805306369)(sAMAccountType=805306368))(msDS-AllowedToDelegateTo=*))'
+		async for entry, err in self.pagedsearch(ldap_filter, ['sAMAccountName', 'msDS-AllowedToDelegateTo']):
+			if err is not None:
+				yield None, err
+				return
+			yield entry.get('attributes', {}), None
+		logger.debug('Finished polling for entries!')
+
+	async def get_all_s4u2proxy(self):
+		ldap_filter = r'(&(|(sAMAccountType=805306369)(sAMAccountType=805306368))(userAccountControl:1.2.840.113556.1.4.803:=16777216))'
+		async for entry, err in self.pagedsearch(ldap_filter, ['sAMAccountName']):
+			if err is not None:
+				yield None, err
+				return
+			yield entry.get('attributes', {}).get('sAMAccountName'), None
+		logger.debug('Finished polling for entries!')
+
 	#async def get_permissions_for_dn(self, dn):
 	#	"""
 	#	Lists all users who can modify the specified dn
