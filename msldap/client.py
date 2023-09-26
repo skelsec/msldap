@@ -1180,7 +1180,15 @@ class MSLDAPClient:
 			changes = {
 				'nTSecurityDescriptor' : [('replace', new_sd.to_bytes())]
 			}
-			_, err = await self.modify(group_dn, changes)
+			req_flags = SDFlagsRequestValue({
+				'Flags': SDFlagsRequest.DACL_SECURITY_INFORMATION
+			})
+			controls = [{
+				'controlType': b'1.2.840.113556.1.4.801',
+				'controlValue': req_flags.dump(),
+				'criticality': False
+			}]
+			_, err = await self.modify(group_dn, changes, controls)
 			if err is not None:
 				raise err
 
@@ -1229,7 +1237,15 @@ class MSLDAPClient:
 			changes = {
 				'nTSecurityDescriptor' : [('replace', new_sd.to_bytes())]
 			}
-			_, err = await self.modify(forest_dn, changes)
+			req_flags = SDFlagsRequestValue({
+				'Flags': SDFlagsRequest.DACL_SECURITY_INFORMATION
+			})
+			controls = [{
+				'controlType': b'1.2.840.113556.1.4.801',
+				'controlValue': req_flags.dump(),
+				'criticality': False
+			}]
+			_, err = await self.modify(forest_dn, changes, controls)
 			if err is not None:
 				raise err
 
