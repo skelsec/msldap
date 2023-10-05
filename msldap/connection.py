@@ -16,7 +16,7 @@ from msldap.protocol.query import escape_filter_chars, query_syntax_converter
 from msldap.commons.authbuilder import get_auth_context
 from msldap.network.packetizer import LDAPPacketizer
 from asysocks.unicomm.common.target import UniProto
-from msldap.commons.exceptions import LDAPBindException, LDAPAddException, LDAPModifyException, LDAPDeleteException
+from msldap.commons.exceptions import LDAPBindException, LDAPAddException, LDAPModifyException, LDAPDeleteException, LDAPSearchException
 from hashlib import sha256
 from asysocks.unicomm.client import UniClient
 from asyauth.common.constants import asyauthProtocol
@@ -779,6 +779,8 @@ class MSLDAPClientConnection:
 							return
 						
 						if 'resultCode' in res['protocolOp']:
+							if res['protocolOp']['resultCode'] != 'success':
+								raise LDAPSearchException(res['protocolOp']['resultCode'], res['protocolOp']['diagnosticMessage'])
 							for control in res['controls']:
 								if control['controlType'] == b'1.2.840.113556.1.4.319':
 									try:

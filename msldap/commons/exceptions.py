@@ -55,6 +55,11 @@ class LDAPServerException(Exception):
 			self.message = 'LDAP server sent error! Result code: "%s" Reason: "%s"' % (self.resultcode, self.diagnostic_message)
 		super().__init__(self.message)
 
+class LDAPSearchException(LDAPServerException):
+	def __init__(self, resultcode, diagnostic_message):
+		message = 'LDAP Search failed! Result code: "%s" Reason: "%s"' % (resultcode, diagnostic_message)
+		super().__init__(resultcode, diagnostic_message, message)
+
 class LDAPBindException(LDAPServerException):
 	def __init__(self, resultcode, diagnostic_message):
 		message = 'LDAP Bind failed! Result code: "%s" Reason: "%s"' % (resultcode, diagnostic_message)

@@ -26,17 +26,18 @@ from msldap.commons.factory import LDAPConnectionFactory
 from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
 from msldap.examples.utils.completers import PathCompleter
 
-from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
+from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR, SE_SACL
 from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK, AceFlags,\
 	ACE_OBJECT_PRESENCE, ACEType, ACCESS_ALLOWED_ACE, ACCESS_DENIED_ACE
 from winacl.dtyp.sid import SID
 from winacl.dtyp.guid import GUID
+from winacl.dtyp.acl import ACL
 
 from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate,\
 	EX_RIGHT_CERTIFICATE_ENROLLMENT, CertificateNameFlag
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest
 from tabulate import tabulate
-
+from msldap.commons.exceptions import LDAPSearchException
 
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 	def __init__(self, url = None):
@@ -386,55 +387,136 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 			return False
+		
+	async def do_sam2dn(self, sAMAccountName):
+		"""Fetches the DN of an object based on the sAMAccountName"""
+		dn, err = await self.connection.sam2dn(sAMAccountName)
+		if err is not None:
+			raise err
+		print(dn)
+		return True
+	
+	async def do_sid2dn(self, sid):
+		"""Fetches the DN of an object based on the objectSid"""
+		dn, err = await self.connection.sid2dn(sid)
+		if err is not None:
+			raise err
+		print(dn)
+		return True
+		
+	async def do_dn2sid(self, dn):
+		"""Fetches the objectSid of an object based on the DN"""
+		sid, err = await self.connection.dn2sid(dn)
+		if err is not None:
+			raise err
+		print(sid)
+		return True
+	
+	async def do_dn2sam(self, dn):
+		"""Fetches the sAMAccountName of an object based on the DN"""
+		sam, err = await self.connection.dn2sam(dn)
+		if err is not None:
+			raise err
+		print(sam)
+		return True
+	
+	async def do_dadms(self):
+		"""Lists all members of the domain administrators group"""
+		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
 
-	#async def do_addallowedtoactonbehalfofotheridentity(self, target_name, add_computer_name):
-	#	"""Adds a SID to the msDS-AllowedToActOnBehalfOfOtherIdentity protperty of target_dn"""
-	#	try:
-	#		await self.do_ldapinfo(False)
-	#		await self.do_adinfo(False)
-	#
-	#		try:
-	#			new_owner_sid = SID.from_string(sid)
-	#		except:
-	#			print('Incorrect SID!')
-	#			return False, Exception('Incorrect SID')
-	#
-	#
-	#		target_sd = None
-	#		if target_attribute is None or target_attribute == '':
-	#			target_attribute = 'nTSecurityDescriptor'
-	#			res, err = await self.connection.get_objectacl_by_dn(target_dn)
-	#			if err is not None:
-	#				raise err
-	#			target_sd = SECURITY_DESCRIPTOR.from_bytes(res)
-	#		else:
-	#			
-	#			query = '(distinguishedName=%s)' % target_dn
-	#			async for entry, err in self.connection.pagedsearch(query, [target_attribute]):
-	#				if err is not None:
-	#					raise err
-	#				print(entry['attributes'][target_attribute])
-	#				target_sd = SECURITY_DESCRIPTOR.from_bytes(entry['attributes'][target_attribute])
-	#				break
-	#			else:
-	#				print('Target DN not found!')
-	#				return False, Exception('Target DN not found!')
-	#
-	#		print(target_sd)
-	#		new_sd = copy.deepcopy(target_sd)
-	#		new_sd.Owner = new_owner_sid
-	#		print(new_sd)
-	#
-	#		changes = {
-	#			target_attribute : [('replace', [new_sd.to_bytes()])]
-	#		}
-	#		_, err = await self.connection.modify(target_dn, changes)
-	#		if err is not None:
-	#			raise err
-	#
-	#		print('Change OK!')
-	#	except:
-	#		traceback.print_exc()
+			dn, err = await self.connection.sid2dn(self.adinfo.objectSid + '-512')
+			if err is not None:
+				raise err
+			
+			async for obj, err in self.connection.get_group_members(dn, recursive=True):
+				if err is not None:
+					raise err
+				print(obj.distinguishedName)			
+			return True
+		except:
+			traceback.print_exc()
+			return False
+	
+	async def do_groupmembers(self, dn, recursive = True):
+		"""Returns all member users in a group specified by DN"""
+		try:
+			if recursive is not False or recursive != '0':
+				recursive = True
+			async for obj, err in self.connection.get_group_members(dn, recursive=recursive):
+				if err is not None:
+					raise err
+				print(obj.distinguishedName)
+			return True
+		except Exception as e:
+			traceback.print_exc()
+			return False	
+
+	async def do_addallowedtoactonbehalfofotheridentity(self, target_dn, other_identity_sid):
+		"""Adds a SID to the msDS-AllowedToActOnBehalfOfOtherIdentity protperty of target_dn"""
+		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
+	
+			try:
+				computer_sid = SID.from_string(other_identity_sid)
+			except:
+				print('Incorrect SID!')
+				return False, Exception('Incorrect SID')
+	
+	
+			query = '(distinguishedName=%s)' % target_dn
+			async for entry, err in self.connection.pagedsearch(query, ['msDS-AllowedToActOnBehalfOfOtherIdentity', 'objectSid']):
+				if err is not None:
+					raise err
+				
+				if 'msDS-AllowedToActOnBehalfOfOtherIdentity' not in entry['attributes']:
+					print('Attribute does not exist on the current object, crafing new SD')					
+					target_sd = SECURITY_DESCRIPTOR()
+					target_sd.Control = SE_SACL.SE_DACL_PRESENT | SE_SACL.SE_SELF_RELATIVE
+					target_sd.Owner = SID.from_string('S-1-5-32-544')
+					target_sd.Group = None
+					target_sd.Sacl = None
+					target_sd.Dacl = ACL()
+					target_sd.Dacl.AclRevision = 4
+					target_sd.Dacl.Sbz1 = 0
+					target_sd.Dacl.Sbz2 = 0
+
+				else:
+					target_sd = SECURITY_DESCRIPTOR.from_bytes(entry['attributes']['msDS-AllowedToActOnBehalfOfOtherIdentity'])
+				
+				break
+			else:
+				print('Target DN not found!')
+				return False, Exception('Target DN not found!')
+			
+			# checking if account is already there
+			for ace in target_sd.Dacl.aces:
+				if ace.Sid == computer_sid:
+					print('Account is already there!')
+					return False, Exception('Account is already there!')
+
+			print('Constructing new ACE')
+			ace = ACCESS_ALLOWED_ACE()
+			ace.AceFlags = 0
+			#ace.AceSize = 0
+			ace.Mask = 983551
+			ace.Sid = computer_sid
+
+			new_sd = copy.deepcopy(target_sd)
+			new_sd.Dacl.aces.append(ace)
+
+			changes = {
+				'msDS-AllowedToActOnBehalfOfOtherIdentity' : [('replace', new_sd.to_bytes())]
+			}
+			_, err = await self.connection.modify(target_dn, changes)
+			if err is not None:
+				raise err
+				
+			print('Change OK!')
+		except:
+			traceback.print_exc()
 
 	async def do_changeowner(self, new_owner_sid, target_dn, target_attribute = None):
 		"""Changes the owner in a Security Descriptor to the new_owner_sid on an LDAP object or on an LDAP object's attribute identified by target_dn and target_attribute. target_attribute can be omitted to change the target_dn's SD's owner"""
@@ -573,7 +655,6 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			
 			# now trying to get the new version LAPS
 			async for entry, err in self.connection.get_all_laps_windows():
-				#print(entry)
 				if err is not None:
 					raise err
 				
@@ -586,12 +667,8 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 					from msldap.wintypes.encryptedlaps import EncryptedLAPSBlob
 					pwd = entry['attributes']['msLAPS-EncryptedPassword']
 					print('%s : %s' % (entry['attributes']['cn'], pwd.hex()))
-					blob = EncryptedLAPSBlob.from_bytes(pwd)
-					#print(str(blob))
-					#print(blob.asn1blob.native)
-					#print(blob.asn1blob.native['content']['recipient_infos'])
-					#print(blob.asn1blob.native['content']['recipient_infos'][0]['kekid']['key_identifier'])
-					print(blob.get_keyidentifier())
+					#blob = EncryptedLAPSBlob.from_bytes(pwd)
+					#print(blob.blob.hex())
 
 				if 'msLAPS-EncryptedPasswordHistory' in entry['attributes']:
 					pwd = entry['attributes']['msLAPS-EncryptedPasswordHistory']
@@ -1173,6 +1250,42 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except Exception as e:
 			traceback.print_exc()
 	"""
+
+	async def do_dnszones(self):
+		"""Lists all DNS zones"""
+		try:
+			async for entry, err in self.connection.dnslistzones():
+				if err is not None:
+					raise err
+				print(entry)
+
+			return True
+		except:
+			traceback.print_exc()
+			return False
+
+	async def do_dnsdump(self, zone = None):
+		try:
+			if zone == '':
+				zone = None
+			
+			dns_filename = 'dns_%s.tsv' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+			pbar = tqdm(desc = 'Writing DNS records to file %s' % dns_filename)
+			with open(dns_filename, 'w', newline='', encoding = 'utf8') as f:
+				async for zonedn, name, dnsrecod, err in self.connection.dnsentries(zone):
+					if err is not None:
+						raise err
+					
+					dnsdataobj = dnsrecod.get_formatted()
+					line = '\t'.join([zonedn, name, dnsrecod.Type.name, dnsdataobj.to_line()])
+
+					f.write(line + '\r\n')
+					pbar.update(1)
+
+			return True
+		except Exception as e:
+			traceback.print_exc()
+			return False
 
 
 async def amain(args):
