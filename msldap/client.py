@@ -21,6 +21,8 @@ from msldap.protocol.messages import Control
 from msldap.ldap_objects import *
 from msldap.commons.utils import KNOWN_SIDS
 from msldap.commons.target import MSLDAPTarget
+from msldap.wintypes.dnsp.strcutures import DNS_RECORD
+from msldap.commons.exceptions import LDAPSearchException
 from asyauth.common.credentials import UniCredential
 
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
@@ -1588,6 +1590,104 @@ class MSLDAPClient:
 				return
 			yield entry.get('attributes', {}).get('sAMAccountName'), None
 		logger.debug('Finished polling for entries!')
+	
+	async def sam2dn(self, sAMAccountName):
+		"""Fetches the DN of an object based on the sAMAccountName"""
+		try:
+			query = '(sAMAccountName=%s)' % sAMAccountName
+			async for entry, err in self.pagedsearch(query, ['distinguishedName', 'objectSid']):
+				if err is not None:
+					raise err
+				entry['attributes']['distinguishedName'], None
+		except Exception as e:
+			return None, e
+	
+	async def sid2dn(self, sid):
+		"""Fetches the DN of an object based on the objectSid"""
+		try:
+			query = '(objectSid=%s)' % sid
+			async for entry, err in self.pagedsearch(query, ['distinguishedName']):
+				if err is not None:
+					raise err
+				return entry['attributes']['distinguishedName'], None
+		except Exception as e:
+			return None, e
+		
+	async def dn2sid(self, dn):
+		"""Fetches the objectSid of an object based on the DN"""
+		try:
+			query = '(distinguishedName=%s)' % dn
+			async for entry, err in self.pagedsearch(query, ['objectSid']):
+				if err is not None:
+					raise err
+				return entry['attributes']['objectSid'], None
+		except Exception as e:
+			return None, e
+	
+	async def dn2sam(self, dn):
+		"""Fetches the sAMAccountName of an object based on the DN"""
+		try:
+			query = '(distinguishedName=%s)' % dn
+			async for entry, err in self.pagedsearch(query, ['sAMAccountName']):
+				if err is not None:
+					raise err
+				return entry['attributes']['sAMAccountName'], None
+		except Exception as e:
+			return None, e
+	
+	async def dnslistzones(self):
+		"""Lists all DNS zones in the forest"""
+		try:
+			query = '(objectClass=dnsZone)'
+			async for entry, err in self.pagedsearch(query, ['dc']):
+				if err is not None:
+					raise err
+				yield(entry['attributes']['dc']), None
+		except Exception as e:
+			yield None, e
+
+	async def dnsentries(self, zone = None, with_tombstones = False):
+		"""Lists all DNS entries in the forest"""
+		dnsroots = [
+			'CN=MicrosoftDNS,CN=System,%s' % self._tree,
+			'CN=MicrosoftDNS,DC=DomainDnsZones,%s' % self._tree
+		]
+
+		async for entry, err in self.dnslistzones():
+			if err is not None:
+				raise err
+			dnsroots.append('CN=MicrosoftDNS,DC=ForestDnsZones,DC=%s' % entry)
+
+		try:
+			for dnsroot in dnsroots:
+				query = '(objectClass=dnsNode)'
+				try:
+					async for entry, err in self.pagedsearch(query, attributes=['dnsRecord','dNSTombstoned','name'], tree=dnsroot):
+						if err is not None:
+							raise err
+						
+						if 'name' not in entry['attributes'] or entry['attributes']['name'] is None:
+							continue
+
+						if 'dNSTombstoned' in entry['attributes'] and entry['attributes']['dNSTombstoned'] is True:
+							if with_tombstones is False:
+								continue
+						
+						if 'dnsRecord' not in entry['attributes']:
+							continue
+
+						for recorddata in entry['attributes']['dnsRecord']:
+							yield dnsroot, entry['attributes']['name'], DNS_RECORD.from_bytes(recorddata), None
+				
+				except LDAPSearchException:
+					if zone is None:
+						pass
+					else:
+						raise Exception('Zone %s not found!' % zone)
+		except Exception as e:
+			yield None, None, None, e
+	
+
 
 	#async def get_permissions_for_dn(self, dn):
 	#	"""
