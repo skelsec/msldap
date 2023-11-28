@@ -6,6 +6,7 @@
 
 import datetime #, timedelta, timezone
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
+from msldap.commons.utils import bh_dt_convert
 
 MSADUser_ATTRS = [ 	
 	'accountExpires', 'badPasswordTime', 'badPwdCount', 'cn', 'codePage', 
@@ -14,7 +15,8 @@ MSADUser_ATTRS = [
 	'objectCategory', 'objectClass', 'objectGUID', 'objectSid', 'primaryGroupID', 
 	'pwdLastSet', 'sAMAccountName', 'sAMAccountType', 'sn', 'userAccountControl', 
 	'userPrincipalName', 'whenChanged', 'whenCreated','memberOf','member', 'servicePrincipalName',
-	'msDS-AllowedToDelegateTo', 'adminCount'
+	'msDS-AllowedToDelegateTo', 'adminCount', 'isDeleted', 'mail', 'title', 'homeDirectory',
+	'unixUserPassword',	'userPassword', 'unicodePwd', 'scriptPath', 'sIDHistory'
 ]
 MSADUser_TSV_ATTRS = [
 	'sAMAccountName', 'userPrincipalName' ,'canLogon', 'badPasswordTime', 'description',
@@ -22,7 +24,8 @@ MSADUser_TSV_ATTRS = [
 	'whenCreated', 'whenChanged', 'member', 'memberOf', 'servicePrincipalName', 
 	'objectSid', 'cn', 'UAC_SCRIPT', 'UAC_ACCOUNTDISABLE', 'UAC_LOCKOUT', 'UAC_PASSWD_NOTREQD', 
 	'UAC_PASSWD_CANT_CHANGE', 'UAC_ENCRYPTED_TEXT_PASSWORD_ALLOWED', 'UAC_DONT_EXPIRE_PASSWD', 
-	'UAC_USE_DES_KEY_ONLY', 'UAC_DONT_REQUIRE_PREAUTH', 'UAC_PASSWORD_EXPIRED', 'adminCount'
+	'UAC_USE_DES_KEY_ONLY', 'UAC_DONT_REQUIRE_PREAUTH', 'UAC_PASSWORD_EXPIRED', 'adminCount',
+	'isDeleted', 'mail', 'title', 'homeDirectory', 'userPassword', 'unixUserPassword', 'unicodePwd', 'scriptPath',
 ]
 
 class MSADUser:
@@ -46,6 +49,14 @@ class MSADUser:
 		self.sAMAccountName = None #str
 		self.userPrincipalName = None #str
 		self.servicePrincipalName = None #str
+		self.mail = None #str
+		self.title = None #str
+		self.homeDirectory = None #str
+		self.userPassword = None #str
+		self.unixUserPassword = None #str
+		self.unicodePwd = None #str
+		self.scriptPath = None #str
+		self.sIDHistory = None #list
 
 		## groups
 		self.memberOf = None #list
@@ -68,7 +79,7 @@ class MSADUser:
 		self.userAccountControl = None #UserAccountControl intflag
 		self.allowedtodelegateto = None
 		self.admincount = None
-
+		self.isDeleted = None
 		
 		## other
 		self.codePage = None #int
@@ -158,6 +169,14 @@ class MSADUser:
 		adi.sAMAccountType = entry['attributes'].get('sAMAccountType')
 		adi.codePage = entry['attributes'].get('codePage')
 		adi.countryCode = entry['attributes'].get('countryCode')
+		adi.isDeleted = entry['attributes'].get('isDeleted')
+		adi.mail = entry['attributes'].get('mail')
+		adi.title = entry['attributes'].get('title')
+		adi.userPassword = entry['attributes'].get('userPassword')
+		adi.unixUserPassword = entry['attributes'].get('unixuserpassword')
+		adi.unicodePwd = entry['attributes'].get('unicodePwd')
+		adi.scriptPath = entry['attributes'].get('scriptPath')
+		adi.sIDHistory = entry['attributes'].get('sIDHistory')
 		
 		adi.allowedtodelegateto = entry['attributes'].get('msDS-AllowedToDelegateTo')
 		adi.admincount = entry['attributes'].get('adminCount')
@@ -217,6 +236,14 @@ class MSADUser:
 		t['must_change_pw'] = vn(self.must_change_pw)
 		t['admincount'] = self.admincount
 		t['canLogon'] = vn(self.canLogon)
+		t['isDeleted'] = vn(self.isDeleted)
+		t['mail'] = vn(self.mail)
+		t['title'] = vn(self.title)
+		t['homeDirectory'] = vn(self.homeDirectory)
+		t['userPassword'] = vn(self.userPassword)
+		t['unixUserPassword'] = vn(self.unixUserPassword)
+		t['unicodePwd'] = vn(self.unicodePwd)
+		t['scriptPath'] = vn(self.scriptPath)
 		return t
 
 	def uac_to_textflag(self, attr_s):
@@ -266,11 +293,71 @@ class MSADUser:
 		t += 'must_change_pw: %s\n' % self.must_change_pw
 		t += 'admincount: %s\n' % self.admincount
 		t += 'canLogon: %s\n' % self.canLogon
-
+		t += 'isDeleted: %s\n' % self.isDeleted
+		t += 'mail: %s\n' % self.mail
+		t += 'title: %s\n' % self.title
+		t += 'homeDirectory: %s\n' % self.homeDirectory
+		t += 'userPassword: %s\n' % self.userPassword
+		t += 'unixUserPassword: %s\n' % self.unixUserPassword
+		t += 'unicodePwd: %s\n' % self.unicodePwd
+		t += 'scriptPath: %s\n' % self.scriptPath
+		
 		return t 
 
 
-
+	def to_bh(self, domain):
+		uac = self.userAccountControl
+		if uac is None:
+			uac = MSLDAP_UAC(0)
+		sidhistory = []
+		if self.sIDHistory is not None:
+			for sid in self.sIDHistory:
+				sidhistory.append(str(sid))
+		return {
+			'_allowerdtodelegateto' : self.allowedtodelegateto,
+			'Aces' : [], #Post processing
+			'AllowedToDelegate' : [], #Post processing
+			'ObjectIdentifier' : str(self.objectSid),
+			'PrimaryGroupSID' : str(self.objectSid).rsplit('-',1)[0] + '-' + str(self.primaryGroupID),
+			"SPNTargets": [], #TODO
+			"HasSIDHistory": [], #TODO
+			"IsDeleted": bool(self.isDeleted),
+			"IsACLProtected": False , # Post processing
+			'Properties' : {
+				'name' : '%s@%s' % (self.sAMAccountName.upper(), domain.upper()),
+				'domain' : domain,
+				'domainsid' : str(self.objectSid).rsplit('-',1)[0] , 
+				'distinguishedname' : str(self.distinguishedName).upper(), 
+				'unconstraineddelegation' : self.uac_to_textflag('UAC_TRUSTED_FOR_DELEGATION'),
+				'trustedtoauth' : MSLDAP_UAC.TRUSTED_TO_AUTHENTICATE_FOR_DELEGATION in uac, 
+				'passwordnotreqd' : MSLDAP_UAC.PASSWD_NOTREQD in uac, 
+				'enabled' : MSLDAP_UAC.ACCOUNTDISABLE not in uac,
+				'lastlogon' : bh_dt_convert(self.lastLogon),
+				'lastlogontimestamp' : bh_dt_convert(self.lastLogonTimestamp),
+				'pwdlastset' : bh_dt_convert(self.pwdLastSet),
+				'dontreqpreauth' : MSLDAP_UAC.DONT_REQUIRE_PREAUTH in uac,
+				'pwdneverexpires' : MSLDAP_UAC.DONT_EXPIRE_PASSWD in uac,
+				'sensitive' : MSLDAP_UAC.NOT_DELEGATED in uac,
+				'serviceprincipalnames' : self.servicePrincipalName if self.servicePrincipalName is not None else [],
+				'hasspn' : bool(self.servicePrincipalName),
+				'displayname' : self.displayName ,
+				'email' : self.mail,
+				'title' : self.title ,
+				'homedirectory' : self.homeDirectory ,
+				'description' : self.description ,
+				'userpassword' : self.userPassword ,
+				'admincount': bool(self.admincount),
+				'sidhistory' : sidhistory,
+				'whencreated' : bh_dt_convert(self.whenCreated),
+				'unixpassword' : self.unixUserPassword ,
+				'unicodepassword' : self.unicodePwd ,
+				'logonscript' : self.scriptPath,
+				'samaccountname' : self.sAMAccountName,
+				'highvalue': False, #TODO
+				'sfupassword' : None , #TODO have no idea what this is
+			}
+			
+		}
 		
 
 		

@@ -7,13 +7,18 @@
 from msldap.wintypes import *
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
 from winacl.dtyp.sid import SID
+from msldap.commons.utils import bh_dt_convert
+
 
 MSADGroup_ATTRS = [ 	
 	'cn', 'distinguishedName', 'objectGUID', 'objectSid', 'groupType', 
 	'instanceType', 'name', 'member', 'sAMAccountName', 'systemFlags', 
 	'whenChanged', 'whenCreated', 'description', 'nTSecurityDescriptor',
-	'sAMAccountType',
+	'sAMAccountType', 'adminCount', 'isDeleted'
 ]
+
+MSADGroup_highvalue = ["S-1-5-32-544", "S-1-5-32-550", "S-1-5-32-549", "S-1-5-32-551", "S-1-5-32-548"]
+
 
 
 class MSADGroup:
@@ -33,6 +38,8 @@ class MSADGroup:
 		self.systemFlags = None
 		self.whenChanged = None
 		self.whenCreated = None
+		self.adminCount = None
+		self.isDeleted = None
 		
 	def to_dict(self):
 		d = {}
@@ -51,6 +58,8 @@ class MSADGroup:
 		d['systemFlags'] = self.systemFlags
 		d['whenChanged'] = self.whenChanged
 		d['whenCreated'] = self.whenCreated
+		d['adminCount'] = self.adminCount
+		d['isDeleted'] = self.isDeleted
 
 		return d	
 	
@@ -69,6 +78,8 @@ class MSADGroup:
 		t.systemFlags = entry['attributes'].get('systemFlags')
 		t.whenChanged = entry['attributes'].get('whenChanged')
 		t.whenCreated = entry['attributes'].get('whenCreated')
+		t.adminCount = entry['attributes'].get('adminCount')
+		t.isDeleted = entry['attributes'].get('isDeleted')
 		
 		t.description =  entry['attributes'].get('description')
 		if isinstance(t.description, list):
@@ -82,7 +93,10 @@ class MSADGroup:
 		#if temp:
 		#	t.nTSecurityDescriptor = SID.from_bytes(temp)
 		return t
-		
+	
+	def get_row(self, attrs):
+		t = self.to_dict()
+		return [str(t.get(x)) if x[:4]!='UAC_' else str(self.uac_to_textflag(x)) for x in attrs]
 
 	def __str__(self):
 		t = 'MSADGroup\r\n'
@@ -92,3 +106,31 @@ class MSADGroup:
 			else:
 				t += '%s: %s\r\n' % (x, self.__dict__[x])
 		return t
+
+	def to_bh(self, domain):
+		# Thx Dirk-jan
+		def is_highvalue(sid:str):
+			if sid.endswith("-512") or sid.endswith("-516") or sid.endswith("-519") or sid.endswith("-520"):
+				return True
+			if sid in MSADGroup_highvalue:
+				return True
+			return False
+
+		return {
+			'Aces' : [],
+			'Members': [],
+			'ObjectIdentifier' : self.objectSid,
+			"IsDeleted": bool(self.isDeleted),
+			"IsACLProtected": False , # Post processing
+			'Properties' : {
+				'name' : self.name,
+				'domain' : domain,
+				'domainsid' : str(self.objectSid).rsplit('-',1)[0] , 
+				'distinguishedname' : str(self.distinguishedName).upper(), 
+				'highvalue' : is_highvalue(str(self.objectSid)),
+				'admincount' : bool(self.adminCount),
+				'description' : self.description ,
+				'samaccountname' : self.sAMAccountName ,
+				'whencreated' : bh_dt_convert(self.whenCreated),
+			},
+		}

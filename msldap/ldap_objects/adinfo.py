@@ -4,6 +4,9 @@
 #  Tamas Jos (@skelsec)
 #
 
+from msldap.commons.utils import bh_dt_convert
+from msldap.commons.utils import FUNCTIONAL_LEVELS
+
 MSADInfo_ATTRS = [
 	'auditingPolicy', 'creationTime', 'dc', 'distinguishedName', 
 	'forceLogoff', 'instanceType', 'lockoutDuration', 'lockOutObservationWindow', 
@@ -12,8 +15,9 @@ MSADInfo_ATTRS = [
 	'objectGUID', 'objectSid', 'pwdHistoryLength', 
 	'pwdProperties', 'serverState', 'systemFlags', 'uASCompat', 'uSNChanged', 
 	'uSNCreated', 'whenChanged', 'whenCreated', 'rIDManagerReference',
-	'msDS-Behavior-Version'
+	'msDS-Behavior-Version', 'description', 'isDeleted', 'gPLink'
 ]
+
 class MSADInfo:
 	def __init__(self):
 		self.auditingPolicy = None #dunno
@@ -47,6 +51,9 @@ class MSADInfo:
 		self.whenCreated = None #datetime
 		self.rIDManagerReference = None #str
 		self.domainmodelevel = None
+		self.description = None
+		self.isDeleted = None
+		self.gPLink = None
 	
 	@staticmethod
 	def from_ldap(entry):
@@ -81,7 +88,10 @@ class MSADInfo:
 		adi.whenChanged = entry['attributes'].get('whenChanged') #datetime
 		adi.whenCreated = entry['attributes'].get('whenCreated') #datetime
 		adi.rIDManagerReference = entry['attributes'].get('rIDManagerReference')
-		
+		adi.description = entry['attributes'].get('description')
+		adi.isDeleted = entry['attributes'].get('isDeleted')
+		adi.gPLink = entry['attributes'].get('gPLink')
+
 		#https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/564dc969-6db3-49b3-891a-f2f8d0a68a7f
 		adi.domainmodelevel = entry['attributes'].get('msDS-Behavior-Version')
 
@@ -119,6 +129,7 @@ class MSADInfo:
 		d['whenChanged'] = self.whenChanged
 		d['whenCreated'] = self.whenCreated
 		d['domainmodelevel'] = self.domainmodelevel
+		d['description'] = self.description
 		return d
 
 
@@ -154,4 +165,43 @@ class MSADInfo:
 		t += 'whenChanged: %s\n' % self.whenChanged
 		t += 'whenCreated: %s\n' % self.whenCreated
 		t += 'domainmodelevel: %s\n' % self.domainmodelevel
-		return t 
+		t += 'description: %s\n' % self.description
+		return t
+	
+	def get_row(self, attrs):
+		t = self.to_dict()
+		return [str(t.get(x)) for x in attrs]
+	
+	def to_bh(self, domain):
+		try:
+			functional_level = FUNCTIONAL_LEVELS[int(self.domainmodelevel)]
+		except KeyError:
+			functional_level = 'Unknown'
+		return {
+			'_gPLink' : self.gPLink, #always empty
+			'Aces' : [],
+			'ObjectIdentifier' : str(self.objectSid),
+			"IsDeleted": bool(self.isDeleted),
+			"IsACLProtected": False , # Post processing
+			"Trusts" : [], #Post processing
+			"ChildObjects": [], #Post processing
+			"GPOChanges" : {
+				"LocalAdmins": [],
+				"RemoteDesktopUsers": [],
+				"DcomUsers": [],
+				"PSRemoteUsers": [],
+				"AffectedComputers": []
+			},
+			"Links": [], # Post processing
+			'Properties' : {
+				'name' : domain,
+				'domain' : domain,
+				'domainsid' : str(self.objectSid).rsplit('-',1)[0] , 
+				'distinguishedname' : str(self.distinguishedName).upper(), 
+				'description' : self.description,
+				'functionallevel' : functional_level,
+				'highvalue' : True,
+				'whencreated' : bh_dt_convert(self.whenCreated),
+			}
+			
+		}

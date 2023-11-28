@@ -11,6 +11,10 @@ import shlex
 import datetime
 import copy
 import typing
+import json
+import base64
+import zipfile
+import os
 
 from asysocks.unicomm.common.target import UniTarget
 from asyauth.common.credentials import UniCredential
@@ -23,7 +27,10 @@ from asysocks import logger as sockslogger
 from asyauth import logger as authlogger
 from msldap.client import MSLDAPClient
 from msldap.commons.factory import LDAPConnectionFactory
-from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS
+from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS, \
+	MSADMachine_ATTRS, MSADGroup_ATTRS, MSADOU_ATTRS, MSADInfo_ATTRS, \
+	MSADContainer_ATTRS, MSADGPO_ATTRS, MSADDomainTrust_ATTRS
+
 from msldap.examples.utils.completers import PathCompleter
 
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR, SE_SACL
@@ -38,6 +45,7 @@ from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate,\
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest
 from tabulate import tabulate
 from msldap.commons.exceptions import LDAPSearchException
+from msldap.commons.utils import is_filtered_container
 
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 	def __init__(self, url = None):
@@ -161,31 +169,347 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 
 	async def do_dump(self):
 		"""Fetches ALL user and machine accounts from the domain with a LOT of attributes"""
+		zip_filename = 'dump_%s.zip' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+		sdtempname = 'sdtemp_%s.txt' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+		
 		try:
 			await self.do_adinfo(False)
 			await self.do_ldapinfo(False)
+
+			tname = 'domain_%s' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+			bh_filename = 'bh_%s.json' % tname
+			users_filename = '%s.tsv' % tname
 			
-			users_filename = 'users_%s.tsv' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-			pbar = tqdm(desc = 'Writing users to file %s' % users_filename)
-			with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
-				async for user, err in self.connection.get_all_users():
-					if err is not None:
-						raise err
-					pbar.update()
-					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS))+'\r\n')
-			print('Users dump was written to %s' % users_filename)
 			
-			users_filename = 'computers_%s.tsv' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-			pbar = tqdm(desc = 'Writing computers to file %s' % users_filename)
-			with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
-				async for user, err in self.connection.get_all_machines():
-					if err is not None:
-						raise err
-					pbar.update()
-					f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS))+'\r\n')
-			print('Computer dump was written to %s' % users_filename)
+			with open(sdtempname, 'w', newline = '') as sdtemp:
+				try:
+					with open(bh_filename, 'w', newline='', encoding = 'utf8') as b:
+						with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+							f.write('\t'.join(MSADInfo_ATTRS)+'\r\n')
+							adinfo, err = await self.connection.get_ad_info()
+							if err is not None:
+								raise err
+							f.write('\t'.join(adinfo.get_row(MSADInfo_ATTRS))+'\r\n')
+							sdtemp.write('domain:'+adinfo.distinguishedName + '\r\n')
+							b.write(json.dumps(adinfo.to_bh(self.adinfo.name))+'\r\n')
+					print('Adinfo was written to %s' % users_filename)
+					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+						dz.write(users_filename, arcname = users_filename)
+						dz.write(bh_filename, arcname = bh_filename)
+				finally:
+					try:
+						os.remove(users_filename)
+						os.remove(bh_filename)
+					except:
+						pass
+
+				tname = 'schema_%s' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+				users_filename = '%s.json' % tname
+
+				try:
+					pbar = tqdm(desc = 'Writing schema to file %s' % users_filename)
+					schema = {}
+					with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+						async for user, err in self.connection.get_all_schemaentry(['name', 'schemaidguid']):
+							if err is not None:
+								raise err
+							pbar.update()
+							schema[user.name.lower()] = str(user.schemaIDGUID)
+						
+						json.dump(schema, f)
+
+					print('Schema dump was written to %s' % users_filename)
+					pbar.close()
+					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+						dz.write(users_filename, arcname = users_filename)
+				finally:
+					try:
+						os.remove(users_filename)
+					except:
+						pass
+			
+				tname = 'trusts_%s' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+				bh_filename = 'bh_%s.json' % tname
+				users_filename = '%s.tsv' % tname
+
+				try:
+					pbar = tqdm(desc = 'Writing trusts to file %s' % users_filename)
+					with open(bh_filename, 'w', newline='', encoding = 'utf8') as b:
+						with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+							f.write('\t'.join(MSADDomainTrust_ATTRS)+'\r\n')
+							async for user, err in self.connection.get_all_trusts():
+								if err is not None:
+									raise err
+								pbar.update()
+								f.write('\t'.join(user.get_row(MSADDomainTrust_ATTRS))+'\r\n')
+								sdtemp.write('trust:'+user.distinguishedName + '\r\n')
+								b.write(json.dumps(user.to_bh())+'\r\n')
+
+					print('Computer dump was written to %s' % users_filename)
+					pbar.close()
+					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+						dz.write(users_filename, arcname = users_filename)
+						dz.write(bh_filename, arcname = bh_filename)
+				finally:
+					try:
+						os.remove(users_filename)
+						os.remove(bh_filename)
+					except:
+						pass
+				
+
+				tname = 'users_%s' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+				bh_filename = 'bh_%s.json' % tname
+				users_filename = '%s.tsv' % tname
+				
+				try:	
+					pbar = tqdm(desc = 'Writing users to file %s' % users_filename)
+				
+					with open(bh_filename, 'w', newline='', encoding = 'utf8') as b:
+						with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+							f.write('\t'.join(MSADUser_TSV_ATTRS)+'\r\n')
+							async for user, err in self.connection.get_all_users():
+								if err is not None:
+									raise err
+								pbar.update()
+								f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS))+'\r\n')
+								sdtemp.write('user:'+user.distinguishedName + '\r\n')
+								b.write(json.dumps(user.to_bh(self.adinfo.name))+'\r\n')
+					print('Users dump was written to %s' % users_filename)
+					pbar.close()
+					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+						dz.write(users_filename, arcname = users_filename)
+						dz.write(bh_filename, arcname = bh_filename)
+				finally:
+					try:
+						os.remove(users_filename)
+						os.remove(bh_filename)
+					except:
+						pass
+				
+				tname = 'computers_%s' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+				bh_filename = 'bh_%s.json' % tname
+				users_filename = '%s.tsv' % tname
+
+				try:
+					pbar = tqdm(desc = 'Writing computers to file %s' % users_filename)
+					with open(bh_filename, 'w', newline='', encoding = 'utf8') as b:
+						with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+							f.write('\t'.join(MSADMachine_ATTRS)+'\r\n')
+							async for user, err in self.connection.get_all_machines():
+								if err is not None:
+									raise err
+								pbar.update()
+								f.write('\t'.join(user.get_row(MSADMachine_ATTRS))+'\r\n')
+								sdtemp.write('computer:'+user.distinguishedName + '\r\n')
+								b.write(json.dumps(user.to_bh(self.adinfo.name))+'\r\n')
+					print('Computer dump was written to %s' % users_filename)
+					pbar.close()
+					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+						dz.write(users_filename, arcname = users_filename)
+						dz.write(bh_filename, arcname = bh_filename)
+				finally:
+					try:
+						os.remove(users_filename)
+						os.remove(bh_filename)
+					except:
+						pass
+				
+				tname = 'groups_%s' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+				bh_filename = 'bh_%s.json' % tname
+				users_filename = '%s.tsv' % tname
+				try:
+					pbar = tqdm(desc = 'Writing groups to file %s' % users_filename)
+					with open(bh_filename, 'w', newline='', encoding = 'utf8') as b:
+						with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+							f.write('\t'.join(MSADGroup_ATTRS)+'\r\n')
+							async for user, err in self.connection.get_all_groups():
+								if err is not None:
+									raise err
+								pbar.update()
+								f.write('\t'.join(user.get_row(MSADGroup_ATTRS))+'\r\n')
+								sdtemp.write('group:'+user.distinguishedName + '\r\n')
+								b.write(json.dumps(user.to_bh(self.adinfo.name))+'\r\n')
+					print('Group dump was written to %s' % users_filename)
+					pbar.close()
+					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+						dz.write(users_filename, arcname = users_filename)
+						dz.write(bh_filename, arcname = bh_filename)
+				finally:
+					try:
+						os.remove(users_filename)
+						os.remove(bh_filename)
+					except:
+						pass
+				
+				tname = 'ous_%s' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+				bh_filename = 'bh_%s.json' % tname
+				users_filename = '%s.tsv' % tname
+				try:
+					pbar = tqdm(desc = 'Writing OUs to file %s' % users_filename)
+					with open(bh_filename, 'w', newline='', encoding = 'utf8') as b:
+						with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+							f.write('\t'.join(MSADOU_ATTRS)+'\r\n')
+							async for user, err in self.connection.get_all_ous():
+								if err is not None:
+									raise err
+								pbar.update()
+								f.write('\t'.join(user.get_row(MSADOU_ATTRS))+'\r\n')
+								sdtemp.write('ou:'+user.distinguishedName + '\r\n')
+								b.write(json.dumps(user.to_bh(self.adinfo.name, str(self.adinfo.objectSid)))+'\r\n')
+					print('OU dump was written to %s' % users_filename)
+					pbar.close()
+					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+						dz.write(users_filename, arcname = users_filename)
+						dz.write(bh_filename, arcname = bh_filename)
+				finally:
+					try:
+						os.remove(users_filename)
+						os.remove(bh_filename)
+					except:
+						pass
+
+				
+				tname = 'containers_%s' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+				bh_filename = 'bh_%s.json' % tname
+				users_filename = '%s.tsv' % tname
+				try:
+					pbar = tqdm(desc = 'Writing Containers to file %s' % users_filename)
+					with open(bh_filename, 'w', newline='', encoding = 'utf8') as b:
+						with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+							f.write('\t'.join(MSADContainer_ATTRS)+'\r\n')
+							async for user, err in self.connection.get_all_containers():
+								if err is not None:
+									raise err
+								if is_filtered_container(user.distinguishedName):
+									continue
+								pbar.update()
+								f.write('\t'.join(user.get_row(MSADContainer_ATTRS))+'\r\n')
+								sdtemp.write('container:'+user.distinguishedName + '\r\n')
+								b.write(json.dumps(user.to_bh(self.adinfo.name, str(self.adinfo.objectSid)))+'\r\n')
+					print('Container dump was written to %s' % users_filename)
+					pbar.close()
+					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+						dz.write(users_filename, arcname = users_filename)
+						dz.write(bh_filename, arcname = bh_filename)
+				finally:
+					try:
+						os.remove(users_filename)
+						os.remove(bh_filename)
+					except:
+						pass
+
+				tname = 'gpos_%s' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+				bh_filename = 'bh_%s.json' % tname
+				users_filename = '%s.tsv' % tname
+				try:
+					pbar = tqdm(desc = 'Writing GPOs to file %s' % users_filename)
+					with open(bh_filename, 'w', newline='', encoding = 'utf8') as b:
+						with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+							f.write('\t'.join(MSADOU_ATTRS)+'\r\n')
+							async for user, err in self.connection.get_all_gpos():
+								if err is not None:
+									raise err
+								pbar.update()
+								f.write('\t'.join(user.get_row(MSADGPO_ATTRS))+'\r\n')
+								sdtemp.write('gpo:'+user.distinguishedName + '\r\n')
+								b.write(json.dumps(user.to_bh(self.adinfo.name, str(self.adinfo.objectSid)))+'\r\n')
+					print('GPO dump was written to %s' % users_filename)
+					pbar.close()
+					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+						dz.write(users_filename, arcname = users_filename)
+						dz.write(bh_filename, arcname = bh_filename)
+				finally:
+					try:
+						os.remove(users_filename)
+						os.remove(bh_filename)
+					except:
+						pass
+
+				try:
+					users_filename = 'tokens_%s.json' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+					pbar = tqdm(desc = 'Writing tokens to file %s' % users_filename)
+					with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+						async for res, err in self.connection.get_all_tokengroups():
+							if err is not None:
+								raise err
+							pbar.update()
+							f.write(json.dumps(res)+'\r\n')
+					print('Token dump was written to %s' % users_filename)
+					pbar.close()
+					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+						dz.write(users_filename, arcname = users_filename)
+				finally:
+					try:
+						os.remove(users_filename)
+					except:
+						pass
+
+
+				try:
+					dns_filename = 'dns_%s.tsv' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+					pbar = tqdm(desc = 'Writing DNS records to file %s' % dns_filename)
+					with open(dns_filename, 'w', newline='', encoding = 'utf8') as f:
+						async for zonedn, name, dnsrecod, err in self.connection.dnsentries():
+							if err is not None:
+								raise err
+							
+							dnsdataobj = dnsrecod.get_formatted()
+							line = '\t'.join([zonedn, name, dnsrecod.Type.name, dnsdataobj.to_line()])
+
+							f.write(line + '\r\n')
+							pbar.update(1)
+					print('DNS dump was written to %s' % dns_filename)
+					pbar.close()
+					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+						dz.write(dns_filename, arcname = dns_filename)
+				finally:
+					try:
+						os.remove(dns_filename)
+					except:
+						pass
+
+			total = 0
+			with open(sdtempname, 'r', newline = '') as sdtemp:
+				for line in sdtemp:
+					total += 1
+			
+			try:
+				with open(sdtempname, 'r', newline = '') as sdtemp:
+					users_filename = 'sds_%s.json' % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+					pbar = tqdm(desc = 'Writing SDs to file %s' % users_filename, total=total)
+					with open(users_filename, 'w', newline='', encoding = 'utf8') as f:
+						for line in sdtemp:
+							line = line.strip()
+							line = line.split(':',1)
+							if len(line) < 2:
+								continue
+							dn = line[1].strip()
+							adsec, err = await self.connection.get_objectacl_by_dn(dn)
+							if err is not None:
+								raise err
+							pbar.update()
+							f.write(json.dumps({'dn' : dn, 'otype': line[0], 'sd': base64.b64encode(adsec).decode()})+'\r\n')
+					print('SD dump was written to %s' % users_filename)
+					pbar.close()
+				
+				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+					dz.write(users_filename, arcname = users_filename)
+			finally:
+				try:
+					os.remove(users_filename)
+					os.remove(sdtempname)
+				except:
+					pass
+			print('All dumps were written to %s' % zip_filename)
+			
 			return True
 		except:
+			try:
+				os.remove(sdtempname)
+			except:
+				pass
+			
 			traceback.print_exc()
 			return False
 
@@ -664,11 +988,8 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 					
 					
 				if 'msLAPS-EncryptedPassword' in entry['attributes']:
-					from msldap.wintypes.encryptedlaps import EncryptedLAPSBlob
 					pwd = entry['attributes']['msLAPS-EncryptedPassword']
 					print('%s : %s' % (entry['attributes']['cn'], pwd.hex()))
-					#blob = EncryptedLAPSBlob.from_bytes(pwd)
-					#print(blob.blob.hex())
 
 				if 'msLAPS-EncryptedPasswordHistory' in entry['attributes']:
 					pwd = entry['attributes']['msLAPS-EncryptedPasswordHistory']
@@ -696,7 +1017,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			async for group_sid, err in self.connection.get_tokengroups(dn):
 				if err is not None:
 					raise err
-				group_sids.append(group_sids)
+				group_sids.append(group_sid)
 				group_dn, err = await self.connection.get_dn_for_objectsid(group_sid)
 				if err is not None:
 					raise err
@@ -1284,6 +1605,20 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 
 			return True
 		except Exception as e:
+			traceback.print_exc()
+			return False
+	
+	async def do_pre2000(self):
+		"""Lists potentially abusable machine accounts created with pre windows-2000 flag"""
+		try:
+			query = '(&(userAccountControl=4128)(logonCount=0))'
+			async for entry, err in self.connection.pagedsearch(query, attributes=['sAMAccountName']):
+				if err is not None:
+					raise err
+
+				print(entry)
+			return True
+		except:
 			traceback.print_exc()
 			return False
 

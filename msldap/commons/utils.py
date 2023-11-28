@@ -1,5 +1,7 @@
 
 import datetime
+import time
+import calendar
 
 def timestamp2datetime(dt) -> datetime.datetime:
 	"""
@@ -32,48 +34,91 @@ def print_cert(cert, offset=0) -> str:
 		]
 	return "{}{}".format(blanks, "\n{}".format(blanks).join(msg))
 
+def win_timestamp_to_unix(seconds):
+	"""
+	Convert Windows timestamp (100 ns since 1 Jan 1601) to
+	unix timestamp.
+	"""
+	seconds = int(seconds)
+	if seconds == 0:
+		return 0
+	return int((seconds - 116444736000000000) / 10000000)
+
+def bh_dt_convert(dt:datetime.datetime):
+	if dt is None or dt == 0 or dt == '0' or dt == '':
+		return -1
+	ts = max(0,int(dt.timestamp()))
+	return ts
+	
+
+#taken from bloodhound.py
+def is_filtered_container(containerdn):
+	if "CN=DOMAINUPDATES,CN=SYSTEM,DC=" in containerdn.upper():
+		return True
+	if "CN=POLICIES,CN=SYSTEM,DC=" in containerdn.upper() and (containerdn.upper().startswith('CN=USER') or containerdn.upper().startswith('CN=MACHINE')):
+		return True
+	return False
+
+def is_filtered_container_child(containerdn):
+	if "CN=PROGRAM DATA,DC=" in containerdn.upper():
+		return True
+	if "CN=SYSTEM,DC=" in containerdn.upper():
+		return True
+	return False
+
+FUNCTIONAL_LEVELS = {
+		0: "2000 Mixed/Native",
+		1: "2003 Interim",
+		2: "2003",
+		3: "2008",
+		4: "2008 R2",
+		5: "2012",
+		6: "2012 R2",
+		7: "2016"
+	}
+
 KNOWN_SIDS = {
-    "S-1-0": "Null Authority",
-    "S-1-0-0": "Nobody",
-    "S-1-1": "World Authority",
-    "S-1-1-0": "Everyone",
-    "S-1-2": "Local Authority",
-    "S-1-2-0": "Local",
-    "S-1-3": "Creator Authority",
-    "S-1-3-0": "Creator Owner",
-    "S-1-3-1": "Creator Group",
-    "S-1-3-4": "Owner Rights",
-    "S-1-4": "Non-unique Authority",
-    "S-1-5": "NT Authority",
-    "S-1-5-1": "Dialup",
-    "S-1-5-2": "Network",
-    "S-1-5-3": "Batch",
-    "S-1-5-4": "Interactive",
-    "S-1-5-5-X-Y": "Logon Session",
-    "S-1-5-6": "Service",
-    "S-1-5-7": "Anonymous",
-    "S-1-5-9": "Enterprise Domain Controllers",
-    "S-1-5-10": "Principal Self",
-    "S-1-5-11": "Authenticated Users",
-    "S-1-5-12": "Restricted Code",
-    "S-1-5-13": "Terminal Server Users",
-    "S-1-5-14": "Remote Interactive Logon",
-    "S-1-5-17": "IUSR",
-    "S-1-5-18": "Local System",
-    "S-1-5-19": "NT Authority Local Service",
-    "S-1-5-20": "NT Authority Network Service",
-    "S-1-5-32-544": "Administrators",
-    "S-1-5-32-545": "Users",
-    "S-1-5-32-546": "Guests",
-    "S-1-5-32-547": "Power Users",
-    "S-1-5-32-548": "Account Operators",
-    "S-1-5-32-549": "Server Operators",
-    "S-1-5-32-550": "Print Operators",
-    "S-1-5-32-551": "Backup Operators",
-    "S-1-5-32-552": "Replicators",
-    "S-1-5-32-582": "Storage Replica Administrators",
-    "S-1-5-64-10": "NTLM Authentication",
-    "S-1-5-64-14": "SChannel Authentication",
-    "S-1-5-64-21": "Digest Authentication",
-    "S-1-5-80": "NT Service",
+	"S-1-0": "Null Authority",
+	"S-1-0-0": "Nobody",
+	"S-1-1": "World Authority",
+	"S-1-1-0": "Everyone",
+	"S-1-2": "Local Authority",
+	"S-1-2-0": "Local",
+	"S-1-3": "Creator Authority",
+	"S-1-3-0": "Creator Owner",
+	"S-1-3-1": "Creator Group",
+	"S-1-3-4": "Owner Rights",
+	"S-1-4": "Non-unique Authority",
+	"S-1-5": "NT Authority",
+	"S-1-5-1": "Dialup",
+	"S-1-5-2": "Network",
+	"S-1-5-3": "Batch",
+	"S-1-5-4": "Interactive",
+	"S-1-5-5-X-Y": "Logon Session",
+	"S-1-5-6": "Service",
+	"S-1-5-7": "Anonymous",
+	"S-1-5-9": "Enterprise Domain Controllers",
+	"S-1-5-10": "Principal Self",
+	"S-1-5-11": "Authenticated Users",
+	"S-1-5-12": "Restricted Code",
+	"S-1-5-13": "Terminal Server Users",
+	"S-1-5-14": "Remote Interactive Logon",
+	"S-1-5-17": "IUSR",
+	"S-1-5-18": "Local System",
+	"S-1-5-19": "NT Authority Local Service",
+	"S-1-5-20": "NT Authority Network Service",
+	"S-1-5-32-544": "Administrators",
+	"S-1-5-32-545": "Users",
+	"S-1-5-32-546": "Guests",
+	"S-1-5-32-547": "Power Users",
+	"S-1-5-32-548": "Account Operators",
+	"S-1-5-32-549": "Server Operators",
+	"S-1-5-32-550": "Print Operators",
+	"S-1-5-32-551": "Backup Operators",
+	"S-1-5-32-552": "Replicators",
+	"S-1-5-32-582": "Storage Replica Administrators",
+	"S-1-5-64-10": "NTLM Authentication",
+	"S-1-5-64-14": "SChannel Authentication",
+	"S-1-5-64-21": "Digest Authentication",
+	"S-1-5-80": "NT Service",
 }
