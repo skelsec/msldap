@@ -52,7 +52,7 @@ jobs:
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
       with:
-        version: '>= 363.0.0'
+        version: '>= 390.0.0'
 
     - name: Upload Executables to GCS
       run: |
