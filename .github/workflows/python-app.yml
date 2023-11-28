@@ -1,4 +1,9 @@
 name: Build Windows Executable - PyInstaller
+# Description:
+# Most of my projects come with a build.bat script that uses PyInstaller to freeze the examples
+# to an executable file. This Action will set up the envrionment and run this build.bat script,
+# then upload the resulting executables to a google cloud bucket.
+# Additionally the executables will be compressed and encrypted using 7z
 
 on:
   push:
@@ -36,21 +41,20 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller
+        pip install pyinstaller venv
 
     - name: Run Batch File to Build Executable
-      run: builder\pyinstaller\build.bat # Replace with the path to your batch file
+      run: builder\pyinstaller\build.bat
 
     - name: Compress executables
       run: |
         "C:\Program Files\7-Zip\7z.exe a secure.7z builder\pyinstaller\*.exe -pprotected"
-
-    # Optional: Upload the built executable as an artifact
+    
     - name: Upload Executable
       uses: actions/upload-artifact@v2
       with:
         name: executable
-        path: builder\pyinstaller\*.exe # Replace with the path to your built executable
+        path: builder\pyinstaller\*.exe
         
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
