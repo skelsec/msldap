@@ -58,4 +58,5 @@ jobs:
 
     - name: Upload Executables to GCS
       run: |
+        gcloud auth login
         gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/msldap/${{ steps.version.outputs.VERSION }}/
