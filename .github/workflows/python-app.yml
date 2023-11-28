@@ -1,0 +1,35 @@
+name: Build Executable
+
+on:
+  push:
+    branches:
+      - master # Trigger on push to master branch
+
+jobs:
+  build:
+    runs-on: windows-latest # Use a Windows runner
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+
+    - name: Run Batch File to Build Executable
+      run: builder\pyinstaller\build.bat # Replace with the path to your batch file
+
+    # Optional: Upload the built executable as an artifact
+    - name: Upload Executable
+      uses: actions/upload-artifact@v2
+      with:
+        name: executable
+        path: builder\pyinstaller\*.exe # Replace with the path to your built executable
