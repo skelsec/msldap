@@ -29,7 +29,7 @@ jobs:
     - name: Determine Version
       id: version
       run: |
-        $VERSION = python -c "import sys; sys.path.append(${{ secrets.PROJECTNAME }}); import _version; print(_version.__version__)"
+        $VERSION = python -c "import sys; sys.path.append(${{ github.repository }}); import _version; print(_version.__version__)"
         echo "Version: $VERSION"
         echo "::set-output name=VERSION::$VERSION"
       shell: powershell
@@ -44,7 +44,7 @@ jobs:
 
     - name: Compress executables
       run: |
-        "C:\Program Files\7-Zip\7z.exe" a secure.7z builder\pyinstaller\*.exe -p${{ secrets.ARCHPASS }}
+        "C:\Program Files\7-Zip\7z.exe" a secure.7z builder\pyinstaller\*.exe -pprotected
 
     # Optional: Upload the built executable as an artifact
     - name: Upload Executable
@@ -60,4 +60,4 @@ jobs:
 
     - name: Upload Executables to GCS
       run: |
-        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ secrets.PROJECTNAME }}/${{ steps.version.outputs.VERSION }}/
+        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ github.repository }}/${{ steps.version.outputs.VERSION }}/
