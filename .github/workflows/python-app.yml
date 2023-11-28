@@ -18,6 +18,14 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: '3.9'
+    
+    - name: Determine Version
+      id: version
+      run: |
+        # Example: Extract version from a file or environment
+        VERSION=$(python -c "from pathlib import Path; exec(Path('msldap\\_version.py').read_text()); print(__version__)")
+        echo "Version: $VERSION"
+        echo "::set-output name=VERSION::$VERSION"
 
     - name: Install Dependencies
       run: |
@@ -33,3 +41,14 @@ jobs:
       with:
         name: executable
         path: builder\pyinstaller\*.exe # Replace with the path to your built executable
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@master
+      with:
+        project_id: your-gcp-project-id # Replace with your GCP project ID
+        service_account_key: ${{ secrets.GCLOUD_BUCKET_SERVICE_USER_SECRET }}
+        export_default_credentials: true
+
+    - name: Upload Executables to GCS
+      run: |
+        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/msldap/${{ steps.version.outputs.VERSION }}/
