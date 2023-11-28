@@ -18,7 +18,7 @@ jobs:
         fetch-depth: 0
     - uses: 'google-github-actions/auth@v1'
       with:
-        workload_identity_provider: 'projects/octopwn-ea2a4/locations/global/workloadIdentityPools/github-actions-auth-pool/providers/github-actions-provider'
+        workload_identity_provider: 'projects/988671454678/locations/global/workloadIdentityPools/github-actions-auth-pool/providers/github-actions-provider'
         service_account: 'skelsec-bucket-foss-writer@octopwn-ea2a4.iam.gserviceaccount.com'
 
     - name: Set up Python
