@@ -65,7 +65,10 @@ def single_interval(x, encode = False):
 			return datetime.datetime.max.replace(tzinfo=datetime.timezone.utc)
 		
 		us = x / 10.
-		return (MSLDAP_DT_WIN_EPOCH + datetime.timedelta(microseconds=us)).replace(tzinfo=datetime.timezone.utc)
+		try:
+			return (MSLDAP_DT_WIN_EPOCH + datetime.timedelta(microseconds=us)).replace(tzinfo=datetime.timezone.utc)
+		except:
+			return MSLDAP_DT_WIN_EPOCH
 	raise NotImplementedError()
 
 def x2gmsa(x, encode = False):

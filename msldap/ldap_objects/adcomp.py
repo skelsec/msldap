@@ -5,7 +5,9 @@
 #
 
 import datetime
+import base64
 from msldap.ldap_objects.common import MSLDAP_UAC, vn
+from msldap.commons.utils import bh_dt_convert
 
 MSADMachine_ATTRS = [
 	'accountExpires', 'badPasswordTime', 'badPwdCount', 'cn', 'description', 'codePage', 
@@ -16,12 +18,13 @@ MSADMachine_ATTRS = [
 	'operatingSystem', 'operatingSystemVersion','primaryGroupID', 
 	'pwdLastSet', 'sAMAccountName', 'sAMAccountType', 'sn', 'userAccountControl', 
 	'whenChanged', 'whenCreated', 'servicePrincipalName','msDS-AllowedToDelegateTo',
-	'msDS-AllowedToActOnBehalfOfOtherIdentity'
+	'msDS-AllowedToActOnBehalfOfOtherIdentity', 'operatingSystemServicePack', 'isDeleted',
+	'ms-Mcs-AdmPwdExpirationTime', 'sIDHistory'
 ]
-			
+
 MSADMachine_TSV_ATTRS = [
-	'sAMAccountName', 'dNSHostName', 'operatingSystem', 'operatingSystemVersion', 'badPasswordTime', 
-	'badPwdCount', 'pwdLastSet', 'lastLogonTimestamp', 'whenCreated', 'whenChanged', 'servicePrincipalName', 
+	'sAMAccountName', 'dNSHostName', 'operatingSystem', 'operatingSystemVersion','operatingSystemServicePack', 
+	'badPasswordTime', 'badPwdCount', 'pwdLastSet', 'lastLogonTimestamp', 'whenCreated', 'whenChanged', 'servicePrincipalName', 
 	'objectSid', 'cn', 'description', 'UAC_SCRIPT', 'UAC_ACCOUNTDISABLE', 'UAC_LOCKOUT', 'UAC_PASSWD_NOTREQD', 
 	'UAC_PASSWD_CANT_CHANGE', 'UAC_ENCRYPTED_TEXT_PASSWORD_ALLOWED', 'UAC_DONT_EXPIRE_PASSWD', 'UAC_USE_DES_KEY_ONLY', 
 	'UAC_DONT_REQUIRE_PREAUTH', 'UAC_PASSWORD_EXPIRED'
@@ -66,6 +69,10 @@ class MSADMachine:
 		self.servicePrincipalName = None
 		self.allowedtodelegateto = None
 		self.allowedtoactonbehalfofotheridentity = None
+		self.operatingSystemServicePack = None
+		self.isDeleted = None
+		self.ms_Mcs_AdmPwdExpirationTime = None
+		self.sIDHistory = None
 
 		## calculated properties
 		self.when_pw_change = None #datetime
@@ -153,6 +160,10 @@ class MSADMachine:
 		adi.whenChanged = entry['attributes'].get('whenChanged')
 		adi.whenCreated = entry['attributes'].get('whenCreated')
 		adi.servicePrincipalName = entry['attributes'].get('servicePrincipalName')
+		adi.operatingSystemServicePack = entry['attributes'].get('operatingSystemServicePack')
+		adi.isDeleted = entry['attributes'].get('isDeleted')
+		adi.ms_Mcs_AdmPwdExpirationTime = entry['attributes'].get('ms-Mcs-AdmPwdExpirationTime')
+		adi.sIDHistory = entry['attributes'].get('sIDHistory')
 		
 		adi.allowedtodelegateto = entry['attributes'].get('msDS-AllowedToDelegateTo')
 		adi.allowedtoactonbehalfofotheridentity = entry['attributes'].get('msDS-AllowedToActOnBehalfOfOtherIdentity')
@@ -208,6 +219,7 @@ class MSADMachine:
 		t['whenCreated'] = vn(self.whenCreated)
 		t['servicePrincipalName'] = vn(self.servicePrincipalName)
 		t['userAccountControl'] = vn(self.userAccountControl)
+		t['operatingSystemServicePack'] = vn(self.operatingSystemServicePack)
 		return t
 		
 	def uac_to_textflag(self, attr_s):
@@ -228,3 +240,95 @@ class MSADMachine:
 		for k in self.__dict__:
 			t += '%s : %s\r\n' % (k, self.__dict__[k])
 		return t
+	
+	def to_bh(self, domain):
+		uac = self.userAccountControl
+		if uac is None:
+			uac = MSLDAP_UAC(0)
+		op = self.operatingSystem
+		if self.operatingSystem is not None:
+			if self.operatingSystemServicePack is not None:
+				op = self.operatingSystem + ' ' + self.operatingSystemServicePack
+
+		sidhistory = []
+		if self.sIDHistory is not None:
+			for sid in self.sIDHistory:
+				sidhistory.append(str(sid))
+		
+		actonbehalf = self.allowedtoactonbehalfofotheridentity
+		if actonbehalf is not None:
+			actonbehalf = base64.b64encode(actonbehalf).decode()
+
+		alloweddeleg = self.allowedtodelegateto
+		if alloweddeleg is None:
+			alloweddeleg = []
+		return {
+			'_allowedtoactonbehalfofotheridentity' : actonbehalf,
+			'_dns' : self.dNSHostName,
+
+			'Aces' : [], #Post processing
+			'AllowedToDelegate' : [], #Post processing
+			'AllowedToAct' : [], #Post processing
+			'ObjectIdentifier' : self.objectSid,
+			'PrimaryGroupSID' : str(self.objectSid).rsplit('-',1)[0] + '-' + str(self.primaryGroupID),
+			"SPNTargets": [], #this seems to be always empty
+			"HasSIDHistory": [], #this seems to be always empty
+			"IsDeleted": bool(self.isDeleted),
+			"IsACLProtected": False , # Post processing
+			"Status": None, # no idea what this is
+			"DumpSMSAPassword" : [],
+			'Properties' : {
+				'name' : self.name,
+				'domain' : domain,
+				'domainsid' : str(self.objectSid).rsplit('-',1)[0] , 
+				'distinguishedname' : str(self.distinguishedName).upper(), 
+				'unconstraineddelegation' : self.uac_to_textflag('UAC_TRUSTED_FOR_DELEGATION'),
+				'enabled' : MSLDAP_UAC.ACCOUNTDISABLE in uac,
+				'trustedtoauth' : MSLDAP_UAC.TRUSTED_TO_AUTHENTICATE_FOR_DELEGATION in uac, 
+				'samaccountname' : self.sAMAccountName ,
+				'haslaps' : self.ms_Mcs_AdmPwdExpirationTime is not None,
+				'lastlogon' : bh_dt_convert(self.lastLogon),
+				'lastlogontimestamp' : bh_dt_convert(self.lastLogonTimestamp),
+				'whencreated' : bh_dt_convert(self.whenCreated),
+				'serviceprincipalnames' : self.servicePrincipalName,
+				'description' : self.description ,
+				'operatingsystem' : op,
+				'sidhistory' : sidhistory,
+				'allowedtodelegate' : alloweddeleg,
+			},
+			'LocalAdmins': {
+                'Collected': False,
+                'FailureReason': None,
+                'Results': [],
+            },
+            'PSRemoteUsers': {
+                'Collected': False,
+                'FailureReason': None,
+                'Results': [],
+            },
+			'RemoteDesktopUsers': {
+                'Collected': False,
+                'FailureReason': None,
+                'Results': [],
+            },
+            'DcomUsers': {
+                'Collected': False,
+                'FailureReason': None,
+                'Results': [],
+            },
+			'Sessions': {
+                'Collected': False,
+                'FailureReason': None,
+                'Results': [],
+            },
+            'PrivilegedSessions': {
+                'Collected': False,
+                'FailureReason': None,
+                'Results': [],
+            },
+            'RegistrySessions': {
+                'Collected': False,
+                'FailureReason': None,
+                'Results': [],
+            },
+		}

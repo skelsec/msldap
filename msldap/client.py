@@ -138,7 +138,7 @@ class MSLDAPClient:
 	def get_server_info(self):
 		return self._serverinfo
 
-	async def pagedsearch(self, query:str, attributes:List[str], controls:List[Tuple[str, str, str]] = None, tree:str = None):
+	async def pagedsearch(self, query:str, attributes:List[str], controls:List[Tuple[str, str, str]] = None, tree:str = None, search_scope:int=2):
 		"""
 		Performs a paged search on the AD, using the filter and attributes as a normal query does.
 			!The LDAP connection MUST be active before invoking this function!
@@ -151,6 +151,8 @@ class MSLDAPClient:
 		:type controls: dict
 		:param tree: Base tree to perform the search on
 		:type tree: str
+		:param search_scope: LDAP search scope
+		:type search_scope: int
 
 		:return: Async generator which yields (`dict`, None) tuple on success or (None, `Exception`) on error
 		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
@@ -188,7 +190,8 @@ class MSLDAPClient:
 			attributes = attributes, 
 			size_limit = self.ldap_query_page_size, 
 			controls = controls,
-			rate_limit=self.ldap_query_ratelimit
+			rate_limit=self.ldap_query_ratelimit,
+			search_scope=search_scope
 			):
 				
 				if err is not None:
@@ -289,6 +292,23 @@ class MSLDAPClient:
 				yield None, err
 				return
 			yield MSADGPO.from_ldap(entry), None
+	
+	async def get_all_containers(self, attrs:List[str] = MSADContainer_ATTRS):
+		"""
+		Fetches all container objects available in the LDAP tree and yields them as MSADContainer object.
+		
+		:return: Async generator which yields (`MSADUser`, None) tuple on success or (None, `Exception`) on error
+		:rtype: Iterator[(:class:`MSADUser`, :class:`Exception`)]
+		
+		"""
+		logger.debug('Polling AD for all container objects')
+		ldap_filter = r'(&(objectCategory=container)(objectClass=container))'
+		async for entry, err in self.pagedsearch(ldap_filter, attrs):
+			if err is not None:
+				yield None, err
+				return
+			yield MSADContainer.from_ldap(entry), None #self._ldapinfo
+		logger.debug('Finished polling for entries!')
 
 	async def get_all_laps(self):
 		"""
@@ -362,20 +382,20 @@ class MSLDAPClient:
 			return None, None
 		logger.debug('Finished polling for entries!')
 	
-	async def get_all_schemaentry(self):
+	async def get_all_schemaentry(self, attrs:List[str] = MSADSCHEMAENTRY_ATTRS):
 		"""
 		Fetches all Schema entries under CN=Schema,CN=Configuration,...
 
 		:return: Async generator which yields (`MSADSchemaEntry`, None) tuple on success or (None, `Exception`) on error
 		:rtype: Iterator[(:class:`MSADSchemaEntry`, :class:`Exception`)]
 		"""
-		res = await self.get_tree_plot('CN=Schema,CN=Configuration,' + self._tree, level = 1)		
+		res = await self.get_tree_plot(self._serverinfo['schemaNamingContext'], level = 1)		
 		for x in res:
 			for dn in res[x]:
 				async for entry, err in self._con.pagedsearch(
 					dn, 
 					r'(distinguishedName=%s)' % escape_filter_chars(dn),
-					attributes = [x.encode() for x in MSADSCHEMAENTRY_ATTRS], 
+					attributes = [x.encode() for x in attrs], 
 					size_limit = self.ldap_query_page_size, 
 					search_scope=BASE, 
 					controls = None,
@@ -626,7 +646,7 @@ class MSLDAPClient:
 				return
 			yield MSADGroup.from_ldap(entry), None
 			
-	async def get_all_ous(self):
+	async def get_all_ous(self, attrs:List[str] = MSADOU_ATTRS):
 		"""
 		Yields all OUs present in the LDAP tree.  
 
@@ -634,7 +654,7 @@ class MSLDAPClient:
 		:rtype: Iterator[(:class:`MSADOU`, :class:`Exception`)]
 		"""
 		ldap_filter = r'(objectClass=organizationalUnit)'
-		async for entry, err in self.pagedsearch(ldap_filter, MSADOU_ATTRS):
+		async for entry, err in self.pagedsearch(ldap_filter, attrs):
 			if err is not None:
 				yield None, err
 				return
@@ -861,7 +881,7 @@ class MSLDAPClient:
 				yield MSADSecurityInfo.from_ldap(entry2), None
 
 
-	async def get_all_trusts(self):
+	async def get_all_trusts(self, attrs:List[str] = MSADDomainTrust_ATTRS):
 		"""
 		Yields all trusted domains.
 
@@ -871,7 +891,7 @@ class MSLDAPClient:
 		"""
 
 		ldap_filter = r'(objectClass=trustedDomain)'
-		async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADDomainTrust_ATTRS):
+		async for entry, err in self.pagedsearch(ldap_filter, attributes = attrs):
 			if err is not None:
 				yield None, err
 				return
@@ -1634,7 +1654,29 @@ class MSLDAPClient:
 				return entry['attributes']['sAMAccountName'], None
 		except Exception as e:
 			return None, e
-	
+
+	async def dnattrs(self, dn, attrs:List[str]):
+		"""Fetches attributes of an object specified by DN"""
+		try:
+			query = '(distinguishedName=%s)' % dn
+			async for entry, err in self.pagedsearch(query, attrs):
+				if err is not None:
+					raise err
+				return entry['attributes'], None
+		except Exception as e:
+			return None, e
+
+	async def get_childobjects(self, dn):
+		try:
+			query = '(|(objectClass=container)(objectClass=organizationalUnit)(sAMAccountType=805306369)(objectClass=group)(&(objectCategory=person)(objectClass=user)))'
+			attrs =['objectSid', 'objectClass', 'objectGUID', 'distinguishedName', 'sAMAccountName', 'sAMAccountType']
+			async for entry, err in self.pagedsearch(query, attrs, tree=dn, search_scope=1):
+				if err is not None:
+					raise err
+				yield entry['attributes'], None
+		except Exception as e:
+			yield None, e
+   
 	async def dnslistzones(self):
 		"""Lists all DNS zones in the forest"""
 		try:

@@ -18,6 +18,8 @@ from msldap.ldap_objects.adca import MSADCA, MSADCA_ATTRS
 from msldap.ldap_objects.adenrollmentservice import MSADEnrollmentService_ATTRS, MSADEnrollmentService
 from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate, MSADCertificateTemplate_ATTRS
 from msldap.ldap_objects.adgmsa import MSADGMSAUser, MSADGMSAUser_ATTRS
+from msldap.ldap_objects.adcontainer import MSADContainer, MSADContainer_ATTRS
+
 
 __all__ = [
     'MSADUser', 
@@ -49,5 +51,7 @@ __all__ = [
     'MSADCertificateTemplate_ATTRS',
     'MSADGMSAUser', 
     'MSADGMSAUser_ATTRS',
+    'MSADContainer',
+    'MSADContainer_ATTRS',
 
 ]

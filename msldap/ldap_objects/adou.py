@@ -3,13 +3,16 @@
 # Author:
 #  Tamas Jos (@skelsec)
 #
+import base64
+from msldap.commons.utils import bh_dt_convert
+
 
 
 MSADOU_ATTRS = [ 	
 	'description', 'distinguishedName', 'dSCorePropagationData', 'gPLink', 'instanceType', 
 	'isCriticalSystemObject', 'name', 'nTSecurityDescriptor', 'objectCategory', 'objectClass', 
 	'objectGUID', 'ou', 'showInAdvancedViewOnly', 'systemFlags', 'uSNChanged', 'uSNCreated',
-	'whenChanged', 'whenCreated',
+	'whenChanged', 'whenCreated', 'isDeleted'
 ]
 
 class MSADOU:
@@ -32,6 +35,7 @@ class MSADOU:
 		self.uSNCreated = None #str
 		self.whenChanged = None #str
 		self.whenCreated = None #str
+		self.isDeleted = None #str
 	
 	@staticmethod
 	def from_ldap(entry):
@@ -54,6 +58,7 @@ class MSADOU:
 		adi.uSNCreated = entry['attributes'].get('uSNCreated') #int
 		adi.whenChanged = entry['attributes'].get('whenChanged') #datetime
 		adi.whenCreated = entry['attributes'].get('whenCreated') #datetime
+		adi.isDeleted = entry['attributes'].get('isDeleted') #datetime
 		return adi
 	
 	def to_dict(self):
@@ -76,8 +81,12 @@ class MSADOU:
 		d['uSNCreated'] = self.uSNCreated
 		d['whenChanged'] = self.whenChanged
 		d['whenCreated'] = self.whenCreated
+		d['isDeleted'] = self.isDeleted
 		return d
 
+	def get_row(self, attrs):
+		t = self.to_dict()
+		return [str(t.get(x)) if x !='nTSecurityDescriptor' else base64.b64encode(t.get(x, b'')).decode() for x in attrs]
 
 	def __str__(self):
 		t = 'MSADOU\r\n'
@@ -85,3 +94,30 @@ class MSADOU:
 		for k in d:
 			t += '%s: %s\r\n' % (k, d[k])
 		return t 
+	
+	def to_bh(self, domain, domainsid):
+		return {
+			'Aces' : [],
+			'Links'	: [],
+			'ObjectIdentifier' : self.objectGUID.upper(),
+			"IsDeleted": bool(self.isDeleted),
+			"IsACLProtected": False , # Post processing
+			'Properties' : {
+				'name' : self.name,
+				'domain' : domain,
+				'domainsid' : domainsid, 
+				'distinguishedname' : str(self.distinguishedName).upper(), 
+				'highvalue' : False, # seems always false
+				'whencreated' : bh_dt_convert(self.whenCreated),
+				'description' : self.description ,				
+				'blocksinheritance' : False, # seems always false
+			},
+			"GPOChanges": {
+                "LocalAdmins": [],
+                "RemoteDesktopUsers": [],
+                "DcomUsers": [],
+                "PSRemoteUsers": [],
+                "AffectedComputers": []
+            },
+			'_gPLink' : self.gPLink,
+		}
