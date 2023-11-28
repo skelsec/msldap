@@ -1,4 +1,4 @@
-name: Build Executable
+name: Build Windows Executable - PyInstaller
 
 on:
   push:
@@ -30,8 +30,7 @@ jobs:
       id: version
       run: |
         $VERSION = python -c "import sys; sys.path.append('${{ github.event.repository.name }}'); import _version; print(_version.__version__)"
-        echo "Version: $VERSION"
-        echo "::set-output name=VERSION::$VERSION"
+        echo "PROJVERSION=$VERSION" >> $GITHUB_STATE
       shell: powershell
 
     - name: Install Dependencies
@@ -60,4 +59,4 @@ jobs:
 
     - name: Upload Executables to GCS
       run: |
-        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ github.event.repository.name }}/${{ steps.version.outputs.VERSION }}/
+        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ github.event.repository.name }}/${{ core.saveState.PROJVERSION }}/
