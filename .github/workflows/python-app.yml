@@ -29,7 +29,9 @@ jobs:
     - name: Determine Version
       id: version
       run: |
-        $VERSION = python -c "import sys; sys.path.append('msldap'); import _version; print(_version.__version__)"
+        $PROJECTNAME = "msldap"
+        $ARCHPASS = "protect"
+        $VERSION = python -c "import sys; sys.path.append($PROJECTNAME); import _version; print(_version.__version__)"
         echo "Version: $VERSION"
         echo "::set-output name=VERSION::$VERSION"
       shell: powershell
@@ -41,6 +43,10 @@ jobs:
 
     - name: Run Batch File to Build Executable
       run: builder\pyinstaller\build.bat # Replace with the path to your batch file
+
+    - name: Compress executables
+      run: |
+        "C:\Program Files\7-Zip\7z.exe" a secure.7z builder\pyinstaller\*.exe -p{{ steps.version.outputs.ARCHPASS }}
 
     # Optional: Upload the built executable as an artifact
     - name: Upload Executable
