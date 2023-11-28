@@ -1,21 +1,12 @@
 ![Supported Python versions](https://img.shields.io/badge/python-3.6+-blue.svg) [![Documentation Status](https://readthedocs.org/projects/msldap/badge/?version=latest)](https://msldap.readthedocs.io/en/latest/?badge=latest) [![Twitter](https://img.shields.io/twitter/follow/skelsec?label=skelsec&style=social)](https://twitter.com/intent/follow?screen_name=skelsec)
 
-:triangular_flag_on_post: This is the public repository of msldap, for latest version and updates please consider supporting us through https://porchetta.industries/
-
 # msldap
 LDAP library for MS AD
 ![Documentation Status](https://user-images.githubusercontent.com/19204702/81515211-3761e880-9333-11ea-837f-bcbe2a67ee48.gif )
 
 ## :triangular_flag_on_post: Sponsors
 
-If you want to sponsors this project and have the latest updates on this project, latest issues fixed, latest features, please support us on https://porchetta.industries/
-
-## Official Discord Channel
-
-Come hang out on Discord!
-
-[![Porchetta Industries](https://discordapp.com/api/guilds/736724457258745996/widget.png?style=banner3)](https://discord.gg/ycGXUxy)
-
+If you want to sponsor this project, you can do it on GitHub now!
 
 # Documentation
 [Awesome documentation here!](https://msldap.readthedocs.io/en/latest/)
