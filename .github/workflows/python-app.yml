@@ -12,13 +12,7 @@ jobs:
       contents: 'read'
       id-token: 'write'
     
-    steps:
-    - id: 'auth'
-      uses: 'google-github-actions/auth@v1'
-      with:
-        workload_identity_provider: 'projects/octopwn-ea2a4/locations/global/workloadIdentityPools/github-actions-auth-pool/providers/github-actions-provider'
-        service_account: 'skelsec-bucket-foss-writer@octopwn-ea2a4.iam.gserviceaccount.com'
-        
+    steps:        
     - uses: actions/checkout@v2
       with:
         fetch-depth: 0
@@ -50,6 +44,12 @@ jobs:
       with:
         name: executable
         path: builder\pyinstaller\*.exe # Replace with the path to your built executable
+
+    - id: 'auth'
+      uses: 'google-github-actions/auth@v1'
+      with:
+        workload_identity_provider: 'projects/octopwn-ea2a4/locations/global/workloadIdentityPools/github-actions-auth-pool/providers/github-actions-provider'
+        service_account: 'skelsec-bucket-foss-writer@octopwn-ea2a4.iam.gserviceaccount.com'
 
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
