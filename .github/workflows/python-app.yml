@@ -59,4 +59,4 @@ jobs:
 
     - name: Upload Executables to GCS
       run: |
-        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ github.event.repository.name }}/${{ core.saveState.PROJVERSION }}/
+        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ github.event.repository.name }}/${{ github.core.saveState.PROJVERSION }}/
