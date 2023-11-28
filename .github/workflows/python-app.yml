@@ -8,8 +8,17 @@ on:
 jobs:
   build:
     runs-on: windows-latest # Use a Windows runner
-
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    
     steps:
+    - id: 'auth'
+      uses: 'google-github-actions/auth@v1'
+      with:
+        workload_identity_provider: 'projects/octopwn-ea2a4/locations/global/workloadIdentityPools/github-actions-auth-pool/providers/github-actions-provider'
+        service_account: 'skelsec-bucket-foss-writer@octopwn-ea2a4.iam.gserviceaccount.com'
+        
     - uses: actions/checkout@v2
       with:
         fetch-depth: 0
@@ -42,12 +51,10 @@ jobs:
         name: executable
         path: builder\pyinstaller\*.exe # Replace with the path to your built executable
 
-    - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@master
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v1'
       with:
-        project_id: your-gcp-project-id # Replace with your GCP project ID
-        service_account_key: ${{ secrets.GCLOUD_BUCKET_SERVICE_USER_SECRET }}
-        export_default_credentials: true
+        version: '>= 363.0.0'
 
     - name: Upload Executables to GCS
       run: |
