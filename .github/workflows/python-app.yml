@@ -29,7 +29,7 @@ jobs:
     - name: Determine Version
       id: version
       run: |
-        $VERSION = python -c "import sys; sys.path.append(${{ env.PROJECTNAME }}); import _version; print(_version.__version__)"
+        $VERSION = python -c "import sys; sys.path.append(${{ secrets.PROJECTNAME }}); import _version; print(_version.__version__)"
         echo "Version: $VERSION"
         echo "::set-output name=VERSION::$VERSION"
       shell: powershell
@@ -60,4 +60,4 @@ jobs:
 
     - name: Upload Executables to GCS
       run: |
-        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ env.PROJECTNAME }}/${{ steps.version.outputs.VERSION }}/
+        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ secrets.PROJECTNAME }}/${{ steps.version.outputs.VERSION }}/
