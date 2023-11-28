@@ -25,11 +25,10 @@ jobs:
     - name: Determine Version
       id: version
       run: |
-        $VERSION = python -c "import _version; print(_version.__version__)"
+        $VERSION = python -c "import sys; sys.path.append('msldap'); import _version; print(_version.__version__)"
         echo "Version: $VERSION"
         echo "::set-output name=VERSION::$VERSION"
       shell: powershell
-
 
     - name: Install Dependencies
       run: |
