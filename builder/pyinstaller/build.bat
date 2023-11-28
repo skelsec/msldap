@@ -16,8 +16,8 @@ GOTO :BUILD
 cd %repo%\..\
 pip install .
 cd %repo%\examples
-pyinstaller -F msldapclient.py %hiddenimports%
-pyinstaller -F msldapbloodhound.py %hiddenimports%
+pyinstaller -F msldapclient.py -n msldap %hiddenimports%
+pyinstaller -F msldapbloodhound.py -n msldap-bloodhound %hiddenimports%
 cd %repo%\examples\dist & copy *.exe %root%
 GOTO :CLEANUP
 
