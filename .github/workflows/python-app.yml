@@ -44,7 +44,7 @@ jobs:
 
     - name: Compress executables
       run: |
-        "C:\Program Files\7-Zip\7z.exe" a secure.7z builder\pyinstaller\*.exe -pprotected
+        "C:\Program Files\7-Zip\7z.exe a secure.7z builder\pyinstaller\*.exe -pprotected"
 
     # Optional: Upload the built executable as an artifact
     - name: Upload Executable
