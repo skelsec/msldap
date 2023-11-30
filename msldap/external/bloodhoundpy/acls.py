@@ -24,7 +24,7 @@
 from __future__ import unicode_literals
 import logging
 from multiprocessing import Pool
-from msldap.external.bloodhoundpy.lib import cstruct
+from msldap.external.bloodhoundpy.lib.cstruct import *
 from io import BytesIO
 from future.utils import iteritems, native_str
 from struct import unpack, pack
