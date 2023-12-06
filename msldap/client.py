@@ -309,6 +309,14 @@ class MSLDAPClient:
 				return
 			yield MSADContainer.from_ldap(entry), None #self._ldapinfo
 		logger.debug('Finished polling for entries!')
+	
+	async def get_all_foreignsecurityprincipals(self, attrs:List[str]):
+		ldap_filter = r'(&(objectClass=foreignSecurityPrincipal)(objectCategory=foreignSecurityPrincipal))'
+		async for entry, err in self.pagedsearch(ldap_filter, attrs):
+			if err is not None:
+				yield None, err
+				return
+			yield entry, None
 
 	async def get_all_laps(self):
 		"""
