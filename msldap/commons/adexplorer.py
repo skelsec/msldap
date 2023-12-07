@@ -1,20 +1,25 @@
+
+# The following code was heavily inspired by the 
+# ADExplorerSnapshot.py project created by c3c
+# 
+# The project was licensed under MIT at the time
+# of creating this script, but did not include a
+# LICENSE.md file
+# https://github.com/c3c/ADExplorerSnapshot.py
+
 import io
 import struct
 import enum
-import uuid
 import calendar
-
+from datetime import datetime
 from typing import Dict, List
-#from msldap.external.adexplorersnapshot.parser.classes import Header
-#from msldap.external.adexplorersnapshot.parser.structure import structure
-from winacl.dtyp.sid import SID
-from msldap.external.bloodhoundpy.lib.cstruct import hexdump
+
+from msldap import logger
 from msldap.ldap_objects import MSADSchemaEntry, MSADInfo_ATTRS, MSADInfo, MSADContainer, MSADContainer_ATTRS, \
     MSADDomainTrust_ATTRS, MSADDomainTrust, MSADOU, MSADOU_ATTRS, MSADUser, MSADUser_ATTRS, MSADGroup, MSADGroup_ATTRS,\
     MSADMachine_ATTRS, MSADMachine, MSADGPO_ATTRS, MSADGPO
 
 from msldap.protocol.typeconversion import MSLDAP_BUILTIN_ATTRIBUTE_TYPES, LDAP_WELL_KNOWN_ATTRS
-from datetime import datetime, tzinfo
 
 ENCODER_SPEFIFIC_FULCTIONS = [
     'single_bool', 'single_str', 'multi_str'
@@ -330,6 +335,7 @@ class Header:
         self.fileoffsetHigh = None
         self.fileoffsetEnd = None
         self.unk0x43a = None
+        self.mappingOffset = None
     
     @staticmethod
     def from_bytes(data:bytes):
@@ -349,6 +355,7 @@ class Header:
         header.fileoffsetHigh = struct.unpack("<I", buff.read(4))[0]
         header.fileoffsetEnd = struct.unpack("<I", buff.read(4))[0]
         header.unk0x43a = struct.unpack("<i", buff.read(4))[0]
+        header.mappingOffset = (header.fileoffsetHigh << 32) | header.fileoffsetLow
         return header
     
     def __str__(self):
@@ -485,7 +492,7 @@ class DatEntry:
                 return fconvert(values, encoding='utf-16-le')
             return fconvert(values)
         
-        print('!!!!!!!!!!!!!!!!!!!!!!!! %s' % prop.propName)
+        logger.debug('[ADEXPLORER] No parser found for property "%s"' % prop.propName)
         return values
     
     def get_all_attributes(self):
@@ -499,52 +506,54 @@ class DatEntry:
         if item == '*':
             return self.get_all_attributes()
         return self.get_attribute(item)
+    
+    def get(self, item, default=None):
+        if item == '*':
+            res = self.get_all_attributes()
+            if len(res) == 0:
+                return default
+            return res
+        res = self.get_attribute(item)
+        if res is None:
+            return default
+        return res
 
 class Snapshot:
-    def __init__(self, max_cache_size = 100000):
+    def __init__(self, max_cache_size:int = 100000):
         self.filename:str = None
         self.filehandle = None
-        self.header = None
+        self.header:Header = None
         self.max_cache_size = max_cache_size
-        self.dn_index:Dict[str, LDIFIdx] = {}
-        self.objectclass_index = {}
-        self.samaccounttype_index = {}
-        self.objecttype_index = {}
 
-        self.dn_attr_index = None
-        self.objectclass_attr_index = None
-        self.samaccounttype_attr_index = None
-        self.objecttype_attr_index = None
+        # All object's DN strings mapped to DatEntry
+        self.dn_index:Dict[str, DatEntry] = {}
+
+        # All properties/classes/rights index mapped to the corresponding object
+        # Also, the name of each object is mapped to their index number
+        # It's a bit of a mess
         self.attr_index = {}
+
+        # Hope we'll never encounter a file with multiple 'domain' class entry
         self.rootdomain = None
     
     @staticmethod
     async def from_file(filename:str):
         sn = Snapshot()
         sn.filename = filename
+        sn.filehandle = open(filename, 'rb')
         await sn.parse()
         return sn
     
-    async def open_or_handle(self):
-        if self.filehandle is None:
-            self.filehandle = open(self.filename, 'rb')
-        return self.filehandle
-    
     async def parse(self):
-        self.filehandle = await self.open_or_handle()
         self.filehandle.seek(0)
         self.header = Header.from_buffer(self.filehandle)
         await self.build_index()
 
     async def build_index(self):
-        print('[+] Building index...')
-        self.filehandle.seek(0x43e)
-        for _ in range(self.header.numObjects):
-            pos = self.filehandle.tell()
-            objSize = struct.unpack("<I", self.filehandle.read(4))[0]
-            self.filehandle.seek(pos+objSize)
-        
-        self.filehandle.seek(8, io.SEEK_CUR)
+        logger.debug('[ADEXPLORER] Building index...')
+        self.filehandle.seek(self.header.mappingOffset, io.SEEK_SET)
+
+        logger.debug('[ADEXPLORER] Parsing Properties...')
         # Properties begin
         numattrs = struct.unpack("<I", self.filehandle.read(4))[0]
         attridx = 0
@@ -555,6 +564,7 @@ class Snapshot:
             self.attr_index[self.attr_index[attridx].propName] = attridx
             attridx += 1
 
+        logger.debug('[ADEXPLORER] Parsing Classes...')
         # Classes begin
         numclasses = struct.unpack("<I", self.filehandle.read(4))[0]
         for _ in range(numclasses):
@@ -564,6 +574,7 @@ class Snapshot:
             self.attr_index[self.attr_index[attridx].className] = attridx
             attridx += 1
         
+        logger.debug('[ADEXPLORER] Parsing Rights...')
         # Rights begin
         numrights = struct.unpack("<I", self.filehandle.read(4))[0]
         for _ in range(numrights):
@@ -572,24 +583,24 @@ class Snapshot:
             self.attr_index[attridx] = right.get_meta(attridx, pos)
             attridx += 1
         
-        print('[+] Meta index built!')
-        print('[+] Building DN index...')
+        logger.debug('[ADEXPLORER] Meta index built!')
+        logger.debug('[ADEXPLORER] Building DN index...')
         self.filehandle.seek(0x43e)
         for _ in range(self.header.numObjects):
             pos = self.filehandle.tell()
             de = DatEntry.from_buffer(self.filehandle, self.attr_index)
             dn = de['distinguishedName'].upper()
-            de._bhcache['objectCategory'] = de['objectCategory']
-            de._bhcache['sAMAccountType'] = de['sAMAccountType']
-            de._bhcache['objectClass'] = de['objectClass']
-            if self.rootdomain is None and 'domain' in de['objectClass']:
+            de._bhcache['objectCategory'] = de.get('objectCategory', '')
+            de._bhcache['sAMAccountType'] = de.get('sAMAccountType', [])
+            de._bhcache['objectClass'] = de.get('objectClass', [])
+            #de._bhcache['objectSid'] = de.get('objectSid', None)
+            #de._bhcache['objectGUID'] = de.get('objectGUID', None)
+            if self.rootdomain is None and 'domain' in de._bhcache['objectClass']:
                 self.rootdomain = dn
             self.dn_index[dn] = de
             self.filehandle.seek(pos+de.objSize)
 
-
-        #input('Done! Remaining: %s' % (self.header.fileoffsetEnd - self.filehandle.tell()))
-    
+    #### DEBUG STUFF HERE ####
     async def attr_lookup(self, attr):
         #searches all objects who have this attribute
         #returns a list of DNs
@@ -603,7 +614,11 @@ class Snapshot:
             if attridx in self.dn_index[dn].mappingTable:
                 yield dn
 
-
+    async def sid_lookup(self, sid):
+        for dn in self.dn_index:
+            if sid == self.dn_index[dn]['objectSid']:
+                print(dn)
+    
     #### MSLDAP Functions ####
     async def get_all_schemaentry(self, attrs:List[str]):
         for attridx in self.attr_index:
@@ -613,7 +628,7 @@ class Snapshot:
             if hasattr(self.attr_index[attridx], 'schemaIDGUID') is True:
                 dn = self.attr_index[attridx].DN.upper()
                 if dn not in self.dn_index:
-                    print('[-] DN not found in index: %s' % dn)
+                    logger.debug('[ADEXPLORER] DN not found in index: %s' % dn)
                     continue
                 temp = {}
                 temp['attributes'] = {}
@@ -700,34 +715,34 @@ class Snapshot:
     async def get_all_containers(self, attrs:List[str] = MSADContainer_ATTRS):
         for dn in self.dn_index:
             bhcache = self.dn_index[dn]._bhcache
-            if bhcache['objectCategory'] is not None and 'container' in bhcache['objectCategory']:
-                if bhcache['objectClass'] is not None and 'objectClass' in bhcache:
-                    temp = {}
-                    temp['attributes'] = {}
-                    for attr in attrs:
-                        res = self.dn_index[dn][attr]
-                        if res is not None:
-                            temp['attributes'][attr] = res
-                    yield MSADContainer.from_ldap(temp), None
+            if 'CONTAINER' in bhcache['objectCategory'].upper() and 'container' in bhcache['objectClass']:
+                temp = {}
+                temp['attributes'] = {}
+                for attr in attrs:
+                    res = self.dn_index[dn][attr]
+                    if res is not None:
+                        temp['attributes'][attr] = res
+                yield MSADContainer.from_ldap(temp), None
 
     async def get_all_foreignsecurityprincipals(self, attrs:List[str]):
         for dn in self.dn_index:
             bhcache = self.dn_index[dn]._bhcache
-            if bhcache['objectClass'] is not None and 'foreignSecurityPrincipal' in bhcache['objectClass']:
-                if bhcache['objectCategory'] is not None and 'foreignSecurityPrincipal' in bhcache['objectCategory']:
-                    temp = {}
-                    temp['attributes'] = {}
-                    for attr in attrs:
-                        res = self.dn_index[dn][attr]
-                        if res is not None:
-                            temp['attributes'][attr] = res
-                    yield temp, None
+            if 'foreignSecurityPrincipal' in bhcache['objectClass'] and 'FOREIGN-SECURITY-PRINCIPAL' in bhcache['objectCategory'].upper():
+                temp = {}
+                temp['attributes'] = {}
+                for attr in attrs:
+                    res = self.dn_index[dn][attr]
+                    if res is not None:
+                        temp['attributes'][attr] = res
+                yield temp, None
 
     async def get_objectacl_by_dn(self, dn:str):
         return self.dn_index[dn.upper()]['nTSecurityDescriptor'], None
     
     async def dnattrs(self, dn, attrs:List[str]):
         dn = dn.upper()
+        if dn not in self.dn_index:
+            return {}, None
         temp = {}
         temp['attributes'] = {}
         for attr in attrs:
@@ -740,7 +755,7 @@ class Snapshot:
 async def amain():
     import traceback
     try:
-        sn = await Snapshot.from_file('/mnt/hgfs/!SHARED/dd2.dat')
+        sn = await Snapshot.from_file('dd2.dat')
         i = 0
         entry = ''
         async for entry, err in sn.get_all_schemaentry(['name', 'schemaIDGUID']):
@@ -810,24 +825,9 @@ async def amain():
     except Exception as e:
         traceback.print_exc()
 
-async def amain2():
-    from msldap.bloodhound import MSLDAPDump2Bloodhound
-
-    sn = await Snapshot.from_file('/mnt/hgfs/!SHARED/dd2.dat')
-    bh = MSLDAPDump2Bloodhound(sn)
-    await bh.run()
-
-async def amain3():
-    sn = await Snapshot.from_file('/mnt/hgfs/!SHARED/dd2.dat')
-    for dn in sn.dn_index:
-        if dn == 'CN=USERS,DC=TEST,DC=CORP':
-            print('FOUND')
-
-
-
 def main():
     import asyncio
-    asyncio.run(amain3())
+    asyncio.run(amain())
     
 if __name__ == '__main__':
     main()

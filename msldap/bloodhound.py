@@ -3,6 +3,7 @@ import zipfile
 import json
 import base64
 import datetime
+import asyncio
 
 from tqdm import tqdm
 
@@ -12,19 +13,22 @@ from msldap.external.bloodhoundpy.utils import parse_gplink_string, is_filtered_
 from msldap.commons.factory import LDAPConnectionFactory
 from msldap.connection import MSLDAPClientConnection
 from msldap.client import MSLDAPClient
-from msldap.external.adexplorersnapshot.parser.snapshot import Snapshot
+from msldap.commons.adexplorer import Snapshot
+from msldap import logger
 
 async def dummy_print(msg):
 	print(msg)
 
 class MSLDAPDump2Bloodhound:
-	def __init__(self, url: str or MSLDAPClient or LDAPConnectionFactory or MSLDAPClientConnection, progress = True, output_path = None, print_cb = None):
+	def __init__(self, url: str or MSLDAPClient or LDAPConnectionFactory or MSLDAPClientConnection, progress = True, output_path = None, use_mp:bool=True, print_cb = None):
 		self.debug = False
 		self.ldap_url = url
 		self.connection: MSLDAPClient = None
 		self.ldapinfo = None
 		self.domainname = None
 		self.domainsid = None
+		self.use_mp = use_mp
+		self.mp_sdbatch_length = 5000
 		self.print_cb = print_cb
 		self.with_progress = progress
 		if self.print_cb is None:
@@ -78,6 +82,18 @@ class MSLDAPDump2Bloodhound:
 			return
 		if self.with_progress is True:
 			pbar.close()
+	
+	def get_json_wrapper(self, enumtype):
+		return {
+			'data' : [],
+			'meta': {
+				'methods' : 0,
+				'type': enumtype,
+				'version': 5,
+				'count': 0
+			}
+		}
+		
 
 	def split_json(self, enumtype, data):
 		if data['meta']['count'] <= self.MAX_ENTRIES_PER_FILE:
@@ -101,21 +117,19 @@ class MSLDAPDump2Bloodhound:
 			yield jsonstruct
 
 	
-	async def write_json_to_zip(self, enumtype, data):
-		filepart = 0
-		for chunk in self.split_json(enumtype, data):
-			if filepart == 0:
-				filename = '%s_%s.json' % (self.curdate, enumtype)
-			else:
-				filename = '%s_%s_%02d.json' % (self.curdate, enumtype, filepart)
-			self.zipfile.writestr(filename, json.dumps(chunk))
-			filepart += 1
+	async def write_json_to_zip(self, enumtype, data, filepart = 0):
+		if filepart == 0:
+			filename = '%s_%s.json' % (self.curdate, enumtype)
+		else:
+			filename = '%s_%s_%02d.json' % (self.curdate, enumtype, filepart)
+		self.zipfile.writestr(filename, json.dumps(data))
+
 	
 	async def lookup_dn_children(self, parent_dn):
 		parent_dn = parent_dn.upper()
 		parent_dn_reversed = reverse_dn_components(parent_dn)
 		if parent_dn not in self.DNs:
-			await self.print('DN not found: %s' % parent_dn_reversed)
+			logger.debug('[BH] DN not found: %s' % parent_dn_reversed)
 			return []
 
 		branch = self.DNs_sorted
@@ -123,7 +137,7 @@ class MSLDAPDump2Bloodhound:
 		for part in explode_dn(parent_dn_reversed):
 			level += 1
 			if part not in branch:
-				await self.print('Part not found: %s Full: %s Branch: %s Level: %s Parts: %s' % (part, parent_dn_reversed, branch.keys(), level, explode_dn(parent_dn_reversed)))
+				logger.debug('[BH] Part not found: %s Full: %s Branch: %s Level: %s Parts: %s' % (part, parent_dn_reversed, branch.keys(), level, explode_dn(parent_dn_reversed)))
 				return []
 			branch = branch[part]
 
@@ -136,9 +150,12 @@ class MSLDAPDump2Bloodhound:
 			if is_filtered_container_child(tdn):
 				continue
 			if tdn not in self.DNs:
-				#await self.print('Missing %s' % tdn)
-				#continue
 				attrs, err = await self.connection.dnattrs(tdn, ['distinguishedName','objectGUID', 'objectClass','sAMAaccountType', 'sAMAccountName', 'objectSid', 'name'])
+				if err is not None:
+					raise err
+				if attrs is None or len(attrs) == 0:
+					logger.debug('[BH] Missing DN: %s' % tdn)
+					continue
 				res = self.resolve_entry(attrs)
 				results.append({
 					'ObjectIdentifier': res['objectid'].upper(),
@@ -155,6 +172,10 @@ class MSLDAPDump2Bloodhound:
 
 	async def dump_schema(self):
 		pbar = await self.create_progress('Dumping schema')
+		# manual stuff here...
+		# https://learn.microsoft.com/en-us/windows/win32/adschema/c-foreignsecurityprincipal
+		self.schema['foreignsecurityprincipal'] = '89e31c12-8530-11d0-afda-00c04fd930c9'
+		
 		async for entry, err in self.connection.get_all_schemaentry(['name', 'schemaIDGUID']):
 			if err is not None:
 				raise err
@@ -296,6 +317,9 @@ class MSLDAPDump2Bloodhound:
 		async for entry, err in self.connection.get_all_foreignsecurityprincipals(['name','sAMAccountName', 'objectSid', 'objectGUID', 'distinguishedName', 'objectClass']):
 			bhentry = {}
 			entry = entry['attributes']
+			if 'container' in  entry.get('objectClass', []) is True:
+				continue
+
 			if entry['objectSid'] in WELLKNOWN_SIDS:
 				bhentry['objectid'] = '%s-%s' % (self.domainname.upper(), entry['objectSid'].upper())
 			bhentry['principal'] = self.domainname.upper()
@@ -316,8 +340,6 @@ class MSLDAPDump2Bloodhound:
 				'ObjectType' : bhentry['type'],
 			}
 			self.DNs[entry['distinguishedName'].upper()] = bhentry['objectid']
-   
-			#await self.print(entry)
 			
 		await self.close_progress(pbar)
 
@@ -336,6 +358,8 @@ class MSLDAPDump2Bloodhound:
 				json.dump(self.DNs_sorted, f, indent=4)
 	
 	async def dump_acls(self):
+		sdbatch = []
+		tasks = []
 		pbar = await self.create_progress('Dumping SDs', total=len(self.ocache))
 		for sid in self.ocache:
 			dn = self.ocache[sid]['dn']
@@ -355,9 +379,34 @@ class MSLDAPDump2Bloodhound:
 			if otype == 'ou':
 				otype = 'organizational-unit'
 			if dn.upper() not in self.aces:
-				aces, relations = parse_binary_acl(oentry, otype.lower(), secdesc, self.schema)
-				self.aces[dn.upper()] = (aces, relations)
+				if self.use_mp is True:
+					from concurrent.futures import ProcessPoolExecutor
+					sdbatch.append((dn, oentry, otype.lower(), secdesc, self.schema))
+					if len(sdbatch) > self.mp_sdbatch_length:
+						loop = asyncio.get_running_loop()
+						with ProcessPoolExecutor() as executor:
+							for sde in sdbatch:
+								tasks.append(loop.run_in_executor(executor, parse_binary_acl, *sde))
+						results = await asyncio.gather(*tasks)
+						for dn, aces, relations in results:
+							self.aces[dn.upper()] = (aces, relations)
+						sdbatch = []
+						tasks = []
+				else:
+					dn, aces, relations = parse_binary_acl(dn, oentry, otype.lower(), secdesc, self.schema)
+					self.aces[dn.upper()] = (aces, relations)
 			await self.update_progress(pbar)
+		
+		if len(sdbatch) != 0:
+			loop = asyncio.get_running_loop()
+			with ProcessPoolExecutor() as executor:
+				for sde in sdbatch:
+					tasks.append(loop.run_in_executor(executor, parse_binary_acl, *sde))
+				results = await asyncio.gather(*tasks)
+				for dn, aces, relations in results:
+					self.aces[dn.upper()] = (aces, relations)
+				sdbatch = []
+				tasks = []
 		await self.close_progress(pbar)
 	
 	async def resolve_gplink(self, gplinks):
@@ -371,10 +420,17 @@ class MSLDAPDump2Bloodhound:
 			if reverse_dn_components(gplink_dn.upper()) in self.DNs:
 				lguid = self.DNs[reverse_dn_components(gplink_dn.upper())]['ObjectIdentifier']
 			else:
-				attrs, err = await self.connection.dnattrs(gplink_dn, ['objectGUID', 'objectSid'])
+				attrs, err = await self.connection.dnattrs(gplink_dn.upper(), ['objectGUID', 'objectSid'])
 				if err is not None:
 					raise err
-				lguid = attrs['objectGUID']
+				if attrs is None or len(attrs) == 0:
+					logger.debug('[BH] Missing DN: %s' % gplink_dn)
+					continue
+				try:
+					lguid = attrs['objectGUID']
+				except:
+					logger.debug('[BH] Missing GUID for %s' % gplink_dn)
+					continue
 			link['GUID'] = lguid.upper()
 			links.append(link)
 		return links
@@ -390,16 +446,6 @@ class MSLDAPDump2Bloodhound:
 
 	async def dump_domains(self):
 		pbar = await self.create_progress('Dumping domains', self.totals['domain'])
-		jsonstruct = {
-			'data' : [],
-			'meta': {
-				'methods' : 0,
-				'type': 'domains',
-				'version': 5,
-				'count': 0
-			}
-		}
-
 		adinfo, err = await self.connection.get_ad_info()
 		if err is not None:
 			raise err
@@ -412,6 +458,8 @@ class MSLDAPDump2Bloodhound:
 		domainentry['ChildObjects'] =  await self.lookup_dn_children(domainentry['Properties']['distinguishedname'])
 		domainentry['Links'] = await self.resolve_gplink(domainentry['_gPLink'])
 
+		jsonstruct = self.get_json_wrapper('domains')
+		filectr = 0
 		async for entry, err in self.connection.get_all_trusts():
 			if err is not None:
 				raise err
@@ -420,9 +468,14 @@ class MSLDAPDump2Bloodhound:
 		domainentry = self.remove_hidden(domainentry)
 		jsonstruct['data'].append(domainentry)
 		jsonstruct['meta']['count'] += 1
+		if jsonstruct['meta']['count'] == self.MAX_ENTRIES_PER_FILE:
+			await self.write_json_to_zip('domains', jsonstruct, filectr)
+			jsonstruct = self.get_json_wrapper('domains')
+			filectr += 1
 		await self.update_progress(pbar)
 		
-		await self.write_json_to_zip('domains', jsonstruct)
+		if jsonstruct['meta']['count'] > 0:
+			await self.write_json_to_zip('domains', jsonstruct, filectr)
 		await self.close_progress(pbar)
 		if self.debug is True:
 			with open('domains.json', 'w') as f:
@@ -430,34 +483,26 @@ class MSLDAPDump2Bloodhound:
 	
 	async def dump_users(self):
 		pbar = await self.create_progress('Dumping users', self.totals['user'])
-		jsonstruct = {
-			'data' : [],
-			'meta': {
-				'methods' : 0,
-				'type': 'users',
-				'version': 5,
-				'count': 0
-			}
-		}
 
+		jsonstruct = self.get_json_wrapper('users')
+		filectr = 0
 		async for ldapentry, err in self.connection.get_all_users():
-			try:
-				entry = ldapentry.to_bh(self.domainname)
-			except Exception as e:
-				print(ldapentry)
-				raise
+			if err is not None:
+				raise err
+			
+			entry = ldapentry.to_bh(self.domainname)
 			meta, relations = self.aces[entry['Properties']['distinguishedname'].upper()]
 			entry['IsACLProtected'] = meta['IsACLProtected']
 			entry['Aces'] = resolve_aces(relations, self.domainname, self.domainsid, self.ocache)
 			
 			if entry['_allowerdtodelegateto'] is not None:
-				seen = []
+				seen = {}
 				for host in entry['_allowerdtodelegateto']:
 					try:
 						target = host.split('/')[1]
 						target = target.split(':')[0]
 					except IndexError:
-						await self.print('[!] Invalid delegation target: %s', host)
+						logger.debug('[BH] Invalid delegation target: %s', host)
 						continue
 					try:
 						sid = self.computer_sidcache[target.lower()]
@@ -472,9 +517,14 @@ class MSLDAPDump2Bloodhound:
 
 			jsonstruct['data'].append(entry)
 			jsonstruct['meta']['count'] += 1
+			if jsonstruct['meta']['count'] == self.MAX_ENTRIES_PER_FILE:
+				await self.write_json_to_zip('users', jsonstruct, filectr)
+				jsonstruct = self.get_json_wrapper('users')
+				filectr += 1
 			await self.update_progress(pbar)
 		
-		await self.write_json_to_zip('users', jsonstruct)
+		if jsonstruct['meta']['count'] > 0:
+			await self.write_json_to_zip('users', jsonstruct, filectr)
 		await self.close_progress(pbar)
 
 		if self.debug is True:
@@ -483,16 +533,8 @@ class MSLDAPDump2Bloodhound:
 	
 	async def dump_computers(self):
 		pbar = await self.create_progress('Dumping computers', self.totals['computer'])
-		jsonstruct = {
-			'data' : [],
-			'meta': {
-				'methods' : 0,
-				'type': 'computers',
-				'version': 5,
-				'count': 0
-			}
-		}
-
+		jsonstruct = self.get_json_wrapper('computers')
+		filectr = 0
 		async for ldapentry, err in self.connection.get_all_machines():
 			entry = ldapentry.to_bh(self.domainname)
 			meta, relations = self.aces[entry['Properties']['distinguishedname'].upper()]
@@ -501,7 +543,7 @@ class MSLDAPDump2Bloodhound:
 			
 			if entry['_allowedtoactonbehalfofotheridentity'] is not None:
 				allowedacl = base64.b64decode(entry['_allowedtoactonbehalfofotheridentity'])
-				entryres, relations = parse_binary_acl(entry, 'computer', allowedacl, self.schema)
+				_, entryres, relations = parse_binary_acl(entry['Properties']['distinguishedname'].upper(), entry, 'computer', allowedacl, self.schema)
 				
 				for ace in resolve_aces(relations, self.domainname, self.domainsid, self.ocache):
 					if ace['RightName'] == 'Owner':
@@ -520,7 +562,7 @@ class MSLDAPDump2Bloodhound:
 						target = host.split('/')[1]
 						target = target.split(':')[0]
 					except IndexError:
-						await self.print('[!] Invalid delegation target: %s', host)
+						logger.debug('[BH] Invalid delegation target: %s', host)
 						continue
 					try:
 						sid = self.computer_sidcache[target.lower()]
@@ -538,9 +580,14 @@ class MSLDAPDump2Bloodhound:
 			entry = self.remove_hidden(entry)
 			jsonstruct['data'].append(entry)
 			jsonstruct['meta']['count'] += 1
+			if jsonstruct['meta']['count'] == self.MAX_ENTRIES_PER_FILE:
+				await self.write_json_to_zip('computers', jsonstruct, filectr)
+				jsonstruct = self.get_json_wrapper('computers')
+				filectr += 1
 			await self.update_progress(pbar)
 		
-		await self.write_json_to_zip('computers', jsonstruct)
+		if jsonstruct['meta']['count'] > 0:
+			await self.write_json_to_zip('computers', jsonstruct, filectr)
 		await self.close_progress(pbar)
 
 		if self.debug is True:
@@ -549,16 +596,8 @@ class MSLDAPDump2Bloodhound:
    
 	async def dump_groups(self):
 		pbar = await self.create_progress('Dumping groups', self.totals['group'])
-		jsonstruct = {
-			'data' : [],
-			'meta': {
-				'methods' : 0,
-				'type': 'groups',
-				'version': 5,
-				'count': 0
-			}
-		}
-
+		jsonstruct = self.get_json_wrapper('groups')
+		filectr = 0
 		async for ldapentry, err in self.connection.get_all_groups():
 			entry = ldapentry.to_bh(self.domainname)
 			meta, relations = self.aces[entry['Properties']['distinguishedname'].upper()]
@@ -580,9 +619,14 @@ class MSLDAPDump2Bloodhound:
 			entry = self.remove_hidden(entry)
 			jsonstruct['data'].append(entry)
 			jsonstruct['meta']['count'] += 1
+			if jsonstruct['meta']['count'] == self.MAX_ENTRIES_PER_FILE:
+				await self.write_json_to_zip('groups', jsonstruct, filectr)
+				jsonstruct = self.get_json_wrapper('groups')
+				filectr += 1
 			await self.update_progress(pbar)
 		
-		await self.write_json_to_zip('groups', jsonstruct)
+		if jsonstruct['meta']['count'] > 0:
+			await self.write_json_to_zip('groups', jsonstruct, filectr)
 		await self.close_progress(pbar)
 
 		if self.debug is True:
@@ -591,16 +635,8 @@ class MSLDAPDump2Bloodhound:
 
 	async def dump_gpos(self):
 		pbar = await self.create_progress('Dumping GPOs', self.totals['gpo'])
-		jsonstruct = {
-			'data' : [],
-			'meta': {
-				'methods' : 0,
-				'type': 'gpos',
-				'version': 5,
-				'count': 0
-			}
-		}
-
+		jsonstruct = self.get_json_wrapper('gpos')
+		filectr = 0
 		async for ldapentry, err in self.connection.get_all_gpos():
 			entry = ldapentry.to_bh(self.domainname, self.domainsid)
 			meta, relations = self.aces[entry['Properties']['distinguishedname'].upper()]
@@ -610,9 +646,14 @@ class MSLDAPDump2Bloodhound:
 
 			jsonstruct['data'].append(entry)
 			jsonstruct['meta']['count'] += 1
+			if jsonstruct['meta']['count'] == self.MAX_ENTRIES_PER_FILE:
+				await self.write_json_to_zip('gpos', jsonstruct, filectr)
+				jsonstruct = self.get_json_wrapper('gpos')
+				filectr += 1
 			await self.update_progress(pbar)
 		
-		await self.write_json_to_zip('gpos', jsonstruct)
+		if jsonstruct['meta']['count'] > 0:
+			await self.write_json_to_zip('gpos', jsonstruct, filectr)
 		await self.close_progress(pbar)
 
 		if self.debug is True:
@@ -621,15 +662,8 @@ class MSLDAPDump2Bloodhound:
 
 	async def dump_ous(self):
 		pbar = await self.create_progress('Dumping OUs', self.totals['ou'])
-		jsonstruct = {
-			'data' : [],
-			'meta': {
-				'methods' : 0,
-				'type': 'ous',
-				'version': 5,
-				'count': 0
-			}
-		}
+		jsonstruct = self.get_json_wrapper('ous')
+		filectr = 0
 
 		async for ldapentry, err in self.connection.get_all_ous():
 			if err is not None:
@@ -644,9 +678,15 @@ class MSLDAPDump2Bloodhound:
 
 			jsonstruct['data'].append(entry)
 			jsonstruct['meta']['count'] += 1
+			if jsonstruct['meta']['count'] == self.MAX_ENTRIES_PER_FILE:
+				await self.write_json_to_zip('ous', jsonstruct, filectr)
+				jsonstruct = self.get_json_wrapper('ous')
+				filectr += 1
+
 			await self.update_progress(pbar)
 		
-		await self.write_json_to_zip('ous', jsonstruct)
+		if jsonstruct['meta']['count'] > 0:
+			await self.write_json_to_zip('ous', jsonstruct, filectr)
 		await self.close_progress(pbar)
 
 		if self.debug is True:
@@ -655,15 +695,8 @@ class MSLDAPDump2Bloodhound:
 	
 	async def dump_containers(self):
 		pbar = await self.create_progress('Dumping Containers', self.totals['container'])
-		jsonstruct = {
-			'data' : [],
-			'meta': {
-				'methods' : 0,
-				'type': 'containers',
-				'version': 5,
-				'count': 0
-			}
-		}
+		jsonstruct = self.get_json_wrapper('containers')
+		filectr = 0
 		async for ldapentry, err in self.connection.get_all_containers():
 			if err is not None:
 				raise err
@@ -678,9 +711,14 @@ class MSLDAPDump2Bloodhound:
 
 			jsonstruct['data'].append(entry)
 			jsonstruct['meta']['count'] += 1
+			if jsonstruct['meta']['count'] == self.MAX_ENTRIES_PER_FILE:
+				await self.write_json_to_zip('containers', jsonstruct, filectr)
+				jsonstruct = self.get_json_wrapper('containers')
+				filectr += 1
 			await self.update_progress(pbar)
 		
-		await self.write_json_to_zip('containers', jsonstruct)
+		if jsonstruct['meta']['count'] > 0:
+			await self.write_json_to_zip('containers', jsonstruct, filectr)
 		await self.close_progress(pbar)
 
 		if self.debug is True:
@@ -688,13 +726,13 @@ class MSLDAPDump2Bloodhound:
 				json.dump(jsonstruct, f)
 	
 	async def dump_ldap(self):
-		await self.print('[+] Connecting to LDAP server')
-
 		if isinstance(self.ldap_url, str):
 			if self.ldap_url.startswith('adexplorer://'):
 				self.ldap_url = self.ldap_url[13:]
+				await self.print('[+] Parsing ADEXPLORER Snapshot...')
 				self.connection = await Snapshot.from_file(self.ldap_url)
 				self.ldap_url = self.connection
+				await self.print('[+] Parsing done!')
 
 		if isinstance(self.ldap_url, Snapshot) is False:
 			if isinstance(self.ldap_url, str):
@@ -709,22 +747,18 @@ class MSLDAPDump2Bloodhound:
 			
 			if isinstance(self.ldap_url, MSLDAPClientConnection):
 				self.connection = MSLDAPClient(None, None, connection = self.ldap_url)
-				
+			
+			await self.print('[+] Connecting to LDAP server')
 			self.connection.keepalive = True
 			_, err = await self.connection.connect()
 			if err is not None:
 				raise err
+			await self.print('[+] Connected to LDAP serrver')
 			
 			self.ldapinfo = self.connection.get_server_info()
 			self.domainname = self.ldapinfo['defaultNamingContext'].upper().replace('DC=','').replace(',','.')
 		else:
 			self.domainname = self.connection.rootdomain.upper().replace('DC=','').replace(',','.')
-		
-	
-		
-
-		await self.print('[+] Connected to LDAP serrver')
-		
 		
 		await self.dump_schema()
 		await self.dump_lookuptable()

@@ -1,3 +1,5 @@
+from msldap import logger
+
 WELLKNOWN_SIDS = {
         "S-1-0": ("Null Authority", "USER"),
         "S-1-0-0": ("Nobody", "USER"),
@@ -78,7 +80,7 @@ def resolve_aces(aces, domainname, domainsid, sidcache):
         else:
             linkitem = sidcache.get(ace['sid'])
             if linkitem is None:
-                print('Cache miss for %s' % ace['sid'])
+                logger.debug('[EXT-BH] Cache miss for %s' % ace['sid'])
                 entry = {
                     'type': 'Base',
                     'objectid': ace['sid']

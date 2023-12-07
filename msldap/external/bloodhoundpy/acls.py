@@ -65,14 +65,14 @@ EXTRIGHTS_GUID_MAPPING = {
     "UserAccountRestrictionsSet": string_to_bin("4c164200-20c0-11d0-a768-00aa006e0529")
 }
 
-def parse_binary_acl(entry, entrytype, acl, objecttype_guid_map):
+def parse_binary_acl(dn, entry, entrytype, acl, objecttype_guid_map):
     """
     Main ACL structure parse function.
     This is offloaded to subprocesses and takes the current entry and the
     acl data as argument. This is then returned and processed back in the main process
     """
     if not acl:
-        return entry, []
+        return dn, entry, []
     sd = SecurityDescriptor(BytesIO(acl))
 
     # Check for protected DACL flag
@@ -243,7 +243,7 @@ def parse_binary_acl(entry, entrytype, acl, objecttype_guid_map):
 
     # pprint.pprint(entry)
         # pprint.pprint(relations)
-    return entry, relations
+    return dn, entry, relations
 
 def can_write_property(ace_object, binproperty):
     '''
