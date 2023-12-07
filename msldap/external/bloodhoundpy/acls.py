@@ -21,15 +21,15 @@
 # SOFTWARE.
 #
 ####################
-from __future__ import unicode_literals
-import logging
-from multiprocessing import Pool
-from msldap.external.bloodhoundpy.lib.cstruct import *
-from io import BytesIO
-from future.utils import iteritems, native_str
-from struct import unpack, pack
+#from __future__ import unicode_literals
 import re
 import binascii
+from msldap import logger
+from msldap.external.bloodhoundpy.lib.cstruct import *
+from io import BytesIO
+#from future.utils import iteritems, native_str
+from struct import unpack, pack
+
 
 def bin_to_string(uuid):
     uuid1, uuid2, uuid3 = unpack('<LHH', uuid[:8])
@@ -88,7 +88,7 @@ def parse_binary_acl(dn, entry, entrytype, acl, objecttype_guid_map):
     for ace_object in sd.dacl.aces:
         if ace_object.ace.AceType != 0x05 and ace_object.ace.AceType != 0x00:
             # These are the only two aces we care about currently
-            logging.debug('Don\'t care about acetype %d', ace_object.ace.AceType)
+            logger.debug('Don\'t care about acetype %d', ace_object.ace.AceType)
             continue
         # Check if sid is ignored
         sid = str(ace_object.acedata.sid)
@@ -297,25 +297,27 @@ def build_relation(sid, relation, acetype='', inherited=False):
         raise ValueError("BH 4.0 incompatible output called")
     return {'rightname': relation, 'sid': sid, 'inherited': inherited}
 
-class AclEnumerator(object):
-    """
-    Helper class for ACL parsing.
-    """
-    def __init__(self, addomain, addc, collect):
-        self.addomain = addomain
-        self.addc = addc
-        # Store collection methods specified
-        self.collect = collect
-        self.pool = None
-
-    def init_pool(self):
-        self.pool = Pool()
+#from multiprocessing import Pool
+#class AclEnumerator(object):
+#    """
+#    Helper class for ACL parsing.
+#    """
+#    def __init__(self, addomain, addc, collect):
+#        self.addomain = addomain
+#        self.addc = addc
+#        # Store collection methods specified
+#        self.collect = collect
+#        self.pool = None
+#
+#    def init_pool(self):
+#        self.pool = Pool()
 
 """
 The following is Security Descriptor parsing using cstruct
 Thanks to Erik Schamper for helping me implement this!
 """
-cdef = native_str("""
+#cdef = native_str("""
+cdef = """
 struct SECURITY_DESCRIPTOR {
     uint8   Revision;
     uint8   Sbz1;
@@ -365,7 +367,8 @@ struct ACCESS_ALLOWED_OBJECT_ACE {
     char    InheritedObjectType[Flags & 2 * 8];
     LDAP_SID Sid;
 };
-""")
+"""
+
 c_secd = cstruct()
 c_secd.load(cdef, compiled=True)
 
@@ -484,7 +487,8 @@ class ACCESS_ALLOWED_OBJECT_ACE(object):
 
     def __repr__(self):
         out = []
-        for name, value in iteritems(vars(ACCESS_ALLOWED_OBJECT_ACE)):
+        #for name, value in iteritems(vars(ACCESS_ALLOWED_OBJECT_ACE)):
+        for name, value in vars(ACCESS_ALLOWED_OBJECT_ACE):
             if not name.startswith('_') and type(value) is int and self.has_flag(value):
                 out.append(name)
         data = (' | '.join(out),
@@ -552,7 +556,8 @@ class ACCESS_MASK(object):
 
     def __repr__(self):
         out = []
-        for name, value in iteritems(vars(ACCESS_MASK)):
+        #for name, value in iteritems(vars(ACCESS_MASK)):
+        for name, value in vars(ACCESS_MASK):
             if not name.startswith('_') and type(value) is int and self.has_priv(value):
                 out.append(name)
         return "<ACCESS_MASK RawMask=%d Flags=%s>" % (self.mask, ' | '.join(out))
@@ -593,7 +598,8 @@ class ACE(object):
 
     def __repr__(self):
         out = []
-        for name, value in iteritems(vars(ACE)):
+        #for name, value in iteritems(vars(ACE)):
+        for name, value in vars(ACE):
             if not name.startswith('_') and type(value) is int and self.has_flag(value):
                 out.append(name)
         return "<ACE Type=%s Flags=%s RawFlags=%d \n\tAce=%s>" % (self.ace.AceType, ' | '.join(out), self.ace.AceFlags, str(self.acedata))
