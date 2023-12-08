@@ -60,6 +60,7 @@ setup(
 	entry_points={
 		'console_scripts': [
 			'msldap = msldap.examples.msldapclient:main',
+            'msldap-bloodhound = msldap.examples.msldapbloodhound:main',
 		],
 	}
 )

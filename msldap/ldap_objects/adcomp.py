@@ -262,9 +262,6 @@ class MSADMachine:
 		alloweddeleg = self.allowedtodelegateto
 		if alloweddeleg is None:
 			alloweddeleg = []
-		compname = self.dNSHostName
-		if compname is None or compname == '':
-			compname = '%s.%s' % (self.sAMAccountName[:-1].upper(), domain.upper())
 		return {
 			'_allowedtoactonbehalfofotheridentity' : actonbehalf,
 			'_dns' : self.dNSHostName,
@@ -281,7 +278,7 @@ class MSADMachine:
 			"Status": None, # no idea what this is
 			"DumpSMSAPassword" : [],
 			'Properties' : {
-				'name' : compname,
+				'name' : '%s@%s' % (self.sAMAccountName.upper(), domain.upper()),
 				'domain' : domain,
 				'domainsid' : str(self.objectSid).rsplit('-',1)[0] , 
 				'distinguishedname' : str(self.distinguishedName).upper(), 
