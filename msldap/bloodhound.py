@@ -417,8 +417,9 @@ class MSLDAPDump2Bloodhound:
 		for gplink_dn, options in parse_gplink_string(gplinks):
 			link = {}
 			link['IsEnforced'] = options == 2
-			if reverse_dn_components(gplink_dn.upper()) in self.DNs:
-				lguid = self.DNs[reverse_dn_components(gplink_dn.upper())]['ObjectIdentifier']
+			gplink_dn = gplink_dn.upper()
+			if gplink_dn in self.DNs:
+				lguid = self.ocache[self.DNs[gplink_dn]]['ObjectIdentifier']
 			else:
 				attrs, err = await self.connection.dnattrs(gplink_dn.upper(), ['objectGUID', 'objectSid'])
 				if err is not None:

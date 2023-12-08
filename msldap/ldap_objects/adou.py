@@ -108,7 +108,7 @@ class MSADOU:
 			"IsDeleted": bool(self.isDeleted),
 			"IsACLProtected": False , # Post processing
 			'Properties' : {
-				'name' : self.name,
+				'name' : '%s@%s' % (self.name.upper(), domain.upper()),
 				'domain' : domain,
 				'domainsid' : domainsid, 
 				'distinguishedname' : str(self.distinguishedName).upper(), 
