@@ -81,10 +81,10 @@ def single_sid(x, encode = False):
 		return str(SID.from_bytes(x[0]))
 	return [SID.from_string(x).to_bytes()]
 
-def single_str(x, encode = False):
+def single_str(x, encode = False, encoding = 'utf-8'):
 	if encode is False:
-		return x[0].decode()
-	return [x.encode()]
+		return x[0].decode(encoding)
+	return [x.encode(encoding)]
 
 def single_bytes(x, encode = False):
 	if encode is False:
@@ -96,9 +96,9 @@ def single_int(x, encode = False):
 		return int(x[0])
 	return [str(x).encode()]
 
-def single_bool(x, encode = False):
+def single_bool(x, encode = False, encoding = 'utf-8'):
 	if encode is False:
-		x = x[0].decode()
+		x = x[0].decode(encoding)
 		if x == 'FALSE':
 			return False
 		return True
@@ -114,10 +114,10 @@ def single_sd(x, encode = False):
 		return SECURITY_DESCRIPTOR.from_bytes(x[0])
 	return [x.to_bytes()]
 
-def single_date(x, encode = False):
+def single_date(x, encode = False, encoding = 'utf-8'):
 	if encode is False:
 		try:
-			x = x[0].decode()
+			x = x[0].decode(encoding)
 			match = time_format.fullmatch(x)
 			if match is None:
 				return x
@@ -186,12 +186,12 @@ def multi_int(x, encode = False):
 		x = [x]
 	return [str(k).encode() for k in x]
 
-def multi_str(x, encode = False):
+def multi_str(x, encode = False, encoding = 'utf-8'):
 	if encode is False:
-		return [e.decode() for e in x ]
+		return [e.decode(encoding) for e in x ]
 	if isinstance(x, list) is False:
 		x = [x]
-	return [line.encode() for line in x]
+	return [line.encode(encoding) for line in x]
 
 def multi_sid(x, encode = False):
 	if encode is False:

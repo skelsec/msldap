@@ -86,7 +86,12 @@ class MSADOU:
 
 	def get_row(self, attrs):
 		t = self.to_dict()
-		return [str(t.get(x)) if x !='nTSecurityDescriptor' else base64.b64encode(t.get(x, b'')).decode() for x in attrs]
+		if 'nTSecurityDescriptor' in attrs:
+			if t['nTSecurityDescriptor'] is not None:
+				t['nTSecurityDescriptor'] = base64.b64encode(t['nTSecurityDescriptor']).decode()
+			else:
+				t['nTSecurityDescriptor'] = b''
+		return [str(t.get(x)) for x in attrs]
 
 	def __str__(self):
 		t = 'MSADOU\r\n'
@@ -103,7 +108,7 @@ class MSADOU:
 			"IsDeleted": bool(self.isDeleted),
 			"IsACLProtected": False , # Post processing
 			'Properties' : {
-				'name' : self.name,
+				'name' : '%s@%s' % (self.name.upper(), domain.upper()),
 				'domain' : domain,
 				'domainsid' : domainsid, 
 				'distinguishedname' : str(self.distinguishedName).upper(), 

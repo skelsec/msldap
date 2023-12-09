@@ -49,22 +49,7 @@ def bh_dt_convert(dt:datetime.datetime):
 		return -1
 	ts = max(0,int(dt.timestamp()))
 	return ts
-	
 
-#taken from bloodhound.py
-def is_filtered_container(containerdn):
-	if "CN=DOMAINUPDATES,CN=SYSTEM,DC=" in containerdn.upper():
-		return True
-	if "CN=POLICIES,CN=SYSTEM,DC=" in containerdn.upper() and (containerdn.upper().startswith('CN=USER') or containerdn.upper().startswith('CN=MACHINE')):
-		return True
-	return False
-
-def is_filtered_container_child(containerdn):
-	if "CN=PROGRAM DATA,DC=" in containerdn.upper():
-		return True
-	if "CN=SYSTEM,DC=" in containerdn.upper():
-		return True
-	return False
 
 FUNCTIONAL_LEVELS = {
 		0: "2000 Mixed/Native",

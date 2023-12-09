@@ -278,12 +278,12 @@ class MSADMachine:
 			"Status": None, # no idea what this is
 			"DumpSMSAPassword" : [],
 			'Properties' : {
-				'name' : self.name,
+				'name' : '%s@%s' % (self.sAMAccountName.upper(), domain.upper()),
 				'domain' : domain,
 				'domainsid' : str(self.objectSid).rsplit('-',1)[0] , 
 				'distinguishedname' : str(self.distinguishedName).upper(), 
 				'unconstraineddelegation' : self.uac_to_textflag('UAC_TRUSTED_FOR_DELEGATION'),
-				'enabled' : MSLDAP_UAC.ACCOUNTDISABLE in uac,
+				'enabled' : MSLDAP_UAC.ACCOUNTDISABLE not in uac,
 				'trustedtoauth' : MSLDAP_UAC.TRUSTED_TO_AUTHENTICATE_FOR_DELEGATION in uac, 
 				'samaccountname' : self.sAMAccountName ,
 				'haslaps' : self.ms_Mcs_AdmPwdExpirationTime is not None,

@@ -22,7 +22,7 @@
 # - Rework definition parsing, maybe pycparser?
 # - Change expression implementation
 # - Lazy reading?
-from __future__ import print_function
+
 import re
 import sys
 import ast
