@@ -1065,7 +1065,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			_, err = await self.connection.del_user_from_group(user_dn, group_dn)
 			if err is not None:
 				raise err
-			print('User added to group!')
+			print('User removed from group!')
 			return True
 		except:
 			traceback.print_exc()
