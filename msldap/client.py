@@ -51,6 +51,9 @@ class MSLDAPClient:
 		self.target = target
 		self.keepalive = keepalive
 		self.ldap_query_page_size = 1000
+		self._disable_channel_binding = False
+		self._disable_signing = False
+		self._null_channel_binding = False
 		if self.target is not None:
 			self.ldap_query_page_size = self.target.ldap_query_page_size
 		
@@ -109,6 +112,9 @@ class MSLDAPClient:
 			self.disconnected_evt = asyncio.Event()
 			if self._con is None:
 				self._con = MSLDAPClientConnection(self.target, self.creds)
+				self._con._disable_channel_binding = self._disable_channel_binding
+				self._con._disable_signing = self._disable_signing
+				self._con._null_channel_binding = self._null_channel_binding
 				_, err = await self._con.connect()
 				if err is not None:
 					raise err

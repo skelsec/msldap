@@ -56,6 +56,11 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		self.adinfo = None
 		self.ldapinfo = None
 		self.domain_name = None
+		self.noisig = False
+		self.nocb = False
+		self._disable_channel_binding = False
+		self._disable_signing = False
+		self._null_channel_binding = False
 		self.__current_dirs = {}
 		self._current_dn = None
 		
@@ -73,6 +78,9 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			
 			self.connection = self.conn_url.get_client()
 			self.connection.keepalive = True
+			self.connection._disable_channel_binding = self._disable_channel_binding
+			self.connection._disable_signing = self._disable_signing
+			self.connection._null_channel_binding = self._null_channel_binding
 			_, err = await self.connection.connect()
 			if err is not None:
 				raise err
@@ -88,6 +96,21 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 			return False
+		
+	async def do_nosig(self):
+		"""Disables signing"""
+		self._disable_signing = True
+		return True
+	
+	async def do_nocb(self):
+		"""Disables channel binding"""
+		self._disable_channel_binding = True
+		return True
+	
+	async def do_nullcb(self):
+		"""Sets incorrect channel binding data"""
+		self._null_channel_binding = True
+		return True
 
 	async def do_ldapinfo(self, show = True):
 		"""Prints detailed LDAP connection info (DSA)"""

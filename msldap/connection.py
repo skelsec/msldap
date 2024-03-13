@@ -49,6 +49,9 @@ class MSLDAPClientConnection:
 		self.message_table_notify = {}
 		self.encryption_sequence_counter = 0 # this will be set by the inderlying auth algo
 		self.cb_data = None #for channel binding
+		self._disable_channel_binding = False # putting it here for scanners to be able to turn it off
+		self._disable_signing = False
+		self._null_channel_binding = False
 
 		if self.credential.protocol == asyauthProtocol.NONE:
 			self.is_anon = True
@@ -187,12 +190,15 @@ class MSLDAPClientConnection:
 			self.connection_closed_evt = asyncio.Event()
 			packetizer = LDAPPacketizer()
 			client = UniClient(self.target, packetizer)
-			self.network = await client.connect()
+			self.network = await asyncio.wait_for(client.connect(), timeout=self.target.timeout)
 			
 			# now processing channel binding options
-			if self.target.protocol == UniProto.CLIENT_SSL_TCP:
-				certdata = self.network.get_peer_certificate()
-				self.cb_data = b'tls-server-end-point:' + sha256(certdata).digest()
+			if self.target.protocol == UniProto.CLIENT_SSL_TCP and self._disable_channel_binding is False:
+				if self._null_channel_binding is True:
+					self.cb_data = b'tls-server-end-point:' + sha256(b'').digest()
+				else:
+					certdata = self.network.get_peer_certificate()
+					self.cb_data = b'tls-server-end-point:' + sha256(certdata).digest()
 
 			self.handle_incoming_task = asyncio.create_task(self.__handle_incoming())
 			self.status = MSLDAPClientStatus.CONNECTED
@@ -250,6 +256,12 @@ class MSLDAPClientConnection:
 				flags = ISC_REQ.CONNECTION|ISC_REQ.CONFIDENTIALITY|ISC_REQ.INTEGRITY
 				if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 					flags = ISC_REQ.CONNECTION
+				
+				# this switch is for the case when we are using NTLM and we want to disable signing
+				# useful for testing if the server supports it
+				if self._disable_signing is True:
+					flags = ISC_REQ.CONNECTION
+				
 				data, to_continue, err = await self.auth.authenticate(None, spn=self.target.to_target_string(), flags=flags, cb_data = self.cb_data)
 				if err is not None:
 					return None, err
@@ -383,6 +395,11 @@ class MSLDAPClientConnection:
 					try:
 						flags = ISC_REQ.CONNECTION|ISC_REQ.CONFIDENTIALITY|ISC_REQ.INTEGRITY
 						if self.target.protocol == UniProto.CLIENT_SSL_TCP:
+							flags = ISC_REQ.CONNECTION
+						
+						# this switch is for the case when we are using NTLM and we want to disable signing
+						# useful for testing if the server supports it
+						if self.credential.protocol == asyauthProtocol.NTLM and self._disable_signing is True:
 							flags = ISC_REQ.CONNECTION
 						
 						data, to_continue, err = await self.auth.authenticate(challenge, cb_data = self.cb_data, spn=self.target.to_target_string(), flags=flags)

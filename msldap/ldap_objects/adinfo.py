@@ -15,7 +15,7 @@ MSADInfo_ATTRS = [
 	'objectGUID', 'objectSid', 'pwdHistoryLength', 
 	'pwdProperties', 'serverState', 'systemFlags', 'uASCompat', 'uSNChanged', 
 	'uSNCreated', 'whenChanged', 'whenCreated', 'rIDManagerReference',
-	'msDS-Behavior-Version', 'description', 'isDeleted', 'gPLink'
+	'msDS-Behavior-Version', 'description', 'isDeleted', 'gPLink', 'ms-DS-MachineAccountQuota'
 ]
 
 class MSADInfo:
@@ -54,6 +54,7 @@ class MSADInfo:
 		self.description = None
 		self.isDeleted = None
 		self.gPLink = None
+		self.machineAccountQuota = None
 	
 	@staticmethod
 	def from_ldap(entry):
@@ -91,6 +92,7 @@ class MSADInfo:
 		adi.description = entry['attributes'].get('description')
 		adi.isDeleted = entry['attributes'].get('isDeleted')
 		adi.gPLink = entry['attributes'].get('gPLink')
+		adi.machineAccountQuota = entry['attributes'].get('ms-DS-MachineAccountQuota')
 
 		#https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/564dc969-6db3-49b3-891a-f2f8d0a68a7f
 		adi.domainmodelevel = entry['attributes'].get('msDS-Behavior-Version')
@@ -130,6 +132,7 @@ class MSADInfo:
 		d['whenCreated'] = self.whenCreated
 		d['domainmodelevel'] = self.domainmodelevel
 		d['description'] = self.description
+		d['ms-DS-MachineAccountQuota'] = self.machineAccountQuota
 		return d
 
 
@@ -166,6 +169,9 @@ class MSADInfo:
 		t += 'whenCreated: %s\n' % self.whenCreated
 		t += 'domainmodelevel: %s\n' % self.domainmodelevel
 		t += 'description: %s\n' % self.description
+		t += 'isDeleted: %s\n' % self.isDeleted
+		t += 'gPLink: %s\n' % self.gPLink
+		t += 'ms-DS-MachineAccountQuota: %s\n' % self.machineAccountQuota
 		return t
 	
 	def get_row(self, attrs):
