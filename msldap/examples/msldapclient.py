@@ -15,6 +15,8 @@ import json
 import base64
 import zipfile
 import os
+import importlib.util
+import sys
 
 from asysocks.unicomm.common.target import UniTarget
 from asyauth.common.credentials import UniCredential
@@ -45,6 +47,7 @@ from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate,\
 from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest
 from tabulate import tabulate
 from msldap.commons.exceptions import LDAPSearchException
+from msldap.commons.plugin import MSLDAPConsolePlugin
 
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 	def __init__(self, url = None):
@@ -62,6 +65,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		self._disable_signing = False
 		self._null_channel_binding = False
 		self.__current_dirs = {}
+		self.__loaded_plugins = {}
 		self._current_dn = None
 		
 
@@ -465,6 +469,38 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			print('Change directory error! %s' % e)
 			self._current_dn = original_path
 			self.prompt = '[%s]> ' % (self._current_dn,)
+			return False
+
+	async def do_rm(self, subdn, confirm = 'NO'):
+		"""Remove an object from the current DN"""
+		dn = '%s,%s' % (subdn, self._current_dn)
+		res = await self.do_delete(dn, confirm)
+		if res is True:
+			await self.do_cd('.')
+		return res
+
+	async def do_delete(self, dn, confirm = 'NO'):
+		"""Remove an object identified by its DN"""
+		try:
+			await self.do_ldapinfo(False)
+			await self.do_adinfo(False)
+			if self.connection._con.is_anon is True:
+				print('Anonymous connection. Most functionalities will not work!')
+				return False
+			
+			print('This will delete the following object: %s' % dn)
+			if confirm.upper() != 'YES':
+				print('As a safety measure, you have to confirm the deletion by typing YES in all caps after the DN to be deleted!')
+				print('Example: "delete %s YES"' % dn)
+				print('Not confirmed! Aborting!')
+				return False
+			_, err = await self.connection.delete(dn)
+			if err is not None:
+				raise err
+			print('Delete OK!')
+			return True
+		except:
+			traceback.print_exc()
 			return False
 
 	async def do_ls(self, fullpath = False):
@@ -1531,6 +1567,30 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 
 				print(entry)
 			return True
+		except:
+			traceback.print_exc()
+			return False
+
+	async def do_plugin(self, pluginpath, runargs = None):
+		"""Loads a plugin and runs it"""
+		try:
+			if pluginpath not in self.__loaded_plugins:
+				spec = importlib.util.spec_from_file_location("plugin_module_%s" % len(self.__loaded_plugins), pluginpath)
+				plugin_module = importlib.util.module_from_spec(spec)
+				sys.modules["plugin_module_%s" % len(self.__loaded_plugins)] = plugin_module
+				spec.loader.exec_module(plugin_module)
+				self.__loaded_plugins[pluginpath] = plugin_module
+			else:
+				plugin_module = self.__loaded_plugins[pluginpath]
+			# Find the MSLDAPConsolePlugin subclass
+			for item in dir(plugin_module):
+				obj = getattr(plugin_module, item)
+				if isinstance(obj, type) and issubclass(obj, MSLDAPConsolePlugin) and obj is not MSLDAPConsolePlugin:
+					plugin_instance = obj(self, self.connection)
+					return await plugin_instance.run(runargs)
+			else:
+				print('No plugin class found in that module! Please make sure you have a class that inherits from MSLDAPConsolePlugin!')
+				return False
 		except:
 			traceback.print_exc()
 			return False

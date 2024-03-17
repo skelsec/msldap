@@ -883,4 +883,6 @@ class MSLDAPClientConnection:
 		if isinstance(res, Exception):
 			return None, res
 		
+		if 'attributes' not in res.native['protocolOp']:
+			return None, None
 		return convert_attributes(res.native['protocolOp']['attributes']), None

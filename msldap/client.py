@@ -127,16 +127,19 @@ class MSLDAPClient:
 			res, err = await self._con.get_serverinfo()
 			if err is not None:
 				raise err
-			self._serverinfo = res
-			self._tree = res['defaultNamingContext']
-			self._ldapinfo, err = await self.get_ad_info()
-			if self._con.is_anon is False:
-				if err is not None:
-					raise err
-				self._domainsid_cache[self._ldapinfo.objectSid] = self._ldapinfo.name
+			if res is None:
+				print('RootDSE is empty! You will need to find the tree manually!')
+			else:
+				self._serverinfo = res
+				self._tree = res['defaultNamingContext']
+				self._ldapinfo, err = await self.get_ad_info()
+				if self._con.is_anon is False:
+					if err is not None:
+						raise err
+					self._domainsid_cache[self._ldapinfo.objectSid] = self._ldapinfo.name
 			
-			if self.keepalive is True:
-				self.__keepalive_task = asyncio.create_task(self.__keepalive(res['defaultNamingContext']))
+				if self.keepalive is True:
+					self.__keepalive_task = asyncio.create_task(self.__keepalive(res['defaultNamingContext']))
 			return True, None
 		except Exception as e:
 			return False, e
