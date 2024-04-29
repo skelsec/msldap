@@ -397,9 +397,9 @@ class MSLDAPClientConnection:
 						if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 							flags = ISC_REQ.CONNECTION
 						
-						# this switch is for the case when we are using NTLM and we want to disable signing
+						# this switch is for the case when we want to disable signing
 						# useful for testing if the server supports it
-						if self.credential.protocol == asyauthProtocol.NTLM and self._disable_signing is True:
+						if self._disable_signing is True:
 							flags = ISC_REQ.CONNECTION
 						
 						data, to_continue, err = await self.auth.authenticate(challenge, cb_data = self.cb_data, spn=self.target.to_target_string(), flags=flags)
