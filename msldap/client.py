@@ -1635,7 +1635,7 @@ class MSLDAPClient:
 			async for entry, err in self.pagedsearch(query, ['distinguishedName', 'objectSid']):
 				if err is not None:
 					raise err
-				entry['attributes']['distinguishedName'], None
+				return entry['attributes']['distinguishedName'], None
 		except Exception as e:
 			return None, e
 	

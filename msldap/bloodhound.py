@@ -772,7 +772,7 @@ class MSLDAPDump2Bloodhound:
 			await self.dump_gpos()
 			await self.dump_ous()
 			await self.dump_containers()
-
+		await self.print('[+] Bloodhound data saved to %s' % self.zipfilepath)
 
 	
 	async def run(self):
