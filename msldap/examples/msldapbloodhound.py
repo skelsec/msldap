@@ -6,7 +6,7 @@ async def amain():
 	msldap = MSLDAPDump2Bloodhound(args.url)
 	await msldap.run()
 
-if __name__ == '__main__':
+def main():
 	import argparse
 	parser = argparse.ArgumentParser(description='Bloodhound collector for MSLDAP')
 	parser.add_argument('url', help='LDAP connection URL, or ADEXPLORER dat file path in the form adexplorer://<path>')
@@ -14,3 +14,6 @@ if __name__ == '__main__':
 WARNING: This script is still in development. It is not guaranteed to provide the same results as the original Bloodhound collector.
 """)
 	asyncio.run(amain())
+
+if __name__ == '__main__':
+	main()
