@@ -1,9 +1,8 @@
 import asyncio
 from msldap.bloodhound import MSLDAPDump2Bloodhound
 
-async def amain():
-	args = parser.parse_args()
-	msldap = MSLDAPDump2Bloodhound(args.url)
+async def amain(url):
+	msldap = MSLDAPDump2Bloodhound(url)
 	await msldap.run()
 
 def main():
@@ -13,7 +12,8 @@ def main():
 	print("""
 WARNING: This script is still in development. It is not guaranteed to provide the same results as the original Bloodhound collector.
 """)
-	asyncio.run(amain())
+	args = parser.parse_args()
+	asyncio.run(amain(args.url))
 
 if __name__ == '__main__':
 	main()
