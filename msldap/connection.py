@@ -1,5 +1,6 @@
 import asyncio
 from typing import List, Dict
+import ssl
 
 from msldap import logger
 from msldap.commons.common import MSLDAPClientStatus
@@ -521,7 +522,7 @@ class MSLDAPClientConnection:
 					)
 			self.handle_incoming_task.cancel()
 			await asyncio.sleep(0)
-			await self.network.wrap_ssl(self.target.get_ssl_context())
+			await self.network.wrap_ssl(self.target.get_ssl_context(ssl.PROTOCOL_TLS_CLIENT))
 			self.handle_incoming_task = asyncio.create_task(self.__handle_incoming())
 			self.status = MSLDAPClientStatus.CONNECTED
 			await asyncio.sleep(0)
