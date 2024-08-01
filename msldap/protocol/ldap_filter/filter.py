@@ -409,7 +409,7 @@ class ParserActions:
     def return_escaped_char(self, input, start, end, elements=None):
         string = self.elements_to_string(elements)
 
-        if string:
+        if string and string != '\\':
             chr_code = int(string.replace('\\', ''))
 
             return chr(chr_code)
