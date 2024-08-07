@@ -13,7 +13,7 @@ def equality(attr, value):
 				'extensibleMatch' : MatchingRuleAssertion({
 						'matchingRule' : oid_raw.encode(),
 						'type' : name.encode(),
-						'matchValue' : value.encode(),
+						'matchValue' : rfc4515_encode(value),
 						'dnAttributes' : False
 					})
 				})
@@ -29,7 +29,7 @@ def equality(attr, value):
 					'type' : attr.encode(),
 					'substrings' : Substrings([
 							Substring({
-								'any' : value[1:-1].encode()
+								'any' : rfc4515_encode(value[1:-1])
 							})
 						])
 				})
@@ -41,7 +41,7 @@ def equality(attr, value):
 					'type' : attr.encode(),
 					'substrings' : Substrings([
 							Substring({
-								'final' : value[1:].encode()
+								'final' : rfc4515_encode(value[1:])
 							})
 						])
 				})
@@ -53,7 +53,7 @@ def equality(attr, value):
 					'type' : attr.encode(),
 					'substrings' : Substrings([
 							Substring({
-								'initial' : value[:-1].encode()
+								'initial' : rfc4515_encode(value[:-1])
 							})
 						])
 				})
@@ -63,7 +63,7 @@ def equality(attr, value):
 		return Filter({
 				'equalityMatch' : {
 					'attributeDesc' : attr.encode(),
-					'assertionValue' : value.encode()
+					'assertionValue' : rfc4515_encode(value)
 				}
 			})
 	
@@ -82,7 +82,7 @@ def query_syntax_converter_inner(ftr):
 			return Filter({
 				key : {
 					'attributeDesc' : ftr.attr.encode(),
-					'assertionValue' : ftr.val.encode()
+					'assertionValue' : rfc4515_encode(ftr.val)
 				}
 			})
 		
@@ -115,3 +115,18 @@ def query_syntax_converter(ldap_query_string):
 
 def escape_filter_chars(text):
     return LDAPBase.escape(text)
+
+def rfc4515_encode(value):
+	i = 0
+	byte_str = b''
+	while i < len(value):
+		if (value[i] == '\\') and i < len(value) - 2:
+			try:
+				byte_str += int(value[i + 1: i + 3], 16).to_bytes()
+				i += 2
+			except ValueError:  # not an ldap escaped value, sends as is
+				byte_str += b'\\'
+		else:
+				byte_str += value[i].encode()
+		i += 1
+	return byte_str

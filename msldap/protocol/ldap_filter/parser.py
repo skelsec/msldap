@@ -1266,16 +1266,16 @@ class Grammar(object):
         chunk0 = None
         if self._offset < self._input_size:
             chunk0 = self._input[self._offset:self._offset + 1]
-        if chunk0 == '\\':
-            address1 = TreeNode(self._input[self._offset:self._offset + 1], self._offset)
-            self._offset = self._offset + 1
-        else:
-            address1 = FAILURE
-            if self._offset > self._failure:
-                self._failure = self._offset
-                self._expected = []
-            if self._offset == self._failure:
-                self._expected.append('\'\\\\\'')
+        #if chunk0 == '\\':
+        #    address1 = TreeNode(self._input[self._offset:self._offset + 1], self._offset)
+        #    self._offset = self._offset + 1
+        #else:
+        address1 = FAILURE
+        if self._offset > self._failure:
+            self._failure = self._offset
+            self._expected = []
+        if self._offset == self._failure:
+            self._expected.append('\'\\\\\'')
         if address1 is not FAILURE:
             elements0.append(address1)
             address2 = self._read_ASCII_VALUE()
