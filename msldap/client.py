@@ -1680,6 +1680,7 @@ class MSLDAPClient:
 				if err is not None:
 					raise err
 				return entry['attributes'], None
+			return None, None #no results
 		except Exception as e:
 			return None, e
 

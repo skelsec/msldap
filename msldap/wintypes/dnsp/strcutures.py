@@ -2,7 +2,6 @@
 # parts of the dns implementation was taken from https://github.com/dirkjanm/adidnsdump
 import enum
 import io
-import socket
 import datetime
 from typing import List
 
@@ -136,7 +135,14 @@ class DNS_RPC_RECORD_A:
 	@staticmethod
 	def from_buffer(buff:io.BytesIO):
 		res = DNS_RPC_RECORD_A()
-		res.IpAddress = socket.inet_ntoa(buff.read(4))
+		#webassembly...
+		#res.IpAddress = socket.inet_ntoa(buff.read(4))
+		ipv4_bytes = buff.read(4)
+		
+		# Convert each byte to an integer and join them with dots to form the IPv4 address
+		ipv4_str = '.'.join(str(byte) for byte in ipv4_bytes)
+		res.IpAddress = ipv4_str
+		
 		return res
 	
 	def to_line(self, separator = '\t'):
@@ -156,7 +162,14 @@ class DNS_RPC_RECORD_AAAA:
 	@staticmethod
 	def from_buffer(buff:io.BytesIO):
 		res = DNS_RPC_RECORD_AAAA()
-		res.IpAddress = socket.inet_ntop(socket.AF_INET6, buff.read(16))
+		# webassembly pyodide has problems with socket implementation
+		#res.IpAddress = socket.inet_ntop(socket.AF_INET6, buff.read(16))
+		ipv6_bytes = buff.read(16)
+		ipv6_hex = ''.join(f'{byte:02x}' for byte in ipv6_bytes)
+		
+		# Convert the hex string into the standard IPv6 format
+		ipv6_str = ":".join(ipv6_hex[i:i + 4] for i in range(0, 32, 4))
+		res.IpAddress = ipv6_str
 		return res
 	
 	def to_line(self, separator = '\t'):
