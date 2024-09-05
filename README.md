@@ -2,15 +2,17 @@
 
 ## :triangular_flag_on_post: Sponsors
 
-If you like this project, consider sponsoring it on GitHub! [Sponsors](https://github.com/sponsors/skelsec/)
+If you like this project, consider purchasing licenses of [OctoPwn](https://octopwn.com/), our full pentesting suite that runs in your browser!  
+For notifications on new builds/releases and other info, hop on to our [Discord](https://discord.gg/PM8utcNxMS)
 
 # msldap
 LDAP library for MS AD
 ![Documentation Status](https://user-images.githubusercontent.com/19204702/81515211-3761e880-9333-11ea-837f-bcbe2a67ee48.gif )
 
-## :triangular_flag_on_post: Sponsors
+## :triangular_flag_on_post: Runs in the browser
 
-If you want to sponsor this project, you can do it on GitHub now!
+This project, alongside with many other pentester tools runs in the browser with the power of OctoPwn!  
+Check out the community version at [OctoPwn - Live](https://live.octopwn.com/)
 
 # Documentation
 [Awesome documentation here!](https://msldap.readthedocs.io/en/latest/)
@@ -98,9 +100,9 @@ Detailed explanation with examples:
 	ldap+plain://TEST\\victim:<password>@10.10.10.2 (SASL SIMPLE auth)
 	ldap+ntlm-password://TEST\\victim:<password>@10.10.10.2
 	ldap+ntlm-nt://TEST\\victim:<nthash>@10.10.10.2
-	ldap+kerberos-password://TEST\\victim:<password>@10.10.10.2
-	ldap+kerberos-rc4://TEST\\victim:<rc4key>@10.10.10.2
-	ldap+kerberos-aes://TEST\\victim:<aes>@10.10.10.2
+	ldap+kerberos-password://TEST\\victim:<password>@<hostname>/?dc=10.10.10.2
+	ldap+kerberos-rc4://TEST\\victim:<rc4key>@<hostname>/?dc=10.10.10.2
+	ldap+kerberos-aes://TEST\\victim:<aes>@<hostname>/?dc=10.10.10.2
 	ldap://TEST\\victim:password@10.10.10.2/DC=test,DC=corp/
 	ldap://TEST\\victim:password@10.10.10.2/DC=test,DC=corp/?timeout=99&proxytype=socks5&proxyhost=127.0.0.1&proxyport=1080&proxytimeout=44
 ```

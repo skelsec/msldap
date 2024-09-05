@@ -1686,23 +1686,23 @@ Username and password authentication using NTLM over plaintext LDAP:
 Username and password authentication using NTLM over SSL/TLS:
 	ldaps+ntlm-password://TEST\\victim:password@10.10.10.2
 Username and password authentication using Kerberos over plaintext LDAP:
-	ldap+kerberos-password://TEST\\victim:password@10.10.10.2/?dc=10.10.10.2
+	ldap+kerberos-password://TEST\\victim:password@<hostname>/?dc=10.10.10.2
 Username and password authentication using Kerberos over SSL/TLS:
-	ldaps+kerberos-password://TEST\\victim:password@10.10.10.2/?dc=10.10.10.2
+	ldaps+kerberos-password://TEST\\victim:password@<hostname>/?dc=10.10.10.2
 NTLM authentication using the NT hash over plaintext LDAP:
 	ldap+ntlm-nt://TEST\\victim:<NThash>@10.10.10.2
 Kerberos authentication using the RC4 key over plaintext LDAP:
-	ldap+kerberos-rc4://TEST\\victim:<RC4key>@10.10.10.2/?dc=10.10.10.2
+	ldap+kerberos-rc4://TEST\\victim:<RC4key>@<hostname>/?dc=10.10.10.2
 SICILY authentication using the NT hash over plaintext LDAP:
 	ldap+sicily-nt://TEST\\victim:<NThash>@10.10.10.2
 Kerberos authentication using AES key over plaintext LDAP:
-	ldap+kerberos-aes://TEST\\victim:<AESkey>@10.10.10.2/?dc=10.10.10.2
+	ldap+kerberos-aes://TEST\\victim:<AESkey>@<hostname>/?dc=10.10.10.2
 Kerberos authentication using CCACHE file over plaintext LDAP:
-	ldap+kerberos-ccache://TEST\\victim:<CCACHEfile>@10.10.10.2/?dc=10.10.10.2
+	ldap+kerberos-ccache://TEST\\victim:<CCACHEfile>@<hostname>/?dc=10.10.10.2
 Kerberos authentication using keytab file over plaintext LDAP:
-	ldap+kerberos-keytab://TEST\\victim:<KEYTABfile>@10.10.10.2/?dc=10.10.10.2
+	ldap+kerberos-keytab://TEST\\victim:<KEYTABfile>@<hostname>/?dc=10.10.10.2
 Kerberos authentication using P12 or PFX file over plaintext LDAP (notice that keyfile password is at the 'password' filed):
-	ldap+kerberos-pfx://TEST\\victim:admin@10.10.10.2/?dc=10.10.10.2&keydata=<P12file>
+	ldap+kerberos-pfx://TEST\\victim:admin@<hostname>/?dc=10.10.10.2&keydata=<P12file>
 SSL authentication using P12 or PFX file over plaintext LDAP, automatically performs STARTTLS:
 	ldap+ssl://10.10.10.2/?sslcert=<P12file>&sslpassword=<P12password>'
 SSL authentication using P12 or PFX file over SSL/TLS LDAP:
