@@ -72,7 +72,7 @@ jobs:
         content: "Hey <@here>! New build happened for project ${{ github.event.repository.name }}!"
         title: "build"
         description: |
-          Version `${{ github.event.release.tag_name }}`
+          Version ${{ github.event.release.tag_name }}
           Click [here](${{ github.event.release.html_url }}) to download!
         #image: ${{ secrets.EMBED_IMAGE }}
         color: 0x0000ff
