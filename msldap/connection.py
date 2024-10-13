@@ -251,6 +251,8 @@ class MSLDAPClientConnection:
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
 		:rtype: (:class:`bool`, :class:`Exception`)
 		"""
+		if self.status != MSLDAPClientStatus.CONNECTED:
+			raise Exception("Connect to the LDAP server before binding.")
 		logger.debug('BIND in progress...')
 		try:
 			if self.credential.protocol == asyauthProtocol.SICILY:
@@ -647,7 +649,7 @@ class MSLDAPClientConnection:
 		except Exception as e:
 			return False, e
 	
-	async def search(self, base:str, query:str, attributes:List[str], search_scope:int = 2, size_limit:int = 1000, types_only:bool = False, derefAliases:int = 0, timeLimit:int = None, controls:List[Control] = None, return_done:bool = False):
+	async def search(self, base:str, query:str, attributes:List[bytes], search_scope:int = 2, size_limit:int = 1000, types_only:bool = False, derefAliases:int = 0, timeLimit:int = None, controls:List[Control] = None, return_done:bool = False):
 		"""
 		Performs the search operation.
 		
@@ -656,7 +658,7 @@ class MSLDAPClientConnection:
 		:param query: filter query that defines what should be searched for
 		:type query: str
 		:param attributes: a list of attributes to be included in the response
-		:type attributes: List[str]
+		:type attributes: List[bytes]
 		:param search_scope: Specifies the search operation's scope. Default: 2 (Subtree)
 		:type search_scope: int
 		:param types_only: indicates whether the entries returned should include attribute types only or both types and values. Default: False (both)
@@ -675,7 +677,10 @@ class MSLDAPClientConnection:
 		:return: Async generator which yields (`LDAPMessage`, None) tuple on success or (None, `Exception`) on error
 		:rtype: Iterator[(:class:`LDAPMessage`, :class:`Exception`)]
 		"""
-		if self.status not in [MSLDAPClientStatus.CONNECTED, MSLDAPClientStatus.RUNNING]:
+		if self.status == MSLDAPClientStatus.CONNECTED:
+			yield None, Exception('Connected, but not bound.')
+			return
+		if self.status != MSLDAPClientStatus.RUNNING:
 			yield None, Exception('Connection not running! Probably encountered an error')
 			return
 		try:
@@ -728,7 +733,7 @@ class MSLDAPClientConnection:
 		except Exception as e:
 			yield (None, e)
 
-	async def pagedsearch(self, base:str, query:str, attributes:List[str], search_scope:int = 2, size_limit:int = 1000, typesOnly:bool = False, derefAliases:bool = 0, timeLimit:int = None, controls:List[Control] = None, rate_limit:int = 0):
+	async def pagedsearch(self, base:str, query:str, attributes:List[bytes], search_scope:int = 2, size_limit:int = 1000, typesOnly:bool = False, derefAliases:bool = 0, timeLimit:int = None, controls:List[Control] = None, rate_limit:int = 0):
 		"""
 		Paged search is the same as the search operation and uses it under the hood. Adds automatic control to read all results in a paged manner.
 		
@@ -737,7 +742,7 @@ class MSLDAPClientConnection:
 		:param query: filter query that defines what should be searched for
 		:type query: str
 		:param attributes: a list of attributes to be included in the response
-		:type attributes: List[str]
+		:type attributes: List[bytes]
 		:param search_scope: Specifies the search operation's scope. Default: 2 (Subtree)
 		:type search_scope: int
 		:param types_only: indicates whether the entries returned should include attribute types only or both types and values. Default: False (both)
@@ -756,6 +761,9 @@ class MSLDAPClientConnection:
 		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
 		"""
 		
+		if self.status == MSLDAPClientStatus.CONNECTED:
+			yield None, Exception('Connected, but not bound.')
+			return
 		if self.status != MSLDAPClientStatus.RUNNING:
 			yield None, Exception('Connection not running! Probably encountered an error')
 			return
