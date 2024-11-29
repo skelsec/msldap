@@ -213,7 +213,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 						raise err
 					f.write('\t'.join(adinfo.get_row(MSADInfo_ATTRS))+'\r\n')
 				print('Adinfo was written to %s' % users_filename)
-				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_BZIP2) as dz:
 					dz.write(users_filename, arcname = users_filename)
 			finally:
 				try:
@@ -238,7 +238,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 
 					print('Schema dump was written to %s' % users_filename)
 					pbar.close()
-					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+					with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_BZIP2) as dz:
 						dz.write(users_filename, arcname = users_filename)
 			finally:
 				try:
@@ -261,7 +261,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 
 				print('Trust dump was written to %s' % users_filename)
 				pbar.close()
-				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_BZIP2) as dz:
 					dz.write(users_filename, arcname = users_filename)
 			finally:
 				try:
@@ -285,7 +285,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 						f.write('\t'.join(user.get_row(MSADUser_TSV_ATTRS))+'\r\n')
 				print('Users dump was written to %s' % users_filename)
 				pbar.close()
-				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_BZIP2) as dz:
 					dz.write(users_filename, arcname = users_filename)
 			finally:
 				try:
@@ -307,7 +307,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 						f.write('\t'.join(user.get_row(MSADMachine_ATTRS))+'\r\n')
 				print('Computer dump was written to %s' % users_filename)
 				pbar.close()
-				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_BZIP2) as dz:
 					dz.write(users_filename, arcname = users_filename)
 			finally:
 				try:
@@ -328,7 +328,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 						f.write('\t'.join(user.get_row(MSADGroup_ATTRS))+'\r\n')
 				print('Group dump was written to %s' % users_filename)
 				pbar.close()
-				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_BZIP2) as dz:
 					dz.write(users_filename, arcname = users_filename)
 			finally:
 				try:
@@ -349,7 +349,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 						f.write('\t'.join(user.get_row(MSADOU_ATTRS))+'\r\n')
 				print('OU dump was written to %s' % users_filename)
 				pbar.close()
-				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_BZIP2) as dz:
 					dz.write(users_filename, arcname = users_filename)
 			finally:
 				try:
@@ -371,7 +371,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 						f.write('\t'.join(user.get_row(MSADContainer_ATTRS))+'\r\n')
 				print('Container dump was written to %s' % users_filename)
 				pbar.close()
-				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_BZIP2) as dz:
 					dz.write(users_filename, arcname = users_filename)
 			finally:
 				try:
@@ -392,7 +392,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 						f.write('\t'.join(user.get_row(MSADGPO_ATTRS))+'\r\n')
 				print('GPO dump was written to %s' % users_filename)
 				pbar.close()
-				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_BZIP2) as dz:
 					dz.write(users_filename, arcname = users_filename)
 			finally:
 				try:
@@ -414,7 +414,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 						pbar.update(1)
 				print('DNS dump was written to %s' % dns_filename)
 				pbar.close()
-				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_LZMA) as dz:
+				with zipfile.ZipFile(zip_filename, 'a', compression=zipfile.ZIP_BZIP2) as dz:
 					dz.write(dns_filename, arcname = dns_filename)
 			finally:
 				try:

@@ -120,6 +120,13 @@ class LDAPConnectionFactory:
 		cred = self.get_credential()
 		target = self.get_target()
 		return MSLDAPClientConnection(target, cred)
+	
+	@staticmethod
+	def from_ldapconnection(connection:MSLDAPClientConnection):
+		"""Creates a new LDAPConnectionFactory object from an existing SMBConnection object"""
+		"""This is useful when you have a connection object, but you need to create a new connection with the same credentials"""
+		return LDAPConnectionFactory(copy.deepcopy(connection.credential), copy.deepcopy(connection.target))
+
 		
 	def __str__(self):
 		t = '==== LDAPConnectionFactory ====\r\n'

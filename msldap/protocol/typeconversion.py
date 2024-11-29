@@ -1937,6 +1937,7 @@ LDAP_WELL_KNOWN_ATTRS = {
 	"uidNumber" : single_int,
 	"uNCName" : single_str,
 	"unicodePwd" : single_bytes,
+	"userPassword": single_str,
 	"uniqueIdentifier" : multi_str,
 	"uniqueMember" : multi_str,
 	"unixHomeDirectory" : single_str,

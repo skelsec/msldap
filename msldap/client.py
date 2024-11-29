@@ -1128,7 +1128,7 @@ class MSLDAPClient:
 		
 
 	async def get_object_by_dn(self, dn:str, expected_class = None):
-		ldap_filter = r'(distinguishedName=%s)' % dn
+		ldap_filter = r'(distinguishedName=%s)' % escape_filter_chars(dn)
 		async for entry, err in self.pagedsearch(ldap_filter, ALL_ATTRIBUTES):
 			if err is not None:
 				yield None, err
@@ -1653,7 +1653,7 @@ class MSLDAPClient:
 	async def dn2sid(self, dn):
 		"""Fetches the objectSid of an object based on the DN"""
 		try:
-			query = '(distinguishedName=%s)' % dn
+			query = '(distinguishedName=%s)' % escape_filter_chars(dn)
 			async for entry, err in self.pagedsearch(query, ['objectSid']):
 				if err is not None:
 					raise err
@@ -1664,7 +1664,7 @@ class MSLDAPClient:
 	async def dn2sam(self, dn):
 		"""Fetches the sAMAccountName of an object based on the DN"""
 		try:
-			query = '(distinguishedName=%s)' % dn
+			query = '(distinguishedName=%s)' % escape_filter_chars(dn)
 			async for entry, err in self.pagedsearch(query, ['sAMAccountName']):
 				if err is not None:
 					raise err
@@ -1675,7 +1675,7 @@ class MSLDAPClient:
 	async def dnattrs(self, dn, attrs:List[str]):
 		"""Fetches attributes of an object specified by DN"""
 		try:
-			query = '(distinguishedName=%s)' % dn
+			query = '(distinguishedName=%s)' % escape_filter_chars(dn)
 			async for entry, err in self.pagedsearch(query, attrs):
 				if err is not None:
 					raise err

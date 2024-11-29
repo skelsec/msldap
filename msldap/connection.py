@@ -178,6 +178,16 @@ class MSLDAPClientConnection:
 
 		return messages
 
+	def get_extra_info(self):
+		try:
+			ntlm_data = self.auth.get_extra_info()
+			if ntlm_data is not None:
+				ntlm_data = ntlm_data.to_dict()
+		except:
+			traceback.print_exc()
+			ntlm_data = None
+		return {'ntlm_data' : ntlm_data}
+
 	async def connect(self):
 		"""
 		Connects to the remote server. Establishes the session, but doesn't perform binding.
