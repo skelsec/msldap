@@ -727,13 +727,14 @@ class MSLDAPClient:
 		if err is not None:
 			yield None, err
 			return
-		for member in group.member:
-			async for result, err in self.get_object_by_dn(member):
-				if isinstance(result, MSADGroup) and recursive:
-					async for user, err in self.get_group_members(result.distinguishedName, recursive = True):
-						yield user, err
-				else:
-					yield result, err
+		if group.member:
+			for member in group.member:
+				async for result, err in self.get_object_by_dn(member):
+					if isinstance(result, MSADGroup) and recursive:
+						async for user, err in self.get_group_members(result.distinguishedName, recursive = True):
+							yield user, err
+					else:
+						yield result, err
 		
 						
 	async def get_dn_for_objectsid(self, objectsid:str):
