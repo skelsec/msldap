@@ -70,9 +70,9 @@ jobs:
         webhook: ${{ secrets.DISCORD_WEBHOOK }}
         status: ${{ job.status }}
         content: |
-          ${{ github.event_name == 'push' && format('Hey @here! A new commit was pushed to {0}!', github.repository) || '' }}
-          ${{ github.event_name == 'pull_request' && format('Hey @here! A new pull request has been opened on {0}!', github.repository) || '' }}
-          ${{ github.event_name == 'release' && format('Hey @here! A new release was created for project {0}!', github.event.repository.name) || '' }}
+          ${{ github.event_name == 'push' && format('Hey all! A new commit was pushed to {0}!', github.repository) || '' }}
+          ${{ github.event_name == 'pull_request' && format('Hey all! A new pull request has been opened on {0}!', github.repository) || '' }}
+          ${{ github.event_name == 'release' && format('Hey all! A new release was created for project {0}!', github.event.repository.name) || '' }}
         title: |
           ${{ github.event_name == 'push' && 'Push Notification' || '' }}
           ${{ github.event_name == 'pull_request' && 'Pull Request Notification' || '' }}
