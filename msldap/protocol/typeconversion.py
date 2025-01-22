@@ -94,7 +94,7 @@ def single_bytes(x, encode = False):
 def single_int(x, encode = False):
 	if encode is False:
 		return int(x[0])
-	return [str(x).encode()]
+	return [str(x[0]).encode()]
 
 def single_bool(x, encode = False, encoding = 'utf-8'):
 	if encode is False:
