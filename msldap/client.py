@@ -146,6 +146,14 @@ class MSLDAPClient:
 
 	def get_server_info(self):
 		return self._serverinfo
+	
+	async def get_domain_name(self):
+		self._ldapinfo, err = await self.get_ad_info()
+		if err is not None:
+			return None, err
+		domain = self._ldapinfo.name
+		return domain, err
+		
 
 	async def pagedsearch(self, query:str, attributes:List[str], controls:List[Tuple[str, str, str]] = None, tree:str = None, search_scope:int=2):
 		"""

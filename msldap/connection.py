@@ -66,7 +66,9 @@ class MSLDAPClientConnection:
 	async def __handle_incoming(self):
 		try:
 			
-			async for message_data in self.network.read():				
+			async for message_data in self.network.read():
+				if message_data is None:
+					break	
 				#print('Incoming message data: %s' % message_data)
 				if self.bind_ok is True:
 					if self.__encrypt_messages is True:
@@ -120,6 +122,7 @@ class MSLDAPClientConnection:
 					self.message_table_notify[message_id] = asyncio.Event()
 				self.message_table_notify[message_id].set()
 		
+			raise Exception('Connection closed!')
 		except asyncio.CancelledError:
 			self.status = MSLDAPClientStatus.STOPPED
 			return
@@ -274,6 +277,8 @@ class MSLDAPClientConnection:
 				# useful for testing if the server supports it
 				if self._disable_signing is True:
 					flags = ISC_REQ.CONNECTION
+				
+				logger.debug('SICILY bind with flags: %s' % flags)
 				
 				data, to_continue, err = await self.auth.authenticate(None, spn=self.target.to_target_string(), flags=flags, cb_data = self.cb_data)
 				if err is not None:
@@ -467,6 +472,9 @@ class MSLDAPClientConnection:
 							)
 			elif self.credential.protocol == asyauthProtocol.SSL:
 				if self.target.protocol == UniProto.CLIENT_SSL_TCP:
+					# NOTE! If LDAPS is used with SSL authentication, EXTERNAL bid is NOT needed!
+					# Again, it is NOT needed!
+					# If the handshake is successful, the client is authenticated (but sometimes not?)
 					self.__bind_success()
 					return True, None
 				elif self.target.protocol == UniProto.CLIENT_TCP:
