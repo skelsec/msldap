@@ -319,7 +319,7 @@ MSLDAP_BUILTIN_ATTRIBUTE_TYPES = {
 	'sn' : single_str,
 	'initials' : single_str,
 	#'nTSecurityDescriptor' : x2sd,
-	'nTSecurityDescriptor' : single_bytes,
+	#'nTSecurityDescriptor' : single_bytes,
 	'tokenGroups' : multi_sid,
 	'localPolicyFlags' : single_int,
 	'msDS-SupportedEncryptionTypes' : single_int,
