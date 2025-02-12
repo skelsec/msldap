@@ -1,9 +1,12 @@
-
 # parts of the dns implementation was taken from https://github.com/dirkjanm/adidnsdump
+
+import datetime
 import enum
 import io
-import datetime
 from typing import List
+
+from msldap.commons.utils import bytes2ipv4, bytes2ipv6
+
 
 class DNS_RECORD_TYPE(enum.Enum):
 	ZERO = 0x0000 #An empty record type ([RFC1034] section 3.6 and [RFC1035] section 3.2.2).
@@ -140,8 +143,7 @@ class DNS_RPC_RECORD_A:
 		ipv4_bytes = buff.read(4)
 		
 		# Convert each byte to an integer and join them with dots to form the IPv4 address
-		ipv4_str = '.'.join(str(byte) for byte in ipv4_bytes)
-		res.IpAddress = ipv4_str
+		res.IpAddress = bytes2ipv4(ipv4_bytes)
 		
 		return res
 	
@@ -165,11 +167,9 @@ class DNS_RPC_RECORD_AAAA:
 		# webassembly pyodide has problems with socket implementation
 		#res.IpAddress = socket.inet_ntop(socket.AF_INET6, buff.read(16))
 		ipv6_bytes = buff.read(16)
-		ipv6_hex = ''.join(f'{byte:02x}' for byte in ipv6_bytes)
-		
+
 		# Convert the hex string into the standard IPv6 format
-		ipv6_str = ":".join(ipv6_hex[i:i + 4] for i in range(0, 32, 4))
-		res.IpAddress = ipv6_str
+		res.IpAddress = bytes2ipv6(ipv6_bytes)
 		return res
 	
 	def to_line(self, separator = '\t'):

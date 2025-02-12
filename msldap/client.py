@@ -4,31 +4,32 @@
 #  Tamas Jos (@skelsec)
 #
 
-import copy
 import asyncio
-import string
+import copy
 import random
-from typing import List, Dict, Tuple
+import string
+from typing import Dict, List, Tuple
+
+from asyauth.common.credentials import UniCredential
+from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK
+from winacl.dtyp.guid import GUID
+from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
+from winacl.dtyp.sid import SID
 
 from msldap import logger
 from msldap.commons.common import MSLDAPClientStatus
-from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest, SDFlagsRequestValue
-from msldap.protocol.constants import BASE, ALL_ATTRIBUTES, LEVEL
-
-from msldap.protocol.query import escape_filter_chars
-from msldap.connection import MSLDAPClientConnection
-from msldap.protocol.messages import Control
-from msldap.ldap_objects import *
-from msldap.commons.utils import KNOWN_SIDS
-from msldap.commons.target import MSLDAPTarget
-from msldap.wintypes.dnsp.strcutures import DNS_RECORD
 from msldap.commons.exceptions import LDAPSearchException
-from asyauth.common.credentials import UniCredential
+from msldap.commons.target import MSLDAPTarget
+from msldap.commons.utils import KNOWN_SIDS
+from msldap.connection import MSLDAPClientConnection
+from msldap.ldap_objects import *
+from msldap.protocol.constants import ALL_ATTRIBUTES, BASE, LEVEL
+from msldap.protocol.messages import Control
+from msldap.protocol.query import escape_filter_chars
+from msldap.wintypes.asn1.sdflagsrequest import (SDFlagsRequest,
+                                                 SDFlagsRequestValue)
+from msldap.wintypes.dnsp.structures import DNS_RECORD, DnsPropertyFactory
 
-from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
-from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK
-from winacl.dtyp.sid import SID
-from winacl.dtyp.guid import GUID
 
 class MSLDAPClient:
 	"""
@@ -1706,25 +1707,54 @@ class MSLDAPClient:
    
 	async def dnslistzones(self):
 		"""Lists all DNS zones in the forest"""
+
+		# NOTE: DNS Zones can only be stored here
+		dnsroots = [
+			'CN=MicrosoftDNS,DC=DomainDnsZones,%s' % self._tree,
+			'CN=MicrosoftDNS,DC=ForestDnsZones,%s' % self._tree,
+			'CN=MicrosoftDNS,CN=System,%s' % self._tree,
+		]
+
+		# NOTE: Service catalogs which doesn't contain DNS Zones
+		blacklist = [
+			"RootDNSServers",
+			"..TrustAnchors",
+			"_msdcs",
+		]
+
+		factory = DnsPropertyFactory()
+
 		try:
-			query = '(objectClass=dnsZone)'
-			async for entry, err in self.pagedsearch(query, ['dc']):
-				if err is not None:
-					raise err
-				yield(entry['attributes']['dc']), None
+			for dnsroot in dnsroots:
+				query = '(objectClass=dnsZone)'
+
+				async for entry, err in self.pagedsearch(query, attributes=['dc', 'dNSProperty'], tree=dnsroot):
+					if err is not None:
+						raise err
+
+					zone = entry['attributes']['dc']
+
+					if all(x not in zone for x in blacklist):
+						map_obj = map(factory.from_bytes, entry['attributes']['dNSProperty'])
+						props = sorted(map_obj, key=lambda prop: prop._id)
+	
+						yield zone, props, None
 		except Exception as e:
 			yield None, e
 
 	async def dnsentries(self, zone = None, with_tombstones = False):
 		"""Lists all DNS entries in the forest"""
+
 		dnsroots = [
+			'CN=MicrosoftDNS,DC=DomainDnsZones,%s' % self._tree,
+			'CN=MicrosoftDNS,DC=ForestDnsZones,%s' % self._tree,
 			'CN=MicrosoftDNS,CN=System,%s' % self._tree,
-			'CN=MicrosoftDNS,DC=DomainDnsZones,%s' % self._tree
 		]
 
-		async for entry, err in self.dnslistzones():
+		async for entry, _, err in self.dnslistzones():
 			if err is not None:
 				raise err
+
 			dnsroots.append('CN=MicrosoftDNS,DC=ForestDnsZones,DC=%s' % entry)
 
 		try:
