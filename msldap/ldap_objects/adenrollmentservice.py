@@ -31,7 +31,7 @@ class MSADEnrollmentService:
 		adi.displayName = entry['attributes'].get('displayName')
 		adi.dNSHostName = entry['attributes'].get('dNSHostName')
 		adi.cACertificateDN = entry['attributes'].get('cACertificateDN')
-		adi.certificateTemplates = entry['attributes'].get('certificateTemplates')
+		adi.certificateTemplates = entry['attributes'].get('certificateTemplates', [])
 		for serverdef in entry['attributes'].get('msPKI-Enrollment-Servers', []):
 			adi.enrollmentServers.append(serverdef.split('\n')[3])
 		return adi
