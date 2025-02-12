@@ -1299,6 +1299,69 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 			return False
 
+	async def do_certify2(self, username=None):
+		"""ADCA security test - new version"""
+		try:
+			es = await self.do_enrollmentservices(to_print=False)
+			if es is False:
+				raise Exception('Listing enrollment Services error! %s' % es)
+			if es is None:
+				raise Exception('No Enrollment Services present, stopping!')
+			
+			templates = await self.do_certtemplates(to_print=False)
+			if templates is False:
+				raise Exception('Listing templates error! %s' % es)
+			
+			if templates is None:
+				raise Exception('No templates exists!')
+			
+			results = []
+			tokengroups = None
+			if username is not None:
+				tokengroups, err = await self.connection.get_tokengroups_user(username)
+				if err is not None:
+					raise err
+			else:
+				res, err = await self.connection.whoamifull()
+				if err is not None:
+					raise err
+				tokengroups = res['tokengroups']
+
+			for template in templates:
+				res = template.is_vulnerable2(tokengroups)
+				if len(res) == 0:
+					continue
+						
+				es = template.enrollment_services
+				is_enabled = True
+				if len(es) == 0:
+					es = [(None, None)]
+					is_enabled = False
+				
+				for hostname, service in es:
+					t =  'Template Name: %s\n' % template.name
+					t += 'Enrollment Service Name: %s\n' % service
+					t += 'Enrollment Service Host: %s\n' % hostname
+					t += 'Enabled: %s\n' % is_enabled
+					t += 'Vulnerabilities:\n'
+					for r in res:
+						t += '\t%s - %s\n' % (r, res[r].get('Reason', ''))
+					print(t)
+
+					entry = {
+						'enabled': is_enabled,
+						'template' : template.name,
+						'service' : service,
+						'hostname' : hostname,
+						'vulns' : res
+					}
+					results.append(entry)
+
+			return results
+		except:
+			traceback.print_exc()
+			return False
+		
 	async def do_certify(self, cmd = None, username = None):
 		"""ADCA security test"""
 		try:

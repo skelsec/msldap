@@ -40,6 +40,7 @@ class EnrollmentFlag(enum.IntFlag):
 	ALLOW_PREVIOUS_APPROVAL_KEYBASEDRENEWAL_VALIDATE_REENROLLMENT = 0x00010000
 	ISSUANCE_POLICIES_FROM_REQUEST = 0x00020000
 	SKIP_AUTO_RENEWAL = 0x00040000
+	NO_SECURITY_EXTENSION = 0x00080000
 
 class PrivateKeyFlag(enum.IntFlag):
 	REQUIRE_PRIVATE_KEY_ARCHIVAL = 0x00000001
@@ -196,6 +197,14 @@ class MSADCertificateTemplate:
 		
 		adi.calc_aces()
 		return adi
+	
+	def isLowPrivSid(self, sid):
+		sid = str(sid)
+		if sid in ['S-1-1-0', 'S-1-5-11']:
+			return True
+		if sid.startswith('S-1-5-21-') is True and sid.rsplit('-',1)[1] in ['513','515','545']:
+			return True
+		return False
 
 	def allows_authentication(self):
 		return self.can_be_used_for_any_purpose() or len(set([EKU_CLIENT_AUTHENTICATION_OID, EKU_SMART_CARD_LOGON_OID, EKU_PKINIT_CLIENT_AUTHENTICATION_OID]).intersection(set(self.pKIExtendedKeyUsage))) > 0
@@ -216,24 +225,24 @@ class MSADCertificateTemplate:
 		return EKU_CERTIFICATE_REQUEST_AGENT_OID in self.pKIExtendedKeyUsage
 
 	def allows_to_use_agent_certificate(self):
-		return self.Template_Schema_Version == 1 \
-            or (
-                self.Template_Schema_Version > 1 \
-                and self.RA_Signature == 1 \
-                and EKU_CERTIFICATE_REQUEST_AGENT_OID in self.RA_Application_Policies
-            )
-
-	def is_vulnerable(self, tokengroups = None):
-		def isLowPrivSid(sid):
-			sid = str(sid)
-			if sid in ['S-1-1-0', 'S-1-5-11']:
-				return True
-			if sid.startswith('S-1-5-21-') is True and sid.rsplit('-',1)[1] in ['513','515','545']:
-				return True
-			return False
+		if EKU_ANY_PURPOSE_OID in self.pKIExtendedKeyUsage:
+			return True
+		if EKU_CERTIFICATE_REQUEST_AGENT_OID in self.pKIExtendedKeyUsage:
+			return True
 		
+		#return self.Template_Schema_Version == 1 \
+        #    or (
+        #        self.Template_Schema_Version > 1 \
+        #        and self.RA_Signature == 1 \
+        #        and EKU_CERTIFICATE_REQUEST_AGENT_OID in self.RA_Application_Policies
+        #    )
+	
+	def no_securty_extension(self):
+		return EnrollmentFlag.NO_SECURITY_EXTENSION in EnrollmentFlag(self.Enrollment_Flag)
+
+	def is_vulnerable(self, tokengroups = None):		
 		if tokengroups is None:
-			if isLowPrivSid(str(self.nTSecurityDescriptor.Owner)) is True:
+			if self.isLowPrivSid(str(self.nTSecurityDescriptor.Owner)) is True:
 				return True, 'Owner is low priv user'
 		
 		else:
@@ -242,22 +251,22 @@ class MSADCertificateTemplate:
 		
 		lowprivcanenroll = False
 		if tokengroups is None:
-			if any(isLowPrivSid(str(sid)) for sid in self.fullcontrol_sids) is True:
+			if any(self.isLowPrivSid(str(sid)) for sid in self.fullcontrol_sids) is True:
 				return True, 'Lowpriv SID has full control'
 			
-			if any(isLowPrivSid(str(sid)) for sid in self.write_dacl_sids) is True:
+			if any(self.isLowPrivSid(str(sid)) for sid in self.write_dacl_sids) is True:
 				return True, 'Lowpriv SID can write DACLs'
 			
-			if any(isLowPrivSid(str(sid)) for sid in self.write_owner_sids) is True:
+			if any(self.isLowPrivSid(str(sid)) for sid in self.write_owner_sids) is True:
 				return True, 'Lowpriv SID can change Owner'
 			
-			if any(isLowPrivSid(str(sid)) for sid in self.write_property_sids) is True:
+			if any(self.isLowPrivSid(str(sid)) for sid in self.write_property_sids) is True:
 				return True, 'Lowpriv SID can write property'
 			
-			if any(isLowPrivSid(str(sid)) for sid in self.enroll_sids) is True:
+			if any(self.isLowPrivSid(str(sid)) for sid in self.enroll_sids) is True:
 				lowprivcanenroll = True
 
-			if any(isLowPrivSid(str(sid)) for sid in self.allextendedrights_sids) is True:
+			if any(self.isLowPrivSid(str(sid)) for sid in self.allextendedrights_sids) is True:
 				lowprivcanenroll = True
 				
 		else:
@@ -289,6 +298,83 @@ class MSADCertificateTemplate:
 			return True, 'Certificate request agent'
 		
 		return False, 'No match found'
+	
+	def check_dangerous_permissions(self, tokengroups = None):
+		issues = []
+		if tokengroups is None or len(tokengroups) == 0:
+			if self.isLowPrivSid(str(self.nTSecurityDescriptor.Owner)) is True:
+				issues.append('Owner is low priv user')
+				
+			if any(self.isLowPrivSid(str(sid)) for sid in self.fullcontrol_sids) is True:
+				issues.append('Lowpriv SID has full control')
+			
+			if any(self.isLowPrivSid(str(sid)) for sid in self.write_dacl_sids) is True:
+				issues.append('Lowpriv SID can write DACLs')
+			
+			if any(self.isLowPrivSid(str(sid)) for sid in self.write_owner_sids) is True:
+				issues.append('Lowpriv SID can change Owner')
+			
+			if any(self.isLowPrivSid(str(sid)) for sid in self.write_property_sids) is True:
+				issues.append('Lowpriv SID can write property')
+				
+		else:			
+			if len(self.write_dacl_sids.intersection(set(tokengroups))) > 0:
+				issues.append('Current user can write DACLs')
+			
+			if len(self.write_owner_sids.intersection(set(tokengroups))) > 0:
+				issues.append('Current user can change Owner')
+			
+			if len(self.write_property_sids.intersection(set(tokengroups))) > 0:
+				issues.append('Current user can write property')
+			
+			if len(self.fullcontrol_sids.intersection(set(tokengroups))) > 0:
+				issues.append('Current user has full control')
+			
+			if str(self.nTSecurityDescriptor.Owner) in tokengroups:
+				issues.append('The current user can control the owner -or is the owner-')
+		
+		return issues
+	
+	def is_vulnerable2(self, tokengroups = None):
+		vulns = {}
+		if tokengroups is None:
+			tokengroups = []
+
+		user_can_enroll = False
+		if len(set(self.enroll_sids).intersection(set(tokengroups))) > 0:
+			user_can_enroll = True
+
+		if user_can_enroll and self.allows_authentication() and self.allows_to_specify_san():
+			vulns['ESC1'] = {
+				'SIDs': self.enroll_sids,
+				'Reason': 'Users can enroll, enrollee supplies subject and template allows client authentication'
+			}
+		
+		if user_can_enroll and self.can_be_used_for_any_purpose() is True:
+			vulns['ESC2'] = {
+				'SIDs': self.enroll_sids,
+				'Reason': 'Users can enroll and template allows any purpose'
+			}
+		
+		if user_can_enroll and self.allows_to_use_agent_certificate():
+			vulns['ESC3'] = {
+				'SIDs': self.enroll_sids,
+				'Reason': 'Users can enroll and template allows certificate request agent'
+			}
+		
+		if user_can_enroll and self.no_securty_extension():
+			vulns['ESC9'] = {
+				'SIDs': self.enroll_sids,
+				'Reason': 'Users can enroll and template does not require security extension'
+			}
+
+		perm_issues = self.check_dangerous_permissions(tokengroups)
+		if len(perm_issues) > 0:
+			vulns['ESC4'] = {
+				'SIDs': tokengroups,
+				'Reason': ', '.join(perm_issues)
+			}
+		return vulns
 	
 	def calc_aces(self):
 		if self.nTSecurityDescriptor is None:
@@ -324,6 +410,18 @@ class MSADCertificateTemplate:
 	@property
 	def is_enabled(self):
 		return len(self.enroll_services) > 0
+	
+	@property
+	def enrollment_services(self):
+		res = []
+		for es in self.enroll_services:
+			if es.find('\\') != -1:
+				hostname, service = es.split('\\', 1)
+				res.append((hostname, service))
+			else:
+				res.append((None, service))
+		return res
+
 
 	def __str__(self):
 		t = '== MSADCertificateTemplate ==\r\n'

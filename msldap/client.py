@@ -1579,6 +1579,7 @@ class MSLDAPClient:
 			if err is not None:
 				raise err
 			result['raw'] = res
+			result['tokengroups'] = []
 			if res.startswith('u:') is True:
 				domain, samaccountname = res[2:].split('\\', 1)
 				result['domain'] = domain
@@ -1587,10 +1588,12 @@ class MSLDAPClient:
 				if err is not None:
 					raise err
 				result['sid'] = str(user.objectSid)
+				result['tokengroups'].append(str(user.objectSid))
 				result['groups'] = {}
 				async for group_sid, err in self.get_tokengroups(user.distinguishedName):
 					if err is not None:
 						raise err
+					result['tokengroups'].append(str(group_sid))
 					result['groups'][group_sid] = ('NA','NA')
 					domain, username, err = await self.resolv_sid(group_sid)
 					if err is not None:
