@@ -5,49 +5,47 @@
 #
 
 import asyncio
-import traceback
-import logging
-import shlex
-import datetime
 import copy
-import typing
-import json
-import base64
-import zipfile
-import os
+import datetime
 import importlib.util
+import json
+import logging
+import os
+import shlex
 import sys
+import traceback
+import typing
+import zipfile
 
-from asysocks.unicomm.common.target import UniTarget
+from asyauth import logger as authlogger
 from asyauth.common.credentials import UniCredential
-from msldap.external.aiocmd.aiocmd import aiocmd
-from msldap.external.asciitree.asciitree import LeftAligned
+from asysocks import logger as sockslogger
+from asysocks.unicomm.common.target import UniTarget
+from tabulate import tabulate
 from tqdm import tqdm
+from winacl.dtyp.ace import (ACCESS_ALLOWED_ACE, ACCESS_ALLOWED_OBJECT_ACE,
+                             ACE_OBJECT_PRESENCE, ADS_ACCESS_MASK, AceFlags,
+                             ACEType)
+from winacl.dtyp.acl import ACL
+from winacl.dtyp.guid import GUID
+from winacl.dtyp.security_descriptor import SE_SACL, SECURITY_DESCRIPTOR
+from winacl.dtyp.sid import SID
 
 from msldap import logger
-from asysocks import logger as sockslogger
-from asyauth import logger as authlogger
-from msldap.client import MSLDAPClient
 from msldap.commons.factory import LDAPConnectionFactory
-from msldap.ldap_objects import MSADUser, MSADMachine, MSADUser_TSV_ATTRS, \
-	MSADMachine_ATTRS, MSADGroup_ATTRS, MSADOU_ATTRS, MSADInfo_ATTRS, \
-	MSADContainer_ATTRS, MSADGPO_ATTRS, MSADDomainTrust_ATTRS
-
-from msldap.examples.utils.completers import PathCompleter
-
-from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR, SE_SACL
-from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK, AceFlags,\
-	ACE_OBJECT_PRESENCE, ACEType, ACCESS_ALLOWED_ACE, ACCESS_DENIED_ACE
-from winacl.dtyp.sid import SID
-from winacl.dtyp.guid import GUID
-from winacl.dtyp.acl import ACL
-
-from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate,\
-	EX_RIGHT_CERTIFICATE_ENROLLMENT, CertificateNameFlag
-from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest
-from tabulate import tabulate
-from msldap.commons.exceptions import LDAPSearchException
 from msldap.commons.plugin import MSLDAPConsolePlugin
+from msldap.examples.utils.completers import PathCompleter
+from msldap.external.aiocmd.aiocmd import aiocmd
+from msldap.external.asciitree.asciitree import LeftAligned
+from msldap.ldap_objects import (MSADGPO_ATTRS, MSADOU_ATTRS,
+                                 MSADContainer_ATTRS, MSADDomainTrust_ATTRS,
+                                 MSADGroup_ATTRS, MSADInfo_ATTRS,
+                                 MSADMachine_ATTRS, MSADUser_TSV_ATTRS)
+from msldap.ldap_objects.adcertificatetemplate import (
+    EX_RIGHT_CERTIFICATE_ENROLLMENT, CertificateNameFlag,
+    MSADCertificateTemplate)
+from msldap.wintypes.asn1.sdflagsrequest import SDFlagsRequest
+
 
 class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 	def __init__(self, url = None):
@@ -1584,13 +1582,22 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 	"""
 
-	async def do_dnszones(self):
+	async def do_dnszones(self, to_print_props = False):
 		"""Lists all DNS zones"""
 		try:
-			async for entry, err in self.connection.dnslistzones():
+			async for entry, props, err in self.connection.dnslistzones():
 				if err is not None:
 					raise err
+
 				print(entry)
+
+				if to_print_props is False:
+					continue
+
+				for prop in props:
+					print(" ", prop)
+
+				print()
 
 			return True
 		except:
@@ -1668,8 +1675,9 @@ async def amain(args):
 		if platform.system() != 'Windows':
 			raise Exception('This function only works on Windows systems!')
 		from asyauth.common.credentials import UniCredential
-		from msldap.commons.target import MSLDAPTarget, UniProto
 		from winacl.functions.highlevel import get_logon_info
+
+		from msldap.commons.target import MSLDAPTarget, UniProto
 		cred = UniCredential.get_sspi(args.authtype)
 		userinfo = get_logon_info()
 		if args.target is not None:
