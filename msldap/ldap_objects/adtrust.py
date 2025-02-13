@@ -58,6 +58,11 @@ class TrustAttributes(enum.IntFlag):
 	CROSS_ORGANIZATION_ENABLE_TGT_DELEGATION = 0x00000800 # If this bit is set, tickets granted under this trust MUST be trusted for delegation. The behavior controlled by this bit is as specified in [MS-KILE] section 3.3.5.7.5. Only supported on Windows Server 2008 and later after [MSKB-4490425] updates are installed.
 	PIM_TRUST  = 0x00000400 # If this bit and the TATE bit are set, then a cross-forest trust to a domain is to be treated as Privileged Identity Management trust for the purposes of SID Filtering. For more information on how each trust type is filtered, see [MS-PAC] section 4.1.2.2. Evaluated on Windows Server 2012 R2 operating system only with [MSKB-3155495] installed. Also evaluated on Windows Server 2016 operating system and later. Evaluated only if SID Filtering is used. Evaluated only on cross-forest trusts having TRUST_ATTRIBUTE_FOREST_TRANSITIVE.
 
+	def __str__(self):
+		if not self.value:
+			return "NONE"
+		return '|'.join(m.name for m in self.__class__ if m.value & self.value)
+
 BH_TRUST_DIR_NAMING = {
 	TrustDirection.DISABLED: 'Disabled',
 	TrustDirection.INBOUND: 'Inbound',
@@ -138,7 +143,7 @@ class MSADDomainTrust:
 		}
 		
 	def get_line(self):
-		return '%s %s %s %s' % (self.name, self.trustType, self.trustDirection, self.securityIdentifier)
+		return '%s %s %s %s %s' % (self.name, self.trustType, self.trustDirection, TrustAttributes(self.trustAttributes), self.securityIdentifier)
 		
 	def __str__(self):
 		t = '== MSADDomainTrust ==\r\n'
