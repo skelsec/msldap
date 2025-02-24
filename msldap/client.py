@@ -1599,7 +1599,7 @@ class MSLDAPClient:
 					domain, username, err = await self.resolv_sid(group_sid)
 					if err is not None:
 						raise err
-					result['groups'][group_sid] = (domain, username)				
+					result['groups'][group_sid] = (domain, username)
 			
 			return result, None
 		except:
