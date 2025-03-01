@@ -751,7 +751,7 @@ class MSLDAPClientConnection:
 		except Exception as e:
 			yield (None, e)
 
-	async def pagedsearch(self, base:str, query:str, attributes:List[bytes], search_scope:int = 2, size_limit:int = 1000, typesOnly:bool = False, derefAliases:bool = 0, timeLimit:int = None, controls:List[Control] = None, rate_limit:int = 0):
+	async def pagedsearch(self, base:str, query:str, attributes:List[bytes], search_scope:int = 2, size_limit:int = 1000, typesOnly:bool = False, derefAliases:bool = 0, timeLimit:int = None, controls:List[Control] = None, rate_limit:int = 0, raw: bool = False):
 		"""
 		Paged search is the same as the search operation and uses it under the hood. Adds automatic control to read all results in a paged manner.
 		
@@ -773,8 +773,11 @@ class MSLDAPClientConnection:
 		:type timeLimit: int
 		:param controls: additional controls to be passed in the query
 		:type controls: dict
-		:param rate_limit: time to sleep bwetween each query
+		:param rate_limit: time to sleep between each query
 		:type rate_limit: float
+		:param raw: Return the attributes without conversion
+    	:type raw: bool
+
 		:return: Async generator which yields (`dict`, None) tuple on success or (None, `Exception`) on error
 		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
 		"""
@@ -835,7 +838,7 @@ class MSLDAPClientConnection:
 							else:
 								raise Exception('SearchControl missing from server response!')
 						else:
-							yield (convert_result(res['protocolOp']), None)
+							yield (convert_result(res['protocolOp'], raw), None)
 
 				if cookie == b'':
 					break
