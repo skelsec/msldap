@@ -420,6 +420,8 @@ def encode_attributes(x):
 			lookup_table = MSLDAP_BUILTIN_ATTRIBUTE_TYPES_ENC
 		elif k in MSLDAP_BUILTIN_ATTRIBUTE_TYPES:
 			lookup_table = MSLDAP_BUILTIN_ATTRIBUTE_TYPES
+		elif k in LDAP_WELL_KNOWN_ATTRS:
+			lookup_table = LDAP_WELL_KNOWN_ATTRS
 		else:
 			raise Exception('Unknown conversion type for key "%s"' % k)
 		
@@ -456,7 +458,7 @@ def convert_result(x):
 	}
 
 
-def encode_changes(x):
+def encode_changes(x, encode=True):
 	logger.debug('Encode changes: %s' % x)
 	res = []
 	for k in x:
@@ -465,15 +467,28 @@ def encode_changes(x):
 			lookup_table = MSLDAP_BUILTIN_ATTRIBUTE_TYPES_ENC
 		elif k in MSLDAP_BUILTIN_ATTRIBUTE_TYPES:
 			lookup_table = MSLDAP_BUILTIN_ATTRIBUTE_TYPES
+		elif k in LDAP_WELL_KNOWN_ATTRS:
+			lookup_table = LDAP_WELL_KNOWN_ATTRS
 		else:
 			raise Exception('Unknown conversion type for key "%s"' % k)
 		
 		for mod, value in x[k]:
+			encoder = lookup_table[k]
+			splitted_name = encoder.__name__.split("_")
+			if isinstance(value, list) and "single" == splitted_name[0]:
+				if len(value) > 1:
+					raise TypeError(f"{k} takes only one value but multiple values have been given.")
+				value = value[0]
+			if not encode and splitted_name[1] != ["bytes"]:
+				if splitted_name[0] == "single":
+					encoder = single_bytes
+				else:
+					encoder = multi_bytes
 			res.append(Change({
 				'operation' : mod,
 				'modification' : PartialAttribute({
 					'type' : k.encode(),
-					'attributes' : lookup_table[k](value, True)
+					'attributes' : encoder(value, True)
 				})
 			}))
 			#print(lookup_table[k](value, True))

@@ -591,7 +591,7 @@ class MSLDAPClientConnection:
 		except Exception as e:
 			return False, e
 
-	async def modify(self, entry:str, changes:Dict[str, object], controls:List[Control] = None):
+	async def modify(self, entry:str, changes:Dict[str, object], controls:List[Control] = None, encode=True,):
 		"""
 		Performs the modify operation.
 		
@@ -601,13 +601,16 @@ class MSLDAPClientConnection:
 		:type changes: dict
 		:param controls: additional controls to be passed in the query
 		:type controls: List[class:`Control`] 
+		:param encode: encode the changes provided before sending them to the server
+    	:type encode: bool
+
 		:return: A tuple of (True, None) on success or (False, Exception) on error. 
 		:rtype: (:class:`bool`, :class:`Exception`)
 		"""
 		try:
 			req = {
 				'object' : entry.encode(),
-				'changes' : encode_changes(changes)
+				'changes' : encode_changes(changes, encode)
 			}
 			br = { 'modifyRequest' : ModifyRequest(req)}
 			msg = { 'protocolOp' : protocolOp(br)}
