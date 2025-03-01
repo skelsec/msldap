@@ -437,7 +437,7 @@ def convert_attributes(x, raw=False):
 		k = e['type'].decode()
 		#print('k: %s' % k)
 		if raw:
-            t[k] = e['attributes']
+			t[k] = e['attributes']
 		else:
 			if k in MSLDAP_BUILTIN_ATTRIBUTE_TYPES:
 				t[k] = MSLDAP_BUILTIN_ATTRIBUTE_TYPES[k](e['attributes'], False)

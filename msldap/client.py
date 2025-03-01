@@ -172,7 +172,7 @@ class MSLDAPClient:
 		:param search_scope: LDAP search scope
 		:type search_scope: int
 		:param raw: Return the attributes without conversion
-    	:type raw: bool
+		:type raw: bool
 
 		:return: Async generator which yields (`dict`, None) tuple on success or (None, `Exception`) on error
 		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]

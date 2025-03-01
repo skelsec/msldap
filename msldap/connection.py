@@ -776,7 +776,7 @@ class MSLDAPClientConnection:
 		:param rate_limit: time to sleep between each query
 		:type rate_limit: float
 		:param raw: Return the attributes without conversion
-    	:type raw: bool
+		:type raw: bool
 
 		:return: Async generator which yields (`dict`, None) tuple on success or (None, `Exception`) on error
 		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
