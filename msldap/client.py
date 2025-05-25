@@ -14,6 +14,7 @@ from asyauth.common.credentials import UniCredential
 from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE, ADS_ACCESS_MASK
 from winacl.dtyp.guid import GUID
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
+from winacl.dtyp.ace import ACCESS_ALLOWED_OBJECT_ACE
 from winacl.dtyp.sid import SID
 
 from msldap import logger
@@ -70,6 +71,8 @@ class MSLDAPClient:
 		self.disconnected_evt = None
 		self._sid_cache = {} #SID -> (domain, user)
 		self._domainsid_cache = {} # SID -> domain
+		self.domainname = None
+		self.domainsid = None
 		
 	
 	async def __aenter__(self):
@@ -138,7 +141,8 @@ class MSLDAPClient:
 					if err is not None:
 						raise err
 					self._domainsid_cache[self._ldapinfo.objectSid] = self._ldapinfo.name
-			
+					self.domainname = self._ldapinfo.name
+					self.domainsid = self._ldapinfo.objectSid
 				if self.keepalive is True:
 					self.__keepalive_task = asyncio.create_task(self.__keepalive(res['defaultNamingContext']))
 			return True, None
@@ -149,11 +153,13 @@ class MSLDAPClient:
 		return self._serverinfo
 	
 	async def get_domain_name(self):
+		if self.domainname is not None:
+			return self.domainname, None
 		self._ldapinfo, err = await self.get_ad_info()
 		if err is not None:
 			return None, err
-		domain = self._ldapinfo.name
-		return domain, err
+		self.domainname = self._ldapinfo.name
+		return self.domainname, err
 		
 
 	async def pagedsearch(self, query:str, attributes:List[str], controls:List[Tuple[str, str, str]] = None, tree:str = None, search_scope:int=2):
@@ -719,6 +725,24 @@ class MSLDAPClient:
 			if err is not None:
 				return None, err
 			return MSADUser.from_ldap(entry), None
+		
+		return None, Exception('Search returned no results!')
+	
+	async def get_user_by_sid(self, sid:str):
+		"""
+		Fetches the DN for an object specified by `sid`
+
+		:param sid: The user's SID
+		:type sid: str
+		"""
+
+		ldap_filter = r'(objectSid=%s)' % str(sid)
+		async for entry, err in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
+			if err is not None:
+				return None, err
+			return MSADUser.from_ldap(entry), None
+		
+		return None, Exception('Search returned no results!')
 			
 	async def get_group_members(self, dn:str, recursive:bool = False):
 		"""
@@ -963,6 +987,30 @@ class MSLDAPClient:
 		except Exception as e:
 			return False, e
 
+	async def create_broken_dmsa_user(self, user_dn:str, computer_sid:str):
+		"""
+		This will create a dmsa service user that can be used for neferious reasons, but DO NOT USE THIS FOR ANYTHING ELSE!
+
+		"""
+		try:
+			sn = user_dn.split(',')[0][3:]
+			attributes = {
+				'objectClass':  ['msDS-DelegatedManagedServiceAccount','organizationalPerson', 'person', 'top', 'user', 'computer'], 
+				'sn': sn, 
+				'sAMAccountName': sn,
+				'displayName': sn,
+				'msDS-DelegatedMSAState' : 0,
+				'msDS-ManagedPasswordInterval': 30,
+				'msDS-SupportedEncryptionTypes': 28,
+				'userAccountControl': 4096,
+				'msDS-GroupMSAMembership': SECURITY_DESCRIPTOR.from_sddl('O:S-1-5-32-544D:(A;;0xf01ff;;;%s)' % computer_sid.upper())
+			}
+			_, err = await self._con.add(user_dn, attributes)
+			if err is not None:
+				return False, err
+			return True, None
+		except Exception as e:
+			return False, e
 
 	async def unlock_user(self, user_dn:str):
 		"""
@@ -1789,7 +1837,59 @@ class MSLDAPClient:
 		except Exception as e:
 			yield None, None, None, e
 	
-
+	async def get_all_domain_controllers(self):
+		"""Lists all domain controllers in the forest"""
+		# domain controller is a machine account that has the flag MSLDAP_UAC.SERVER_TRUST_ACCOUNT
+		ldap_filter = r'(&(sAMAccountType=805306369)(userAccountControl:1.2.840.113556.1.4.803:=8192))'
+		async for entry, err in self.pagedsearch(ldap_filter, MSADMachine_ATTRS):
+			if err is not None:
+				yield None, err
+				continue
+			yield MSADMachine.from_ldap(entry), None
+	
+	async def get_all_dmsas(self):
+		"""Lists all DGMAs in the forest"""
+		async for entry, err in self.pagedsearch(r'(objectClass=msDS-DelegatedManagedServiceAccount)', MSADDMSAUser_ATTRS):
+			if err is not None:
+				raise err
+			yield MSADDMSAUser.from_ldap(entry), None
+	
+	async def get_obj_by_dn(self, dn:str, class_type:str):
+		"""
+		Fetches one object from the AD, based on the DN attribute 
+		
+		:param dn: The DN of the object.
+		:type dn: str
+		:param class_type: The class of the object.
+		:type class_type: str
+		:return: A tuple with the object and an `Exception` is there was any
+		:rtype: (:class:`MSADUser`, :class:`Exception`)
+		"""
+		if class_type == 'user':
+			oc = MSADUser
+		elif class_type == 'computer':
+			oc = MSADMachine
+		elif class_type == 'group':
+			oc = MSADGroup
+		elif class_type == 'container':
+			oc = MSADContainer
+		elif class_type == 'dmsa':
+			oc = MSADDMSAUser
+		else:
+			oc = None
+			
+		logger.debug('Polling AD for object %s'% dn)
+		ldap_filter = r'(distinguishedName=%s)' % dn
+		async for entry, err in self.pagedsearch(ldap_filter, MSADUser_ATTRS):
+			if err is not None:
+				return None, err
+			if oc is not None:
+				return oc.from_ldap(entry, self._ldapinfo), None
+			else:
+				return entry, None
+		else:
+			return None, None
+		logger.debug('Finished polling for entries!')
 
 	#async def get_permissions_for_dn(self, dn):
 	#	"""

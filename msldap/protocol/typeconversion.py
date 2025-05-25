@@ -112,7 +112,12 @@ def single_guid(x, encode = False):
 def single_sd(x, encode = False):
 	if encode is False:
 		return SECURITY_DESCRIPTOR.from_bytes(x[0])
-	return [x.to_bytes()]
+	if isinstance(x, SECURITY_DESCRIPTOR):
+		return [x.to_bytes()]
+	elif isinstance(x, bytes):
+		return [x]
+	else:
+		raise ValueError('Invalid security descriptor type: %s' % type(x))
 
 def single_date(x, encode = False, encoding = 'utf-8'):
 	if encode is False:
@@ -408,7 +413,12 @@ MSLDAP_BUILTIN_ATTRIBUTE_TYPES_ENC = {
 	#'member' : multi_str,
 	'msDS-AllowedToActOnBehalfOfOtherIdentity' : single_bytes,
 	'nTSecurityDescriptor' : single_bytes,
-	#'msPKI-Certificate-Name-Flag' : single_int
+	#'msPKI-Certificate-Name-Flag' : single_int,
+	"msDS-DelegatedMSAState" : single_int,
+	"msDS-ManagedAccountPrecededByLink" : single_str,
+	"msDS-ManagedPasswordInterval" : single_int,
+	"msDS-SupportedEncryptionTypes" : single_int,
+	"msDS-GroupMSAMembership" : single_sd,
 }
 
 def encode_attributes(x):
@@ -1982,4 +1992,6 @@ LDAP_WELL_KNOWN_ATTRS = {
 	"x121Address" : multi_str,
 	"x500uniqueIdentifier" : multi_bytes,
 	"userCertificate" : multi_bytes,
+	"msDS-DelegatedMSAState" : single_int,
+	"msDS-ManagedAccountPrecededByLink" : multi_str,
 }
