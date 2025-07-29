@@ -419,6 +419,7 @@ MSLDAP_BUILTIN_ATTRIBUTE_TYPES_ENC = {
 	"msDS-ManagedPasswordInterval" : single_int,
 	"msDS-SupportedEncryptionTypes" : single_int,
 	"msDS-GroupMSAMembership" : single_sd,
+	"pwdLastSet" : single_int,
 }
 
 def encode_attributes(x):
