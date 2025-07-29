@@ -444,6 +444,23 @@ class MSLDAPClient:
 					
 		logger.debug('Finished polling for entries!')
 
+	async def get_dn(self, sAMAccountName: str):
+		"""
+		Fetches the distinguished name for a samAccountName.
+
+		:param sAMAccountName: The username of the machine (eg. COMP123$).
+		:type sAMAccountName: str
+		:return: DN if found, else None; and an error if any.
+		:rtype: Tuple[Optional[str], Optional[Exception]]
+		"""
+		ldap_filter = r'(sAMAccountName=%s)' % str(sAMAccountName)
+		async for entry, err in self.pagedsearch(ldap_filter, ['distinguishedName']):
+			if err is not None:
+				return None, err
+
+			return entry['attributes']['distinguishedName'], None
+		return None, Exception('Search returned no results!')
+
 	async def get_laps(self, sAMAccountName:str):
 		"""
 		Fetches the LAPS password for a machine. This functionality is only available to specific high-privileged users.
