@@ -109,6 +109,24 @@ class LDAPConnectionFactory:
 		target = self.get_target()
 		return MSLDAPClient(target, cred)
 
+	def get_client_newtarget(self, hostname_or_ip:str) -> MSLDAPClient:
+		"""
+		Creates a client with a different target that can be used to interface with the server
+		"""
+		cred = self.get_credential()
+		target_old = self.get_target()
+		target = MSLDAPTarget(
+			hostname_or_ip, 
+			port=target_old.port, 
+			protocol=target_old.protocol, 
+			tree=target_old.tree, 
+			proxies=copy.deepcopy(target_old.proxies), 
+			timeout=target_old.timeout, 
+			ldap_query_page_size=target_old.ldap_query_page_size, 
+			ldap_query_ratelimit=target_old.ldap_query_ratelimit, 
+			hostname=hostname_or_ip
+		)
+		return MSLDAPClient(target, cred)
 
 	def get_connection(self) -> MSLDAPClientConnection:
 		"""
@@ -119,6 +137,28 @@ class LDAPConnectionFactory:
 		"""
 		cred = self.get_credential()
 		target = self.get_target()
+		return MSLDAPClientConnection(target, cred)
+
+	def get_connection_newtarget(self, hostname_or_ip:str) -> MSLDAPClientConnection:
+		"""
+		Creates a connection with a different target that can be used to interface with the server
+		
+		:return: LDAP connection
+		:rtype: :class:`MSLDAPClientConnection`
+		"""
+		cred = self.get_credential()
+		target_old = self.get_target()
+		target = MSLDAPTarget(
+			hostname_or_ip, 
+			port=target_old.port, 
+			protocol=target_old.protocol, 
+			tree=target_old.tree, 
+			proxies=copy.deepcopy(target_old.proxies), 
+			timeout=target_old.timeout, 
+			ldap_query_page_size=target_old.ldap_query_page_size, 
+			ldap_query_ratelimit=target_old.ldap_query_ratelimit, 
+			hostname=hostname_or_ip
+		)
 		return MSLDAPClientConnection(target, cred)
 	
 	@staticmethod

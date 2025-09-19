@@ -114,6 +114,10 @@ class MSLDAPClientConnection:
 						
 						message_data = message_data[msg_len:]
 
+				###### EMERGENCY DEBUG ######
+				#print('DEBUG: Received message: %s' % messages)
+				###### EMERGENCY DEBUG ######
+
 				message_id = messages[0]['messageID'].native
 				if message_id not in self.message_table:
 					self.message_table[message_id] = []
@@ -142,6 +146,11 @@ class MSLDAPClientConnection:
 
 
 	async def send_message(self, message:Dict[str, object]):
+
+		###### EMERGENCY DEBUG ######
+		#print('DEBUG: Sending message: %s' % message)
+		###### EMERGENCY DEBUG ######
+
 		curr_msg_id = self.message_id
 		self.message_id += 1
 
@@ -695,13 +704,13 @@ class MSLDAPClientConnection:
 		:return: Async generator which yields (`LDAPMessage`, None) tuple on success or (None, `Exception`) on error
 		:rtype: Iterator[(:class:`LDAPMessage`, :class:`Exception`)]
 		"""
-		if self.status == MSLDAPClientStatus.CONNECTED:
-			yield None, Exception('Connected, but not bound.')
-			return
-		if self.status != MSLDAPClientStatus.RUNNING:
-			yield None, Exception('Connection not running! Probably encountered an error')
-			return
+
 		try:
+			if self.status == MSLDAPClientStatus.CONNECTED:
+				raise Exception('Connected, but not bound.')
+			if self.status != MSLDAPClientStatus.RUNNING:
+				raise Exception('Connection not running! Probably encountered an error')
+		
 			if timeLimit is None:
 				timeLimit = 600 #not sure
 
@@ -727,6 +736,9 @@ class MSLDAPClientConnection:
 			
 			while True:
 				results = await self.recv_message(msg_id)
+				if len(results) > 0 and isinstance(results[0], Exception):
+					raise results[0]
+				
 				for message in results:
 					msg_type = message['protocolOp'].name
 					message = message.native
@@ -779,13 +791,12 @@ class MSLDAPClientConnection:
 		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
 		"""
 		
-		if self.status == MSLDAPClientStatus.CONNECTED:
-			yield None, Exception('Connected, but not bound.')
-			return
-		if self.status != MSLDAPClientStatus.RUNNING:
-			yield None, Exception('Connection not running! Probably encountered an error')
-			return
 		try:
+			if self.status == MSLDAPClientStatus.CONNECTED:
+				raise Exception('Connected, but not bound.')
+			if self.status != MSLDAPClientStatus.RUNNING:
+				raise Exception('Connection not running! Probably encountered an error')
+		
 			cookie = b''
 			while True:
 				await asyncio.sleep(rate_limit)

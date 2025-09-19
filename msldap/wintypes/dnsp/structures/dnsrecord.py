@@ -4,6 +4,7 @@ import datetime
 import enum
 import io
 from typing import List
+import ipaddress
 
 from msldap.commons.utils import bytes2ipv4, bytes2ipv6
 
@@ -59,17 +60,81 @@ class DNS_RECORD:
 		self.DataLength:int = None
 		self.Type:DNS_RECORD_TYPE = None
 		self.Version: bytes = b'\x05'
-		self.Rank:bytes = None
+		self.Rank:int = None
 		self.Flags:bytes = b'\x00\x00'
-		self.Serial:bytes = None
+		self.Serial:int = None
 		self.TtlSeconds:int = None
 		self.Reserved:bytes = b'\x00\x00\x00\x00'
-		self.TimeStamp:bytes = None
+		self.TimeStamp:bytes = b'\x00\x00\x00\x00'
 		self.Data:bytes = None
-	
+
+	@staticmethod
+	def create_A(ip:str, serial:int, ttlseconds:int = 180, rank:int = 240):
+		record = DNS_RECORD()
+		record.Type = DNS_RECORD_TYPE.A
+		record.Data = ipaddress.IPv4Address(ip).packed
+		record.Rank = rank
+		record.Serial = serial
+		record.TtlSeconds = ttlseconds
+		record.Reserved = b'\x00\x00\x00\x00'
+		record.TimeStamp = b'\x00\x00\x00\x00'
+		return record
+
+	@staticmethod
+	def create_AAAA(ip:str, serial:int, ttlseconds:int = 180, rank:int = 240):
+		record = DNS_RECORD()
+		record.Type = DNS_RECORD_TYPE.AAAA
+		record.Data = ipaddress.IPv6Address(ip).packed
+		record.Rank = rank
+		record.Serial = serial
+		record.TtlSeconds = ttlseconds
+		record.Reserved = b'\x00\x00\x00\x00'
+		record.TimeStamp = b'\x00\x00\x00\x00'
+		return record
+
+	@staticmethod
+	def create_zero(serial:int, data:bytes=b'', ttlseconds:int = 180, rank:int = 240):
+		record = DNS_RECORD()
+		record.Type = DNS_RECORD_TYPE.ZERO
+		record.Data = data
+		record.Rank = rank
+		record.Serial = serial
+		record.TtlSeconds = ttlseconds
+		record.Reserved = b'\x00\x00\x00\x00'
+		record.TimeStamp = b'\x00\x00\x00\x00'
+		return record
+
+	@staticmethod
+	def create_zero_ts(entombedTime:datetime.datetime, serial:int, ttlseconds:int = 180, rank:int = 240):
+		recdata = DNS_RPC_RECORD_TS()
+		recdata.entombedTime = entombedTime
+		return DNS_RECORD.create_zero(serial, recdata.to_bytes(), ttlseconds, rank)
+
 	@staticmethod
 	def from_bytes(data):
 		return DNS_RECORD.from_buffer(io.BytesIO(data))
+
+	def to_bytes(self):
+		return self.to_buffer().getvalue()
+
+	def to_buffer(self):
+		buff = io.BytesIO()
+		buff.write(int.to_bytes(len(self.Data), 2, 'little', signed = False))
+		buff.write(int.to_bytes(self.Type.value, 2, 'little', signed = False))
+		buff.write(self.Version)
+		buff.write(int.to_bytes(self.Rank, 1, signed = False))
+		buff.write(self.Flags)
+		buff.write(int.to_bytes(self.Serial, 4, 'little', signed = False))
+		buff.write(int.to_bytes(self.TtlSeconds, 4, 'big', signed = False))
+		buff.write(self.Reserved)
+		buff.write(self.TimeStamp)
+		buff.write(self.Data)
+		pos = buff.tell()
+		if pos % 4 != 0:
+			# padding to 4 bytes
+			buff.write(b'\x00' * (4 - pos % 4))
+		buff.seek(0)
+		return buff
 	
 	@staticmethod
 	def from_buffer(buff:io.BytesIO):
@@ -77,10 +142,10 @@ class DNS_RECORD:
 		res.DataLength = int.from_bytes(buff.read(2), 'little', signed = False)
 		res.Type = DNS_RECORD_TYPE(int.from_bytes(buff.read(2), 'little', signed = False))
 		res.Version = buff.read(1)
-		res.Rank = buff.read(1)
+		res.Rank = buff.read(1)[0]
 		res.Flags = buff.read(2)
-		res.Serial = buff.read(4)
-		res.TtlSeconds = int.from_bytes(buff.read(4), 'little', signed = False)
+		res.Serial = int.from_bytes(buff.read(4), 'little', signed = False)
+		res.TtlSeconds = int.from_bytes(buff.read(4), 'big', signed = False)
 		res.Reserved = buff.read(4)
 		res.TimeStamp = buff.read(4)
 		res.Data = buff.read(res.DataLength)
@@ -98,9 +163,9 @@ class DNS_RECORD:
 		t += 'DataLength: %s\r\n' % self.DataLength
 		t += 'Type: %s\r\n' % self.Type.name
 		t += 'Version: %s\r\n' % self.Version.hex()
-		t += 'Rank: %s\r\n' % self.Rank.hex()
+		t += 'Rank: %s\r\n' % self.Rank
 		t += 'Flags: %s\r\n' % self.Flags.hex()
-		t += 'Serial: %s\r\n' % self.Serial.hex()
+		t += 'Serial: %s\r\n' % self.Serial
 		t += 'TtlSeconds: %s\r\n' % self.TtlSeconds
 		t += 'Reserved: %s\r\n' % self.Reserved.hex()
 		t += 'TimeStamp: %s\r\n' % self.TimeStamp.hex()
@@ -227,6 +292,16 @@ class DNS_RPC_RECORD_TS:
 		except OverflowError:
 			return None
 		return res
+
+	def to_bytes(self):
+		return self.to_buffer().getvalue()
+
+	def to_buffer(self):
+		diff = datetime.datetime.today() - datetime.datetime(1601,1,1)
+		tstime = int(diff.total_seconds()*10000)
+		buff = io.BytesIO()
+		buff.write(int.to_bytes(tstime, 8, 'little', signed = False))
+		return buff
 	
 	def to_line(self, separator = '\t'):
 		return str(self)
@@ -299,11 +374,11 @@ class DNS_RPC_RECORD_SOA:
 	@staticmethod
 	def from_buffer(buff:io.BytesIO):
 		res = DNS_RPC_RECORD_SOA()
-		res.dwSerialNo = int.from_bytes(buff.read(4), 'little', signed = False)
-		res.dwRefresh = int.from_bytes(buff.read(4), 'little', signed = False)
-		res.dwRetry = int.from_bytes(buff.read(4), 'little', signed = False)
-		res.dwExpire = int.from_bytes(buff.read(4), 'little', signed = False)
-		res.dwMinimumTtl = int.from_bytes(buff.read(4), 'little', signed = False)
+		res.dwSerialNo = int.from_bytes(buff.read(4), 'big', signed = False)
+		res.dwRefresh = int.from_bytes(buff.read(4), 'big', signed = False)
+		res.dwRetry = int.from_bytes(buff.read(4), 'big', signed = False)
+		res.dwExpire = int.from_bytes(buff.read(4), 'big', signed = False)
+		res.dwMinimumTtl = int.from_bytes(buff.read(4), 'big', signed = False)
 		res.namePrimaryServer = DNS_COUNT_NAME.from_buffer(buff)
 		res.zoneAdminEmail = DNS_COUNT_NAME.from_buffer(buff)
 		return res

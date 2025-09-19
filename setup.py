@@ -56,6 +56,7 @@ setup(
 		'tqdm',
 		'wcwidth',
 		'tabulate',
+		'unidns>=0.0.3',
 	],
 	entry_points={
 		'console_scripts': [

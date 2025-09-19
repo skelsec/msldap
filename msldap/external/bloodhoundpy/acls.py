@@ -132,7 +132,7 @@ def parse_binary_acl(dn, entry, entrytype, acl, objecttype_guid_map):
                     if entrytype == 'computer' and \
                     ace_object.acedata.has_flag(ACCESS_ALLOWED_OBJECT_ACE.ACE_OBJECT_TYPE_PRESENT) and \
                     entry['Properties']['haslaps']:
-                        if ace_object.acedata.get_object_type().lower() == objecttype_guid_map['ms-mcs-admpwd']:
+                        if 'ms-mcs-admpwd' in objecttype_guid_map and ace_object.acedata.get_object_type().lower() == objecttype_guid_map['ms-mcs-admpwd']:
                             relations.append(build_relation(sid, 'ReadLAPSPassword', inherited=is_inherited))
                     else:
                         relations.append(build_relation(sid, 'GenericAll', inherited=is_inherited))
@@ -174,6 +174,7 @@ def parse_binary_acl(dn, entry, entrytype, acl, objecttype_guid_map):
 
                 # ServicePrincipalName property write rights (exclude generic rights)
                 if entrytype == 'user' and ace_object.acedata.has_flag(ACCESS_ALLOWED_OBJECT_ACE.ACE_OBJECT_TYPE_PRESENT) \
+                and 'service-principal-name' in objecttype_guid_map \
                 and ace_object.acedata.get_object_type().lower() == objecttype_guid_map['service-principal-name']:
                     relations.append(build_relation(sid, 'WriteSPN', inherited=is_inherited))
 
@@ -187,7 +188,7 @@ def parse_binary_acl(dn, entry, entrytype, acl, objecttype_guid_map):
                 if entrytype == 'computer' and \
                 ace_object.acedata.has_flag(ACCESS_ALLOWED_OBJECT_ACE.ACE_OBJECT_TYPE_PRESENT) and \
                 entry['Properties']['haslaps']:
-                    if ace_object.acedata.get_object_type().lower() == objecttype_guid_map['ms-mcs-admpwd']:
+                    if 'ms-mcs-admpwd' in objecttype_guid_map and ace_object.acedata.get_object_type().lower() == objecttype_guid_map['ms-mcs-admpwd']:
                         relations.append(build_relation(sid, 'ReadLAPSPassword', inherited=is_inherited))
 
             # Extended rights
@@ -287,6 +288,9 @@ def ace_applies(ace_guid, object_class, objecttype_guid_map):
     Note that this function assumes you already verified that InheritedObjectType is set (via the flag).
     If this is not set, the ACE applies to all object types.
     '''
+    if object_class not in objecttype_guid_map:
+        print('debug: ace_applies: object_class not in objecttype_guid_map: %s' % object_class)
+        return False
     if ace_guid == objecttype_guid_map[object_class]:
         return True
     # If none of these match, the ACE does not apply to this object
