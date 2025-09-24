@@ -36,6 +36,7 @@ class TrustType(enum.Enum):
 	UPLEVEL = 0x00000002 #): The trusted domain is a Windows domain running Active Directory.
 	MIT = 0x00000003 #): The trusted domain is running a non-Windows, RFC4120-compliant Kerberos distribution. This type of trust is distinguished in that (1) a SID is not required for the TDO, and (2) the default key types include the DES-CBC and DES-CRC encryption types (see [RFC4120] section 8.1).
 	DCE = 0x00000004 #): Historical reference; this value is not used in Windows.
+	AAD = 0x00000005 #): The trusted domain is an Azure Active Directory domain.
 
 # From: https://msdn.microsoft.com/en-us/library/cc223768.aspx
 class TrustDirection(enum.Enum): #enum.IntFlag << the actual type is intflag, but noone cares
