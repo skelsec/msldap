@@ -172,7 +172,7 @@ class MSLDAPClient:
 		return self.domainname, err
 		
 
-	async def pagedsearch(self, query:str, attributes:List[str], controls:List[Tuple[str, str, str]] = None, tree:str = None, search_scope:int=2):
+	async def pagedsearch(self, query:str, attributes:List[str], controls:List[Tuple[str, str, str]] = None, tree:str = None, search_scope:int=2, raw: bool = False):
 		"""
 		Performs a paged search on the AD, using the filter and attributes as a normal query does.
 			!The LDAP connection MUST be active before invoking this function!
@@ -187,6 +187,8 @@ class MSLDAPClient:
 		:type tree: str
 		:param search_scope: LDAP search scope
 		:type search_scope: int
+		:param raw: Return the attributes without conversion
+		:type raw: bool
 
 		:return: Async generator which yields (`dict`, None) tuple on success or (None, `Exception`) on error
 		:rtype: Iterator[(:class:`dict`, :class:`Exception`)]
@@ -225,7 +227,8 @@ class MSLDAPClient:
 			size_limit = self.ldap_query_page_size, 
 			controls = controls,
 			rate_limit=self.ldap_query_ratelimit,
-			search_scope=search_scope
+			search_scope=search_scope,
+			raw=raw
 			):
 				
 				if err is not None:

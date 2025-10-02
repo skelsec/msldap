@@ -443,29 +443,31 @@ def encode_attributes(x):
 
 	return res
 
-def convert_attributes(x):
+def convert_attributes(x, raw=False):
 	t = {}
 	for e in x:
 		#print(e)
 		k = e['type'].decode()
 		#print('k: %s' % k)
-		
-		if k in MSLDAP_BUILTIN_ATTRIBUTE_TYPES:
-			t[k] = MSLDAP_BUILTIN_ATTRIBUTE_TYPES[k](e['attributes'], False)
-		elif k in LDAP_WELL_KNOWN_ATTRS:
-			t[k] = LDAP_WELL_KNOWN_ATTRS[k](e['attributes'], False)
-		else:
-			logger.debug('Unknown type! %s data: %s' % (k, e['attributes']))
+		if raw:
 			t[k] = e['attributes']
+		else:
+			if k in MSLDAP_BUILTIN_ATTRIBUTE_TYPES:
+				t[k] = MSLDAP_BUILTIN_ATTRIBUTE_TYPES[k](e['attributes'], False)
+			elif k in LDAP_WELL_KNOWN_ATTRS:
+				t[k] = LDAP_WELL_KNOWN_ATTRS[k](e['attributes'], False)
+			else:
+				logger.debug('Unknown type! %s data: %s' % (k, e['attributes']))
+				t[k] = e['attributes']
 	return t
 
-def convert_result(x):
+def convert_result(x, raw=False):
 	#print(x)
 	#import traceback
 	#traceback.print_stack()
 	return {
 		'objectName' : x['objectName'].decode(),
-		'attributes' : convert_attributes(x['attributes'])
+		'attributes' : convert_attributes(x['attributes'], raw)
 	}
 
 
