@@ -423,7 +423,7 @@ class MSLDAPDump2Bloodhound:
 			if is_filtered_container_child(tdn):
 				continue
 			if tdn not in self.DNs:
-				attrs, err = await self.connection.dnattrs(tdn, ['distinguishedName','objectGUID', 'objectClass','sAMAaccountType', 'sAMAccountName', 'objectSid', 'name'])
+				attrs, err = await self.connection.dnattrs(tdn, ['distinguishedName','objectGUID', 'objectClass','sAMAccountType', 'sAMAccountName', 'objectSid', 'name'])
 				if err is not None:
 					raise err
 				if attrs is None or len(attrs) == 0:
@@ -502,7 +502,7 @@ class MSLDAPDump2Bloodhound:
 		dn = entry.get('distinguishedName', '')
 		resolved['objectid'] = entry.get('objectSid', '')
 		resolved['principal'] = ('%s@%s' % (account, self.domainname)).upper()
-		if 'sAMAaccountName' in entry:
+		if account:
 			accountType = entry['sAMAccountType']
 			object_class = entry['objectClass']
 			if accountType in [268435456, 268435457, 536870912, 536870913]:
