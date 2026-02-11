@@ -7,6 +7,7 @@ from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
 from msldap import logger
 from msldap.protocol.messages import Attribute, Change, PartialAttribute
 from msldap.wintypes.managedpassword import MSDS_MANAGEDPASSWORD_BLOB
+from msldap.commons.customvalue import LDAPCustomValue
 
 MSLDAP_DT_WIN_EPOCH = datetime.datetime(1601, 1, 1)
 
@@ -249,6 +250,8 @@ def multi_sd(x, encode=False):
 		x = [x]
 	return [single_sd(r)[0] for r in x]
 
+MSLDAP_CUSTOM_ATTRIBUTE_TYPES = {} # Allows custom attribute types to be defined
+
 MSLDAP_BUILTIN_ATTRIBUTE_TYPES = {
 	'supportedCapabilities' : multi_str,
 	'serverName' : single_str,
@@ -429,6 +432,14 @@ def encode_attributes(x):
 	res = []
 	for k in x:
 		lookup_table = None
+		if isinstance(x[k], LDAPCustomValue):
+			encoded_value = x[k].encode()
+			res.append(Attribute({
+				'type' : k.encode(),
+				'attributes' : encoded_value
+			}))
+			continue
+		
 		if k in MSLDAP_BUILTIN_ATTRIBUTE_TYPES_ENC:
 			lookup_table = MSLDAP_BUILTIN_ATTRIBUTE_TYPES_ENC
 		elif k in MSLDAP_BUILTIN_ATTRIBUTE_TYPES:
@@ -449,8 +460,10 @@ def convert_attributes(x):
 		#print(e)
 		k = e['type'].decode()
 		#print('k: %s' % k)
-		
-		if k in MSLDAP_BUILTIN_ATTRIBUTE_TYPES:
+
+		if k in MSLDAP_CUSTOM_ATTRIBUTE_TYPES: # this takes precedence over builtin types
+			t[k] = MSLDAP_CUSTOM_ATTRIBUTE_TYPES[k].decode(e['attributes'])
+		elif k in MSLDAP_BUILTIN_ATTRIBUTE_TYPES:
 			t[k] = MSLDAP_BUILTIN_ATTRIBUTE_TYPES[k](e['attributes'], False)
 		elif k in LDAP_WELL_KNOWN_ATTRS:
 			t[k] = LDAP_WELL_KNOWN_ATTRS[k](e['attributes'], False)
@@ -478,18 +491,27 @@ def encode_changes(x):
 			lookup_table = MSLDAP_BUILTIN_ATTRIBUTE_TYPES_ENC
 		elif k in MSLDAP_BUILTIN_ATTRIBUTE_TYPES:
 			lookup_table = MSLDAP_BUILTIN_ATTRIBUTE_TYPES
-		else:
-			raise Exception('Unknown conversion type for key "%s"' % k)
 		
 		for mod, value in x[k]:
-			res.append(Change({
-				'operation' : mod,
-				'modification' : PartialAttribute({
-					'type' : k.encode(),
-					'attributes' : lookup_table[k](value, True)
-				})
-			}))
-			#print(lookup_table[k](value, True))
+			if isinstance(value, LDAPCustomValue):
+				encoded_value = value.encode()
+				res.append(Change({
+					'operation' : mod,
+					'modification' : PartialAttribute({
+						'type' : k.encode(),
+						'attributes' : encoded_value
+					})
+				}))
+			else:
+				if lookup_table is None:
+					raise Exception('Unknown conversion type for key "%s"' % k)
+				res.append(Change({
+					'operation' : mod,
+					'modification' : PartialAttribute({
+						'type' : k.encode(),
+						'attributes' : lookup_table[k](value, True)
+					})
+				}))
 	return res
 
 LDAP_WELL_KNOWN_ATTRS = {
