@@ -167,6 +167,22 @@ class LDAPConnectionFactory:
 		"""This is useful when you have a connection object, but you need to create a new connection with the same credentials"""
 		return LDAPConnectionFactory(copy.deepcopy(connection.credential), copy.deepcopy(connection.target))
 
+	async def test_connection(self):
+		ntlm_data = None
+		try:
+			connection = self.get_connection()
+			async with connection:
+				_, err = await connection.connect()
+				if err is not None:
+					raise err
+				_, err = await connection.bind()
+				ntlm_data = connection.get_extra_info()
+				if err is not None:
+					raise err
+				return True, ntlm_data, None
+		except Exception as e:
+			return False, ntlm_data, e
+
 		
 	def __str__(self):
 		t = '==== LDAPConnectionFactory ====\r\n'

@@ -14,7 +14,7 @@ def vn(x):
 	if x == []:
 		return None
 	if isinstance(x, list):
-		return '|'.join(x)
+		return '|'.join([str(y) for y in x])
 	if isinstance(x, datetime):
 		return x.isoformat()
 	return x

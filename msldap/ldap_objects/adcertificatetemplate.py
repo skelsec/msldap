@@ -197,6 +197,34 @@ class MSADCertificateTemplate:
 		
 		adi.calc_aces()
 		return adi
+
+	def to_dict(self):
+		return {
+			'sn': self.sn,
+			'cn': self.cn,
+			'distinguishedName': self.distinguishedName,
+			'name': self.name,
+			'RA_Application_Policies': self.RA_Application_Policies,
+			'Certificate_Application_Policy': self.Certificate_Application_Policy,
+			'Template_Schema_Version': self.Template_Schema_Version,
+			'Certificate_Name_Flag': self.Certificate_Name_Flag,
+			'Enrollment_Flag': self.Enrollment_Flag,
+			'RA_Signature': self.RA_Signature,
+			'Private_Key_Flag': self.Private_Key_Flag,
+			'pKIExtendedKeyUsage': self.pKIExtendedKeyUsage,
+			'nTSecurityDescriptor': self.nTSecurityDescriptor.to_bytes(),
+			'vulns': self.vulns,
+			'enroll_sids': list(self.enroll_sids),
+			'autoenroll_sids': list(self.autoenroll_sids),
+			'write_owner_sids': list(self.write_owner_sids),
+			'write_dacl_sids': list(self.write_dacl_sids),
+			'write_property_sids': list(self.write_property_sids),
+			'fullcontrol_sids': list(self.fullcontrol_sids),
+			'allextendedrights_sids': list(self.allextendedrights_sids),
+			'sid_lookup_table': self.sid_lookup_table,
+			'enroll_services': self.enroll_services,
+		}
+
 	
 	def isLowPrivSid(self, sid):
 		sid = str(sid)
