@@ -8,7 +8,7 @@
 from os import stat
 from sqlite3 import connect
 from asysocks.unicomm.common.target import UniTarget, UniProto
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 from asysocks.unicomm.utils.paramprocessor import str_one, int_one, bool_one
 
 msldaptarget_url_params = {
@@ -62,6 +62,11 @@ class MSLDAPTarget(UniTarget):
 	@staticmethod
 	def from_url(connection_url):
 		url_e = urlparse(connection_url)
+		url_dict = url_e._asdict()
+		for prop, val in url_dict.items():
+			if type(val) is str:
+				url_dict[prop] = unquote(val)
+		url_e = url_e._replace(**url_dict)
 		schemes = []
 		for item in url_e.scheme.upper().split('+'):
 			schemes.append(item.replace('-','_'))
