@@ -624,15 +624,18 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			else:
 				legacy = False
 
-			target = None
-			entries, tree, err = await self.connection.dns_query(target, zone, forest, legacy)
-			if err is not None:
-				raise err
-			if entries is None or len(entries) == 0:
-				print('Record not found!')
-				return True
-			print('Tree: %s' % tree)
-			for entry in entries:
+			# Iterate dns_queryall (all dnsNode entries). It used to call dns_query
+			# with target=None, which escapes None into the LDAP filter and raises
+			# AttributeError, and would only ever return a single record anyway.
+			found = False
+			async for entry, tree, err in self.connection.dns_queryall(zone, forest, legacy):
+				if err is not None:
+					raise err
+				if entry is None:
+					continue
+				if not found:
+					print('Tree: %s' % tree)
+					found = True
 				for recorddata in entry['attributes']['dnsRecord']:
 					print(recorddata.hex())
 					record = DNS_RECORD.from_bytes(recorddata)
@@ -640,6 +643,9 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 					x = record.get_formatted()
 					print(str(x.__dict__))
 					print('------')
+			if not found:
+				print('Record not found!')
+			return True
 		except:
 			traceback.print_exc()
 			return False
