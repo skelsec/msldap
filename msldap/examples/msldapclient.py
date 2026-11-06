@@ -624,11 +624,19 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			else:
 				legacy = False
 
-			target = None
-			entries, tree, err = await self.connection.dns_query(target, zone, forest, legacy)
-			if err is not None:
-				raise err
-			if entries is None or len(entries) == 0:
+			# dns_query takes a single target name; passing None made it call
+			# escape_filter_chars(None) and every invocation of dnsqueryall
+			# raised AttributeError. dns_queryall is the enumerating variant.
+			entries = []
+			tree = None
+			async for entry, tree_, err in self.connection.dns_queryall(zone, forest, legacy):
+				tree = tree_
+				if err is not None:
+					raise err
+				if entry is None:
+					break
+				entries.append(entry)
+			if not entries:
 				print('Record not found!')
 				return True
 			print('Tree: %s' % tree)
@@ -640,6 +648,7 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 					x = record.get_formatted()
 					print(str(x.__dict__))
 					print('------')
+			return True
 		except:
 			traceback.print_exc()
 			return False
