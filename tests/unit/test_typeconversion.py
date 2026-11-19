@@ -1,7 +1,4 @@
-"""Offline tests for msldap.protocol.typeconversion.
-
-Also pins down several confirmed defects (see tests/known_failures.yml).
-"""
+"""Offline tests for msldap.protocol.typeconversion."""
 import datetime
 
 import pytest
@@ -9,7 +6,6 @@ from winacl.dtyp.sid import SID
 
 from msldap.protocol import typeconversion as tc
 from support.builders import make_raw_attributes
-from support.known_failures import known_failure
 
 pytestmark = pytest.mark.unit
 
@@ -52,6 +48,11 @@ class TestSingleValueDecoders:
         assert result.year == 1601
 
 
+    def test_int2timedelta_never_sentinel(self):
+        # -2**63 is the '(never)' sentinel and maps to timedelta.max
+        assert tc.int2timedelta([-9223372036854775808]) == datetime.timedelta.max
+
+
 class TestSingleValueEncoders:
     def test_single_str_encode(self):
         assert tc.single_str("hello", True) == [b"hello"]
@@ -83,6 +84,12 @@ class TestMultiValue:
         sids = ["S-1-5-32-544", "S-1-1-0"]
         raw = [SID.from_string(s).to_bytes() for s in sids]
         assert tc.multi_sid(raw) == sids
+
+    def test_multi_sd_decode(self):
+        # a minimal self-relative SD blob; one decoded SD per input element
+        blank_sd = b"\x01\x00\x04\x80\x14\x00\x00\x00\x24\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x00"
+        assert len(tc.multi_sd([blank_sd])) == 1
+        assert len(tc.multi_sd([blank_sd, blank_sd])) == 2
 
 
 class TestConvertAttributes:
@@ -133,16 +140,3 @@ class TestEncodeChanges:
     def test_encode_changes_unknown_raises(self):
         with pytest.raises(Exception):
             tc.encode_changes({"totallyUnknownAttr": [(2, "x")]})
-
-
-class TestConfirmedDefects:
-    @known_failure("KF-0001")
-    def test_int2timedelta_never_sentinel(self):
-        # -2**63 should map to timedelta.max
-        assert tc.int2timedelta([-9223372036854775808]) == datetime.timedelta.max
-
-    @known_failure("KF-0002")
-    def test_multi_sd_decode(self):
-        # a minimal self-relative SD blob; the decode path should not raise
-        blank_sd = b"\x01\x00\x04\x80\x14\x00\x00\x00\x24\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x00"
-        tc.multi_sd([blank_sd])
