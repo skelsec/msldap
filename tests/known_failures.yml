@@ -11,24 +11,6 @@
 #     module:  dotted path to the offending code
 #     detail:  what happens vs. what should happen
 
-KF-0001:
-  summary: "int2timedelta() never returns timedelta.max for the INT64 sentinel"
-  module: msldap.protocol.typeconversion.int2timedelta
-  detail: >
-    The special-case guard compares an int against the string
-    '-9223372036854775808', which is never equal, so the '(never)' sentinel
-    (-2^63) is turned into a huge bogus negative timedelta instead of
-    datetime.timedelta.max.
-
-KF-0002:
-  summary: "multi_sd() decode path raises TypeError"
-  module: msldap.protocol.typeconversion.multi_sd
-  detail: >
-    In the decode branch the code calls single_sd([r] for r in x), passing a
-    generator expression into single_sd(), which then does x[0] and raises
-    'generator object is not subscriptable'. Multi-valued security descriptor
-    attributes cannot be decoded.
-
 KF-0003:
   summary: "KeyCredential.from_pfx / from_pfx_data cannot reconstruct an object"
   module: msldap.commons.keycredential.KeyCredential.from_pfx_data

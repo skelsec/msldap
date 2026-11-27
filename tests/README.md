@@ -139,8 +139,6 @@ Current entries (see the file for full details):
 
 | ID | Area | One-liner |
 |----|------|-----------|
-| `KF-0001` | `protocol.typeconversion.int2timedelta` | INT64 "(never)" sentinel becomes a bogus timedelta instead of `timedelta.max`. |
-| `KF-0002` | `protocol.typeconversion.multi_sd` | Decode path passes a generator into `single_sd()` → `TypeError`. |
 | `KF-0003` | `commons.keycredential.KeyCredential.from_pfx_data` | Reconstruct from PFX crashes in the constructor (`struct.error`). |
 | `KF-0004` | `commons.ldif.MSLDAPLdiff.parse_entry` | Base64 (`attr:: …`) values are never detected/decoded. |
 | `KF-0005` | `commons.ldif.MSLDAPLdiff.build_index` | `UnboundLocalError` on the first `dn:` line — LDIF parsing is dead. |
