@@ -33,6 +33,7 @@ from winacl.dtyp.sid import SID
 
 from msldap import logger
 from msldap.commons.factory import LDAPConnectionFactory
+from msldap.commons.adcs import PrincipalSet
 from msldap.commons.plugin import MSLDAPConsolePlugin
 from msldap.examples.utils.completers import PathCompleter
 from msldap.external.aiocmd.aiocmd import aiocmd
@@ -1648,6 +1649,44 @@ class MSLDAPClientConsole(aiocmd.PromptToolkitCmd):
 			traceback.print_exc()
 			return False
 		
+	async def do_adcsaudit(self, extra_accounts = None, domain_computers = None, include_disabled = None):
+		"""ADCS audit (ESC1-5, 9, 13, 15) as current user, low-priv users and Domain Computers (if MAQ>0).
+		extra_accounts: comma separated sAMAccountNames to also evaluate as (e.g. owned accounts)
+		domain_computers: 1/0 to force Domain Computers evaluation on/off (default: MAQ>0)
+		include_disabled: 1 to also report templates not published on any CA"""
+		try:
+			extra = []
+			if extra_accounts is not None:
+				for name in extra_accounts.split(','):
+					name = name.strip()
+					if name == '':
+						continue
+					sids, err = await self.connection.get_principal_sids(name)
+					if err is not None:
+						raise err
+					extra.append(PrincipalSet.current_user(sids, label = name, description = 'Account %s' % name))
+			if domain_computers is not None:
+				domain_computers = str(domain_computers) in ['1', 'true', 'True']
+			cnt = 0
+			include_disabled = str(include_disabled) in ['1', 'true', 'True']
+			psets, err = await self.connection.get_adcs_principal_sets(extra_principal_sets = extra, include_domain_computers = domain_computers)
+			if err is not None:
+				raise err
+			print('Evaluating as:')
+			for pset in psets:
+				print('  %s: %s (%d SIDs)' % (pset.label, pset.description, len(pset.sids)))
+			print()
+			async for finding, err in self.connection.audit_adcs(principal_sets = psets, include_disabled = include_disabled):
+				if err is not None:
+					raise err
+				print(str(finding))
+				cnt += 1
+			print('Total findings: %d' % cnt)
+			return True
+		except:
+			traceback.print_exc()
+			return False
+
 	async def do_certify(self, cmd = None, username = None):
 		"""ADCA security test"""
 		try:

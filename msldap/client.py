@@ -26,6 +26,7 @@ from msldap.commons.target import MSLDAPTarget
 from msldap.commons.utils import KNOWN_SIDS
 from msldap.connection import MSLDAPClientConnection
 from msldap.ldap_objects import *
+from msldap.commons.adcs import PrincipalSet, analyze_pki_object, analyze_templates, ESC4_DANGEROUS_ATTRIBUTES
 from msldap.protocol.constants import ALL_ATTRIBUTES, BASE, LEVEL
 from msldap.protocol.messages import Control
 from msldap.protocol.query import escape_filter_chars
@@ -1482,7 +1483,7 @@ class MSLDAPClient:
 	async def list_root_cas(self):
 		try:
 			ldap_filter = "(objectClass=certificationAuthority)"
-			tree = "CN=Certification Authorities,CN=Public Key Services,CN=Services,CN=Configuration,%s" % self._ldapinfo.distinguishedName
+			tree = "CN=Certification Authorities,%s" % self._get_pks_dn()
 			async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADCA_ATTRS, tree = tree):
 				if err is not None:
 					yield None, err
@@ -1496,7 +1497,7 @@ class MSLDAPClient:
 	async def list_ntcas(self):
 		try:
 			ldap_filter = "(objectClass=certificationAuthority)"
-			tree = "CN=NTAuthCertificates,CN=Public Key Services,CN=Services,CN=Configuration,%s" % self._ldapinfo.distinguishedName
+			tree = "CN=NTAuthCertificates,%s" % self._get_pks_dn()
 			async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADCA_ATTRS, tree = tree):
 				if err is not None:
 					yield None, err
@@ -1510,7 +1511,7 @@ class MSLDAPClient:
 	async def list_aiacas(self):
 		try:
 			ldap_filter = "(objectClass=certificationAuthority)"
-			tree = "CN=AIA,CN=Public Key Services,CN=Services,CN=Configuration,%s" % self._ldapinfo.distinguishedName
+			tree = "CN=AIA,%s" % self._get_pks_dn()
 			async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADCA_ATTRS, tree = tree):
 				if err is not None:
 					yield None, err
@@ -1524,7 +1525,7 @@ class MSLDAPClient:
 	async def list_enrollment_services(self):
 		try:
 			ldap_filter = "(objectCategory=pKIEnrollmentService)"
-			tree = "CN=Configuration,%s" % self._ldapinfo.distinguishedName
+			tree = self._get_config_nc()
 
 			async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADEnrollmentService_ATTRS, tree = tree):
 				if err is not None:
@@ -1544,7 +1545,7 @@ class MSLDAPClient:
 			ldap_filter = "(objectCategory=pKICertificateTemplate)"
 			if name is not None:
 				ldap_filter = "(&(objectCategory=pKICertificateTemplate)(name=%s))" % name
-			tree = "CN=Configuration,%s" % self._ldapinfo.distinguishedName
+			tree = self._get_config_nc()
 
 			async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADCertificateTemplate_ATTRS, controls=controls, tree = tree):
 				if err is not None:
@@ -1552,6 +1553,246 @@ class MSLDAPClient:
 					return
 				yield MSADCertificateTemplate.from_ldap(entry), None
 			
+		except Exception as e:
+			yield None, e
+			return
+
+	def _get_config_nc(self) -> str:
+		"""Configuration naming context. Lives at the forest root, so it must come
+		from the RootDSE, building it from the domain DN breaks in child domains."""
+		serverinfo = getattr(self, '_serverinfo', None)
+		if serverinfo is not None and serverinfo.get('configurationNamingContext'):
+			return serverinfo['configurationNamingContext']
+		return "CN=Configuration,%s" % self._ldapinfo.distinguishedName
+
+	def _get_pks_dn(self) -> str:
+		return "CN=Public Key Services,CN=Services,%s" % self._get_config_nc()
+
+	async def list_issuance_policies(self):
+		"""Yields MSADIssuancePolicy objects (msPKI-Enterprise-Oid objects marked as issuance policy)"""
+		try:
+			# no flags filter: only the group link matters for ESC13 and flags is not always set
+			ldap_filter = "(objectClass=msPKI-Enterprise-Oid)"
+			tree = "CN=OID,%s" % self._get_pks_dn()
+			async for entry, err in self.pagedsearch(ldap_filter, attributes = MSADIssuancePolicy_ATTRS, tree = tree):
+				if err is not None:
+					yield None, err
+					return
+				yield MSADIssuancePolicy.from_ldap(entry), None
+		except Exception as e:
+			yield None, e
+			return
+
+	async def get_schema_guids(self, ldap_display_names:List[str]):
+		"""Resolves attribute names to schemaIDGUIDs. Returns ({guid: name}, None) or (None, Exception)"""
+		try:
+			result = {}
+			if len(ldap_display_names) == 0:
+				return result, None
+			ldap_filter = "(|%s)" % ''.join('(lDAPDisplayName=%s)' % escape_filter_chars(x) for x in ldap_display_names)
+			tree = self._serverinfo['schemaNamingContext']
+			async for entry, err in self.pagedsearch(ldap_filter, attributes = ['lDAPDisplayName', 'schemaIDGUID'], tree = tree):
+				if err is not None:
+					raise err
+				guid = entry['attributes'].get('schemaIDGUID')
+				if guid is not None:
+					result[str(guid).lower()] = entry['attributes'].get('lDAPDisplayName')
+			return result, None
+		except Exception as e:
+			return None, e
+
+	async def get_principal_sids(self, samaccountname:str = None):
+		"""Returns (list of SIDs, None) for the given account (or the current user): own SID + tokenGroups.
+		Unlike whoamifull, errors are not swallowed."""
+		try:
+			if samaccountname is None:
+				res, err = await self.whoami()
+				if err is not None:
+					raise err
+				if res is None or res.startswith('u:') is False:
+					raise Exception('Unexpected whoami response: %s' % res)
+				samaccountname = res[2:].split('\\', 1)[1]
+			sids, err = await self.get_tokengroups_user(samaccountname)
+			if err is not None:
+				raise err
+			return [str(x) for x in sids], None
+		except Exception as e:
+			return None, e
+
+	async def get_current_user_principal_set(self):
+		"""Returns (PrincipalSet, None) for the bound identity.
+		Accounts of this domain: own SID + tokenGroups (+ Everyone, Authenticated Users).
+		Foreign accounts (trusted domain/forest, not found here): Everyone + Authenticated Users."""
+		try:
+			res, err = await self.whoami()
+			if err is not None:
+				raise err
+			if res is None or res.startswith('u:') is False:
+				return PrincipalSet.current_user([], description = 'Unauthenticated / unknown identity (%s)' % res), None
+			identity = res[2:]
+			samaccountname = identity.split('\\', 1)[1] if identity.find('\\') != -1 else identity.split('@', 1)[0]
+			sids, err = await self.get_tokengroups_user(samaccountname)
+			if err is None:
+				return PrincipalSet.current_user(sids, description = 'Current user %s' % identity), None
+			if str(err).find('User not found') == -1:
+				raise err
+			logger.debug('Current user %s is not an account of this domain, evaluating as foreign principal' % identity)
+			return PrincipalSet.current_user([], label = 'current-user-foreign',
+				description = 'Current user %s is from another domain: only Everyone and Authenticated Users apply (FSP memberships not resolved)' % identity), None
+		except Exception as e:
+			return None, e
+
+	async def list_pki_objects(self):
+		"""Yields ((name, dn, SECURITY_DESCRIPTOR, allow_create_child), None) for ADCS infrastructure objects
+		relevant for ESC5: the Public Key Services container, its direct children, enrollment
+		service objects and the CA host computer objects. Certificate templates are excluded (see ESC4)."""
+		try:
+			req_flags = SDFlagsRequestValue({'Flags' : SDFlagsRequest.DACL_SECURITY_INFORMATION|SDFlagsRequest.GROUP_SECURITY_INFORMATION|SDFlagsRequest.OWNER_SECURITY_INFORMATION})
+			controls = [('1.2.840.113556.1.4.801', True, req_flags.dump())]
+			attrs = ['distinguishedName', 'name', 'nTSecurityDescriptor', 'dNSHostName']
+			# containers where creating a child object is enough to escalate
+			create_child_dangerous = ['certificate templates', 'enrollment services', 'oid']
+
+			def mk(entry, allow_create_child = False):
+				sd = entry['attributes'].get('nTSecurityDescriptor')
+				if sd is None:
+					return None
+				sd = SECURITY_DESCRIPTOR.from_bytes(sd)
+				return (entry['attributes'].get('name'), entry['attributes'].get('distinguishedName'), sd, allow_create_child)
+
+			pks_dn = self._get_pks_dn()
+			async for entry, err in self.pagedsearch('(objectClass=*)', attributes = attrs, controls = controls, tree = pks_dn, search_scope = BASE):
+				if err is not None:
+					raise err
+				res = mk(entry)
+				if res is not None:
+					yield res, None
+
+			async for entry, err in self.pagedsearch('(objectClass=*)', attributes = attrs, controls = controls, tree = pks_dn, search_scope = LEVEL):
+				if err is not None:
+					raise err
+				name = str(entry['attributes'].get('name') or '').lower()
+				res = mk(entry, name in create_child_dangerous)
+				if res is not None:
+					yield res, None
+
+			ca_hosts = []
+			async for entry, err in self.pagedsearch('(objectClass=pKIEnrollmentService)', attributes = attrs, controls = controls, tree = 'CN=Enrollment Services,%s' % pks_dn, search_scope = LEVEL):
+				if err is not None:
+					raise err
+				if entry['attributes'].get('dNSHostName') is not None:
+					ca_hosts.append(entry['attributes'].get('dNSHostName'))
+				res = mk(entry)
+				if res is not None:
+					yield res, None
+
+			# CA host computer objects (only found when they are in the current domain)
+			for hostname in ca_hosts:
+				ldap_filter = '(&(objectClass=computer)(dNSHostName=%s))' % escape_filter_chars(hostname)
+				async for entry, err in self.pagedsearch(ldap_filter, attributes = attrs, controls = controls):
+					if err is not None:
+						raise err
+					res = mk(entry)
+					if res is not None:
+						yield ('CA host %s' % hostname, res[1], res[2], False), None
+
+		except Exception as e:
+			yield None, e
+			return
+
+	async def get_adcs_principal_sets(self, extra_principal_sets:List[PrincipalSet] = None, include_current_user:bool = True,
+			include_lowpriv:bool = True, include_domain_computers:bool = None):
+		"""Builds the principal sets audit_adcs evaluates. Returns (List[PrincipalSet], None) or (None, Exception).
+		:param include_domain_computers: evaluate as Domain Computers. None = only when ms-DS-MachineAccountQuota > 0"""
+		try:
+			if self._ldapinfo is None:
+				_, err = await self.get_ad_info()
+				if err is not None:
+					raise err
+			domain_sid = str(self._ldapinfo.objectSid)
+			maq = self._ldapinfo.machineAccountQuota
+
+			principal_sets = []
+			if include_current_user is True:
+				pset, err = await self.get_current_user_principal_set()
+				if err is not None:
+					raise err
+				principal_sets.append(pset)
+			if include_lowpriv is True:
+				principal_sets.append(PrincipalSet.lowpriv(domain_sid))
+			if include_domain_computers is None:
+				include_domain_computers = maq is not None and int(maq) > 0
+			if include_domain_computers is True:
+				principal_sets.append(PrincipalSet.domain_computers(domain_sid, maq))
+			if extra_principal_sets is not None:
+				principal_sets.extend(extra_principal_sets)
+			return principal_sets, None
+		except Exception as e:
+			return None, e
+
+	async def audit_adcs(self, extra_principal_sets:List[PrincipalSet] = None, include_current_user:bool = True,
+			include_lowpriv:bool = True, include_domain_computers:bool = None, include_pki_objects:bool = True,
+			include_disabled:bool = False, principal_sets:List[PrincipalSet] = None):
+		"""Runs the LDAP-visible ADCS checks (ESC1-5, 9, 13, 15) and yields (ADCSFinding, None) / (None, Exception).
+
+		:param extra_principal_sets: additional PrincipalSets the caller controls (e.g. owned accounts)
+		:param include_domain_computers: evaluate as Domain Computers. None = only when ms-DS-MachineAccountQuota > 0
+		:param include_disabled: also report templates that are not published on any CA
+		:param principal_sets: use these sets as-is (see get_adcs_principal_sets), the include_* / extra parameters are then ignored
+
+		If the current user is not an account of this domain (e.g. a user from a trusted forest),
+		it is evaluated as Everyone + Authenticated Users only. Such a user is NOT a member of this
+		domain's Domain Users. ForeignSecurityPrincipal memberships are not resolved yet, pass them
+		via extra_principal_sets if known.
+		"""
+		try:
+			if principal_sets is None:
+				principal_sets, err = await self.get_adcs_principal_sets(
+					extra_principal_sets = extra_principal_sets, include_current_user = include_current_user,
+					include_lowpriv = include_lowpriv, include_domain_computers = include_domain_computers,
+				)
+				if err is not None:
+					raise err
+			if len(principal_sets) == 0:
+				raise Exception('No principal sets to evaluate!')
+
+			published = {} # template name -> ['host\\caname']
+			async for srv, err in self.list_enrollment_services():
+				if err is not None:
+					raise err
+				for tname in srv.certificateTemplates:
+					published.setdefault(tname, []).append('%s\\%s' % (srv.dNSHostName, srv.name))
+
+			linked_policies = {}
+			async for policy, err in self.list_issuance_policies():
+				if err is not None:
+					logger.debug('Failed to list issuance policies: %s' % err)
+					break
+				if policy.oid is not None and policy.group_link is not None:
+					linked_policies[policy.oid] = policy.group_link
+
+			dangerous_guids, err = await self.get_schema_guids(ESC4_DANGEROUS_ATTRIBUTES)
+			if err is not None:
+				logger.debug('Failed to resolve schema GUIDs, ESC4 will report all attribute writes: %s' % err)
+				dangerous_guids = None
+
+			templates = []
+			async for template, err in self.list_certificate_templates():
+				if err is not None:
+					raise err
+				template.enroll_services = published.get(template.name, [])
+				templates.append(template)
+			for finding in analyze_templates(templates, principal_sets, linked_issuance_policies = linked_policies, dangerous_guids = dangerous_guids, include_disabled = include_disabled):
+				yield finding, None
+
+			if include_pki_objects is True:
+				async for res, err in self.list_pki_objects():
+					if err is not None:
+						raise err
+					name, dn, sd, allow_create_child = res
+					for finding in analyze_pki_object(name, dn, sd, principal_sets, allow_create_child = allow_create_child):
+						yield finding, None
+
 		except Exception as e:
 			yield None, e
 			return
@@ -1705,6 +1946,11 @@ class MSLDAPClient:
 		"""Full whoami"""
 		#TODO: it can be the case that the server returns the SID of the user
 		# implement that path!
+		#
+		# Returns (result, None) when the identity is not an AD account (anonymous
+		# bind, account not found): the result then has no 'sid'. LDAP errors are
+		# returned as (partial result, Exception) instead of being swallowed, as an
+		# empty tokengroups list silently breaks every permission check downstream.
 		result = {}
 		try:
 			res, err = await self.whoami()
@@ -1712,29 +1958,46 @@ class MSLDAPClient:
 				raise err
 			result['raw'] = res
 			result['tokengroups'] = []
-			if res.startswith('u:') is True:
-				domain, samaccountname = res[2:].split('\\', 1)
-				result['domain'] = domain
-				result['samaccountname'] = samaccountname
-				user, err = await self.get_user(samaccountname)
+			if res is None or res.startswith('u:') is False:
+				return result, None
+			identity = res[2:]
+			domain = None
+			if identity.find('\\') != -1:
+				domain, samaccountname = identity.split('\\', 1)
+			elif identity.find('@') != -1:
+				samaccountname, domain = identity.split('@', 1)
+			else:
+				samaccountname = identity
+			result['domain'] = domain
+			result['samaccountname'] = samaccountname
+			user, err = await self.get_user(samaccountname)
+			if err is not None:
+				raise err
+			if user is None:
+				logger.debug('whoamifull: account %s not found' % samaccountname)
+				return result, None
+			result['sid'] = str(user.objectSid)
+			result['tokengroups'].append(str(user.objectSid))
+			result['groups'] = {}
+			async for group_sid, err in self.get_tokengroups(user.distinguishedName):
 				if err is not None:
 					raise err
-				result['sid'] = str(user.objectSid)
-				result['tokengroups'].append(str(user.objectSid))
-				result['groups'] = {}
-				async for group_sid, err in self.get_tokengroups(user.distinguishedName):
-					if err is not None:
-						raise err
-					result['tokengroups'].append(str(group_sid))
-					result['groups'][group_sid] = ('NA','NA')
-					domain, username, err = await self.resolv_sid(group_sid)
-					if err is not None:
-						raise err
-					result['groups'][group_sid] = (domain, username)
-			
+				group_sid = str(group_sid)
+				if group_sid in result['groups']:
+					continue
+				if group_sid != result['sid']: # get_tokengroups yields the account's own SID first
+					result['tokengroups'].append(group_sid)
+				result['groups'][group_sid] = ('NA','NA')
+				# name resolution is cosmetic, a failure must not drop the remaining groups
+				domain, username, err = await self.resolv_sid(group_sid)
+				if err is not None:
+					logger.debug('whoamifull: failed to resolve %s: %s' % (group_sid, err))
+					continue
+				result['groups'][group_sid] = (domain, username)
+
 			return result, None
-		except:
-			return result, None
+		except Exception as e:
+			return result, e
 
 	async def get_unconstrained_machines(self):
 		ldap_filter = r'(&(sAMAccountType=805306369)(!(userAccountControl:1.2.840.113556.1.4.803:=8192))(userAccountControl:1.2.840.113556.1.4.803:=524288))'

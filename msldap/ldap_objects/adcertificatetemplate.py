@@ -1,6 +1,7 @@
 import enum
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
-from winacl.dtyp.ace import ACEType, ACE_OBJECT_PRESENCE, ACCESS_MASK, ADS_ACCESS_MASK
+from msldap.commons.adcs import ACLModel, PrincipalSet, analyze_template, \
+	SID_EVERYONE, SID_AUTHENTICATED_USERS, SID_BUILTIN_USERS
 
 
 EX_RIGHT_CERTIFICATE_ENROLLMENT = "0e10c968-78fb-11d2-90d4-00c04f79dc55"
@@ -58,6 +59,7 @@ EKU_PKINIT_CLIENT_AUTHENTICATION_OID = "1.3.6.1.5.2.3.4"
 EKU_SMART_CARD_LOGON_OID = "1.3.6.1.4.1.311.20.2.2"
 EKU_ANY_PURPOSE_OID = "2.5.29.37.0"
 EKU_CERTIFICATE_REQUEST_AGENT_OID = "1.3.6.1.4.1.311.20.2.1"
+EKU_SERVER_AUTHENTICATION_OID = "1.3.6.1.5.5.7.3.1"
 
 EKUS_NAMES = {
     "1.3.6.1.4.1.311.2.6.1": "SpcRelaxedPEMarkerCheck",
@@ -146,7 +148,7 @@ ENROLLMENT_FLAGS_NAMES = {
 MSADCertificateTemplate_ATTRS = [
 		'cn', 'sn', 'distinguishedName', 'name', 'msPKI-RA-Application-Policies', 'msPKI-Certificate-Application-Policy', 
 		'msPKI-Template-Schema-Version', 'msPKI-Certificate-Name-Flag', 'msPKI-Enrollment-Flag', 'msPKI-RA-Signature', 
-		'msPKI-Private-Key-Flag', 'pKIExtendedKeyUsage', 'nTSecurityDescriptor'
+		'msPKI-Private-Key-Flag', 'pKIExtendedKeyUsage', 'nTSecurityDescriptor', 'msPKI-Certificate-Policy'
 ]
 
 class MSADCertificateTemplate:
@@ -164,6 +166,8 @@ class MSADCertificateTemplate:
 		self.Private_Key_Flag = None
 		self.pKIExtendedKeyUsage = None
 		self.nTSecurityDescriptor:SECURITY_DESCRIPTOR = None
+		self.Certificate_Policy = [] # issuance policy OIDs
+		self.acl:ACLModel = ACLModel(None)
 
 		self.vulns = []
 		self.enroll_sids = set()
@@ -191,6 +195,7 @@ class MSADCertificateTemplate:
 		adi.RA_Signature = entry['attributes'].get('msPKI-RA-Signature')
 		adi.Private_Key_Flag = entry['attributes'].get('msPKI-Private-Key-Flag')
 		adi.pKIExtendedKeyUsage = entry['attributes'].get('pKIExtendedKeyUsage', [])
+		adi.Certificate_Policy = entry['attributes'].get('msPKI-Certificate-Policy', [])
 		adi.nTSecurityDescriptor = entry['attributes'].get('nTSecurityDescriptor')
 		if adi.nTSecurityDescriptor is not None:
 			adi.nTSecurityDescriptor = SECURITY_DESCRIPTOR.from_bytes(adi.nTSecurityDescriptor)
@@ -212,7 +217,8 @@ class MSADCertificateTemplate:
 			'RA_Signature': self.RA_Signature,
 			'Private_Key_Flag': self.Private_Key_Flag,
 			'pKIExtendedKeyUsage': self.pKIExtendedKeyUsage,
-			'nTSecurityDescriptor': self.nTSecurityDescriptor.to_bytes(),
+			'Certificate_Policy': self.Certificate_Policy,
+			'nTSecurityDescriptor': self.nTSecurityDescriptor.to_bytes() if self.nTSecurityDescriptor is not None else None,
 			'vulns': self.vulns,
 			'enroll_sids': list(self.enroll_sids),
 			'autoenroll_sids': list(self.autoenroll_sids),
@@ -228,212 +234,110 @@ class MSADCertificateTemplate:
 	
 	def isLowPrivSid(self, sid):
 		sid = str(sid)
-		if sid in ['S-1-1-0', 'S-1-5-11']:
+		if sid in [SID_EVERYONE, SID_AUTHENTICATED_USERS, SID_BUILTIN_USERS]:
 			return True
 		if sid.startswith('S-1-5-21-') is True and sid.rsplit('-',1)[1] in ['513','515','545']:
 			return True
 		return False
 
+	@property
+	def schema_version(self):
+		return self.Template_Schema_Version if self.Template_Schema_Version is not None else 1
+
+	def _ekus(self):
+		return self.pKIExtendedKeyUsage if self.pKIExtendedKeyUsage is not None else []
+
 	def allows_authentication(self):
-		return self.can_be_used_for_any_purpose() or len(set([EKU_CLIENT_AUTHENTICATION_OID, EKU_SMART_CARD_LOGON_OID, EKU_PKINIT_CLIENT_AUTHENTICATION_OID]).intersection(set(self.pKIExtendedKeyUsage))) > 0
+		return self.can_be_used_for_any_purpose() or len(set([EKU_CLIENT_AUTHENTICATION_OID, EKU_SMART_CARD_LOGON_OID, EKU_PKINIT_CLIENT_AUTHENTICATION_OID]).intersection(set(self._ekus()))) > 0
 	
+	def allows_server_authentication(self):
+		return self.can_be_used_for_any_purpose() or EKU_SERVER_AUTHENTICATION_OID in self._ekus()
+
 	def can_be_used_for_any_purpose(self):
-		return len(self.pKIExtendedKeyUsage) == 0 or EKU_ANY_PURPOSE_OID in self.pKIExtendedKeyUsage
+		return len(self._ekus()) == 0 or EKU_ANY_PURPOSE_OID in self._ekus()
 	
 	def requires_manager_approval(self):
-		return EnrollmentFlag.PEND_ALL_REQUESTS in EnrollmentFlag(self.Enrollment_Flag)
+		return EnrollmentFlag.PEND_ALL_REQUESTS in EnrollmentFlag(self.Enrollment_Flag or 0)
 	
 	def requires_authorized_signatures(self):
-		return self.RA_Signature != None and self.RA_Signature > 0
+		return self.RA_Signature is not None and self.RA_Signature > 0
 	
 	def allows_to_specify_san(self):
-		return CertificateNameFlag(self.Certificate_Name_Flag) & CertificateNameFlag.ENROLLEE_SUPPLIES_SUBJECT > 0
+		return CertificateNameFlag(self.Certificate_Name_Flag or 0) & CertificateNameFlag.ENROLLEE_SUPPLIES_SUBJECT > 0
 
 	def allows_to_request_agent_certificate(self):
-		return EKU_CERTIFICATE_REQUEST_AGENT_OID in self.pKIExtendedKeyUsage
+		return EKU_CERTIFICATE_REQUEST_AGENT_OID in self._ekus()
 
 	def allows_to_use_agent_certificate(self):
-		if EKU_ANY_PURPOSE_OID in self.pKIExtendedKeyUsage:
+		"""Certificates from this template can act as an enrollment agent"""
+		return EKU_ANY_PURPOSE_OID in self._ekus() or EKU_CERTIFICATE_REQUEST_AGENT_OID in self._ekus()
+
+	def is_enrollment_agent_target(self):
+		"""Template can be requested on behalf of another principal with an enrollment agent certificate (ESC3 condition 2).
+		Schema v1 templates always allow it, v2+ need exactly one RA signature with the Certificate Request Agent application policy.
+		v4 templates may store msPKI-RA-Application-Policies as a `-separated string, hence the substring match."""
+		if self.schema_version == 1:
 			return True
-		if EKU_CERTIFICATE_REQUEST_AGENT_OID in self.pKIExtendedKeyUsage:
-			return True
-		
-		#return self.Template_Schema_Version == 1 \
-        #    or (
-        #        self.Template_Schema_Version > 1 \
-        #        and self.RA_Signature == 1 \
-        #        and EKU_CERTIFICATE_REQUEST_AGENT_OID in self.RA_Application_Policies
-        #    )
+		if self.RA_Signature != 1:
+			return False
+		return any(EKU_CERTIFICATE_REQUEST_AGENT_OID in str(x) for x in (self.RA_Application_Policies or []))
 	
+	def no_security_extension(self):
+		return EnrollmentFlag.NO_SECURITY_EXTENSION in EnrollmentFlag(self.Enrollment_Flag or 0)
+
 	def no_securty_extension(self):
-		return EnrollmentFlag.NO_SECURITY_EXTENSION in EnrollmentFlag(self.Enrollment_Flag)
+		"""Deprecated misspelled alias of no_security_extension"""
+		return self.no_security_extension()
 
-	def is_vulnerable(self, tokengroups = None):		
-		if tokengroups is None:
-			if self.isLowPrivSid(str(self.nTSecurityDescriptor.Owner)) is True:
-				return True, 'Owner is low priv user'
-		
-		else:
-			if str(self.nTSecurityDescriptor.Owner) in tokengroups:
-				return True, 'Owner can be controlled by current user'
-		
-		lowprivcanenroll = False
-		if tokengroups is None:
-			if any(self.isLowPrivSid(str(sid)) for sid in self.fullcontrol_sids) is True:
-				return True, 'Lowpriv SID has full control'
-			
-			if any(self.isLowPrivSid(str(sid)) for sid in self.write_dacl_sids) is True:
-				return True, 'Lowpriv SID can write DACLs'
-			
-			if any(self.isLowPrivSid(str(sid)) for sid in self.write_owner_sids) is True:
-				return True, 'Lowpriv SID can change Owner'
-			
-			if any(self.isLowPrivSid(str(sid)) for sid in self.write_property_sids) is True:
-				return True, 'Lowpriv SID can write property'
-			
-			if any(self.isLowPrivSid(str(sid)) for sid in self.enroll_sids) is True:
-				lowprivcanenroll = True
+	def _legacy_principal_set(self, tokengroups = None):
+		if tokengroups is not None:
+			return PrincipalSet.current_user(tokengroups)
+		# no user context: every low privileged SID present in the ACL
+		sids = [SID_EVERYONE, SID_AUTHENTICATED_USERS, SID_BUILTIN_USERS]
+		sids += [sid for _, sid, _, _ in self.acl.entries if self.isLowPrivSid(sid)]
+		if self.acl.owner is not None and self.isLowPrivSid(self.acl.owner):
+			sids.append(self.acl.owner)
+		return PrincipalSet('low-priv', sids, description = 'Low privileged SIDs present in the template ACL')
 
-			if any(self.isLowPrivSid(str(sid)) for sid in self.allextendedrights_sids) is True:
-				lowprivcanenroll = True
-				
-		else:
-			if len(self.enroll_sids.intersection(set(tokengroups))) > 0 or len(self.allextendedrights_sids.intersection(set(tokengroups))) > 0:
-				lowprivcanenroll = True
-			
-			if len(self.write_dacl_sids.intersection(set(tokengroups))) > 0:
-				return True, 'Current user can write DACLs'
-			
-			if len(self.write_owner_sids.intersection(set(tokengroups))) > 0:
-				return True, 'Current user can change Owner'
-			
-			if len(self.write_property_sids.intersection(set(tokengroups))) > 0:
-				return True, 'Current user can write property'
-			
-			if len(self.fullcontrol_sids.intersection(set(tokengroups))) > 0:
-				return True, 'Current user has full control'
+	def analyze(self, principal_sets, linked_issuance_policies = None, dangerous_guids = None):
+		"""Full ESC analysis, see msldap.commons.adcs.analyze_template. Returns a list of ADCSFinding"""
+		return analyze_template(self, principal_sets, linked_issuance_policies = linked_issuance_policies, dangerous_guids = dangerous_guids)
 
-		if self.requires_manager_approval() is True:
-			return False, 'Needs manager approval'
-		
-		if self.requires_authorized_signatures() is True:
-			return False, 'Needs authorized signature'
-		
-		if self.allows_authentication() and lowprivcanenroll and self.allows_to_specify_san():
-			return True, 'Enrollee supplies subject'
-		
-		if lowprivcanenroll and self.allows_to_use_agent_certificate() and self.allows_to_request_agent_certificate():
-			return True, 'Certificate request agent'
-		
-		return False, 'No match found'
+	def is_vulnerable(self, tokengroups = None):
+		"""Legacy API. Returns (bool, reason) for the first finding."""
+		findings = self.analyze([self._legacy_principal_set(tokengroups)])
+		if len(findings) == 0:
+			return False, 'No match found'
+		return True, '%s: %s' % (findings[0].esc, findings[0].reason)
 	
 	def check_dangerous_permissions(self, tokengroups = None):
-		issues = []
-		if tokengroups is None or len(tokengroups) == 0:
-			if self.isLowPrivSid(str(self.nTSecurityDescriptor.Owner)) is True:
-				issues.append('Owner is low priv user')
-				
-			if any(self.isLowPrivSid(str(sid)) for sid in self.fullcontrol_sids) is True:
-				issues.append('Lowpriv SID has full control')
-			
-			if any(self.isLowPrivSid(str(sid)) for sid in self.write_dacl_sids) is True:
-				issues.append('Lowpriv SID can write DACLs')
-			
-			if any(self.isLowPrivSid(str(sid)) for sid in self.write_owner_sids) is True:
-				issues.append('Lowpriv SID can change Owner')
-			
-			if any(self.isLowPrivSid(str(sid)) for sid in self.write_property_sids) is True:
-				issues.append('Lowpriv SID can write property')
-				
-		else:			
-			if len(self.write_dacl_sids.intersection(set(tokengroups))) > 0:
-				issues.append('Current user can write DACLs')
-			
-			if len(self.write_owner_sids.intersection(set(tokengroups))) > 0:
-				issues.append('Current user can change Owner')
-			
-			if len(self.write_property_sids.intersection(set(tokengroups))) > 0:
-				issues.append('Current user can write property')
-			
-			if len(self.fullcontrol_sids.intersection(set(tokengroups))) > 0:
-				issues.append('Current user has full control')
-			
-			if str(self.nTSecurityDescriptor.Owner) in tokengroups:
-				issues.append('The current user can control the owner -or is the owner-')
-		
-		return issues
+		"""Legacy API. Returns a list of object control issues."""
+		rights = self.acl.evaluate(self._legacy_principal_set(tokengroups).sids)
+		return rights.dangerous_permissions()
 	
 	def is_vulnerable2(self, tokengroups = None):
+		"""Legacy API. Returns {ESCx: {'SIDs': [...], 'Reason': str}} evaluated for the given token groups
+		(or the low privileged SIDs found in the ACL when tokengroups is None)."""
 		vulns = {}
-		if tokengroups is None:
-			tokengroups = []
-
-		user_can_enroll = False
-		if len(set(self.enroll_sids).intersection(set(tokengroups))) > 0:
-			user_can_enroll = True
-
-		if user_can_enroll and self.allows_authentication() and self.allows_to_specify_san():
-			vulns['ESC1'] = {
-				'SIDs': self.enroll_sids,
-				'Reason': 'Users can enroll, enrollee supplies subject and template allows client authentication'
-			}
-		
-		if user_can_enroll and self.can_be_used_for_any_purpose() is True:
-			vulns['ESC2'] = {
-				'SIDs': self.enroll_sids,
-				'Reason': 'Users can enroll and template allows any purpose'
-			}
-		
-		if user_can_enroll and self.allows_to_use_agent_certificate():
-			vulns['ESC3'] = {
-				'SIDs': self.enroll_sids,
-				'Reason': 'Users can enroll and template allows certificate request agent'
-			}
-		
-		if user_can_enroll and self.no_securty_extension():
-			vulns['ESC9'] = {
-				'SIDs': self.enroll_sids,
-				'Reason': 'Users can enroll and template does not require security extension'
-			}
-
-		perm_issues = self.check_dangerous_permissions(tokengroups)
-		if len(perm_issues) > 0:
-			vulns['ESC4'] = {
-				'SIDs': tokengroups,
-				'Reason': ', '.join(perm_issues)
+		for finding in self.analyze([self._legacy_principal_set(tokengroups)]):
+			vulns[finding.esc] = {
+				'SIDs': finding.granting_sids,
+				'Reason': finding.reason,
 			}
 		return vulns
 	
 	def calc_aces(self):
+		self.acl = ACLModel(self.nTSecurityDescriptor)
 		if self.nTSecurityDescriptor is None:
 			return
-		for ace in self.nTSecurityDescriptor.Dacl.aces:
-			if ace.AceType != ACEType.ACCESS_ALLOWED_OBJECT_ACE_TYPE and ace.AceType != ACEType.ACCESS_ALLOWED_ACE_TYPE:
-				continue
-			
-			if ace.AceType == ACEType.ACCESS_ALLOWED_OBJECT_ACE_TYPE:
-				if str(ace.ObjectType) == EX_RIGHT_CERTIFICATE_ENROLLMENT:
-					self.enroll_sids.add(str(ace.Sid))
-				elif str(ace.ObjectType) == EX_RIGHT_CERTIFICATE_AUTOENROLLMENT:
-					self.autoenroll_sids.add(str(ace.Sid))
-				elif ADS_ACCESS_MASK.CONTROL_ACCESS in ADS_ACCESS_MASK(ace.Mask) and ace.ObjectType is None:
-					self.allextendedrights_sids.add(str(ace.Sid))
-				continue
-			
-			if ADS_ACCESS_MASK.GENERIC_ALL in ADS_ACCESS_MASK(ace.Mask):
-				self.fullcontrol_sids.add(str(ace.Sid))
-				
-			if ADS_ACCESS_MASK.WRITE_DACL in ADS_ACCESS_MASK(ace.Mask):
-				self.write_dacl_sids.add(str(ace.Sid))
-
-			if ADS_ACCESS_MASK.WRITE_OWNER in ADS_ACCESS_MASK(ace.Mask):
-				self.write_owner_sids.add(str(ace.Sid))
-			
-			if ADS_ACCESS_MASK.WRITE_PROP in ADS_ACCESS_MASK(ace.Mask):
-				self.write_property_sids.add(str(ace.Sid))
-			
-			if ADS_ACCESS_MASK.CONTROL_ACCESS in ADS_ACCESS_MASK(ace.Mask):
-				self.allextendedrights_sids.add(str(ace.Sid))
+		allowed = self.acl.allowed_sids()
+		self.enroll_sids = allowed['enroll']
+		self.autoenroll_sids = allowed['autoenroll']
+		self.allextendedrights_sids = allowed['allextendedrights']
+		self.fullcontrol_sids = allowed['fullcontrol']
+		self.write_dacl_sids = allowed['write_dacl']
+		self.write_owner_sids = allowed['write_owner']
+		self.write_property_sids = allowed['write_property']
 	
 	@property
 	def is_enabled(self):
@@ -447,7 +351,7 @@ class MSADCertificateTemplate:
 				hostname, service = es.split('\\', 1)
 				res.append((hostname, service))
 			else:
-				res.append((None, service))
+				res.append((None, es))
 		return res
 
 

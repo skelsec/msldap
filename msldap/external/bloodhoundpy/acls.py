@@ -516,7 +516,7 @@ class ACCESS_MASK(object):
     # These constants are only used when WRITING
     # and are then translated into their actual rights
     SET_GENERIC_READ        = 0x80000000
-    SET_GENERIC_WRITE       = 0x04000000
+    SET_GENERIC_WRITE       = 0x40000000
     SET_GENERIC_EXECUTE     = 0x20000000
     SET_GENERIC_ALL         = 0x10000000
     # When reading, these constants are actually represented by

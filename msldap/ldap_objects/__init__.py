@@ -17,6 +17,7 @@ from msldap.ldap_objects.adschemaentry import MSADSCHEMAENTRY_ATTRS, MSADSchemaE
 from msldap.ldap_objects.adca import MSADCA, MSADCA_ATTRS
 from msldap.ldap_objects.adenrollmentservice import MSADEnrollmentService_ATTRS, MSADEnrollmentService
 from msldap.ldap_objects.adcertificatetemplate import MSADCertificateTemplate, MSADCertificateTemplate_ATTRS
+from msldap.ldap_objects.adissuancepolicy import MSADIssuancePolicy, MSADIssuancePolicy_ATTRS
 from msldap.ldap_objects.adgmsa import MSADGMSAUser, MSADGMSAUser_ATTRS
 from msldap.ldap_objects.adcontainer import MSADContainer, MSADContainer_ATTRS
 from msldap.ldap_objects.addmsa import MSADDMSAUser, MSADDMSAUser_ATTRS, MSADDMSAUser_TSV_ATTRS
@@ -50,6 +51,8 @@ __all__ = [
     'MSADEnrollmentService',
     'MSADCertificateTemplate', 
     'MSADCertificateTemplate_ATTRS',
+    'MSADIssuancePolicy',
+    'MSADIssuancePolicy_ATTRS',
     'MSADGMSAUser', 
     'MSADGMSAUser_ATTRS',
     'MSADContainer',

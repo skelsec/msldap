@@ -113,3 +113,4 @@ venv.bak/
 *.exe
 *.json
 !msldap/external/bloodhoundpy/*
+.venvtest/*
